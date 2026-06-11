@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "echo '=== DIAG ==='; node -v; echo NODE_ENV=$NODE_ENV; echo 'root @types:'; ls node_modules/@types 2>/dev/null | tr '\\n' ' '; echo; echo 'api @types:'; ls apps/api/node_modules/@types 2>/dev/null | tr '\\n' ' '; echo; echo 'find node types:'; find . -path ./apps/web -prune -o -name 'index.d.ts' -path '*@types/node*' -print 2>/dev/null | head -3; echo '=== BUILD ==='; npm run build"
+    "buildCommand": "npm run build"
   },
   "deploy": {
     "startCommand": "npm run db:migrate:deploy -w apps/api && npm run start",
