@@ -71,7 +71,13 @@ app.use(
 app.get('/api/health', async (_req: Request, res: Response) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: 'ok', db: 'ok', timestamp: new Date().toISOString() });
+    res.json({
+      status: 'ok',
+      db: 'ok',
+      // Preenchido pelo Railway só em deploys via GitHub — usado para verificar o auto-deploy.
+      commit: process.env.RAILWAY_GIT_COMMIT_SHA ?? null,
+      timestamp: new Date().toISOString(),
+    });
   } catch {
     res.status(503).json({ status: 'degraded', db: 'offline', timestamp: new Date().toISOString() });
   }
