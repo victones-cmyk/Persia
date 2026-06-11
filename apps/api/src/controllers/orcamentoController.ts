@@ -4,6 +4,7 @@
 // → salva local. Erros do GC salvam status='erro' para reenvio posterior.
 
 import type { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { calcularPersiana, aplicarDesconto } from '../services/calc/persiana';
@@ -112,9 +113,18 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   }
 
   const desconto_pct = Number(b.desconto_pct ?? 0);
-  // RN-08: desconto acima do limite exige aprovação de gerente (modal — Fase 6).
+  // RN-08: desconto acima do limite exige aprovação de gerente (senha de admin).
+  let descontoAprovadoPor: string | null = null;
   if (desconto_pct > Number(sessao.desconto_max_pct)) {
-    throw new AppError(403, 'APROVACAO_NECESSARIA', 'Desconto acima do limite exige aprovação do gerente.');
+    const senhaGerente = typeof b.senha_gerente === 'string' ? b.senha_gerente : '';
+    if (!senhaGerente) {
+      throw new AppError(403, 'APROVACAO_NECESSARIA', 'Desconto acima do limite exige aprovação do gerente.');
+    }
+    const admin = await verificarSenhaGerente(senhaGerente);
+    if (!admin) {
+      throw new AppError(401, 'SENHA_GERENTE_INVALIDA', 'Senha de gerente incorreta.');
+    }
+    descontoAprovadoPor = admin.id;
   }
 
   const tecido = await buscarTecidoGc(String(b.tecido_id));
@@ -169,6 +179,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     valor_bruto: valorBruto,
     desconto_pct,
     valor_final: valorFinal,
+    desconto_aprovado_por: descontoAprovadoPor,
   };
 
   try {
@@ -201,6 +212,15 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
         detalhe: { orcamento_id: orcamento.id, gc_orcamento_id: envio.gc_orcamento_id, valor_final: valorFinal },
       },
     });
+    if (descontoAprovadoPor) {
+      await prisma.logAcao.create({
+        data: {
+          usuario_id: descontoAprovadoPor,
+          acao: 'desconto_aprovado',
+          detalhe: { orcamento_id: orcamento.id, desconto_pct, aprovado_para: sessao.id },
+        },
+      });
+    }
 
     res.status(201).json({ orcamento });
   } catch (err) {
@@ -322,6 +342,62 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
       erro: { codigo: gc?.status === 401 ? 'GC_AUTH' : 'GC_ERRO', message: gc?.message ?? 'Falha no reenvio.' },
     });
   }
+}
+
+/** Verifica se a senha corresponde a algum usuário admin ativo. Retorna o admin ou null. */
+async function verificarSenhaGerente(senha: string): Promise<{ id: string } | null> {
+  const admins = await prisma.usuario.findMany({ where: { perfil: 'admin', ativo: true } });
+  for (const a of admins) {
+    if (bcrypt.compareSync(senha, a.senha_hash)) return { id: a.id };
+  }
+  return null;
+}
+
+/** GET /api/orcamentos — lista paginada (20/pág), filtros status e cliente. Vendedor vê só os seus. */
+export async function listarOrcamentos(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const pagina = Math.max(1, Number(req.query.pagina ?? 1));
+  const porPagina = 20;
+  const status = typeof req.query.status === 'string' ? req.query.status : '';
+  const cliente = typeof req.query.cliente === 'string' ? req.query.cliente.trim() : '';
+
+  const where: Prisma.OrcamentoWhereInput = {};
+  if (sessao.perfil !== 'admin') where.usuario_id = sessao.id;
+  if (['rascunho', 'enviado', 'erro', 'cancelado'].includes(status)) {
+    where.status = status as Prisma.EnumStatusOrcamentoFilter['equals'];
+  }
+  if (cliente) where.nome_cliente = { contains: cliente, mode: 'insensitive' };
+
+  const [total, orcamentos] = await Promise.all([
+    prisma.orcamento.count({ where }),
+    prisma.orcamento.findMany({
+      where,
+      orderBy: { criado_em: 'desc' },
+      skip: (pagina - 1) * porPagina,
+      take: porPagina,
+      include: { usuario: { select: { nome: true } }, loja: { select: { nome: true } } },
+    }),
+  ]);
+
+  res.json({
+    orcamentos,
+    paginacao: { pagina, porPagina, total, totalPaginas: Math.max(1, Math.ceil(total / porPagina)) },
+  });
+}
+
+/** POST /api/orcamentos/:id/cancelar — soft delete (status=cancelado). Não toca no GestãoClick. */
+export async function cancelarOrcamento(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const orc = await prisma.orcamento.findUnique({ where: { id: String(req.params.id) } });
+  if (!orc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+  if (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id) {
+    throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão.');
+  }
+  const atualizado = await prisma.orcamento.update({
+    where: { id: orc.id },
+    data: { status: 'cancelado' },
+  });
+  res.json({ orcamento: atualizado });
 }
 
 export async function getOrcamento(req: Request, res: Response): Promise<void> {

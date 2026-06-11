@@ -11,6 +11,7 @@ import { formatBRL, formatNum, roundHalfUp } from '../lib/formatacao';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { ClienteSearch } from './ClienteSearch';
+import { ModalSenhaGerente } from './ModalSenhaGerente';
 
 const GRUPO_LABEL: Record<string, string> = {
   fixo: 'Fixos',
@@ -42,6 +43,7 @@ export function ResultadoPanel({
   const [desconto, setDesconto] = useState(0);
   const [cliente, setCliente] = useState<ClienteResumo | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [modalAberto, setModalAberto] = useState(false);
 
   const valorBruto = resultado.valor_bruto ?? 0;
   const acimaLimite = desconto > descontoMaxPct;
@@ -51,10 +53,12 @@ export function ResultadoPanel({
 
   const gcOffline = gcStatus !== 'online';
   const semUsuarioGc = !gcUsuarioId;
-  const podeEnviar = !gcOffline && !semUsuarioGc && !!cliente && !acimaLimite && !enviando;
+  // Acima do limite NÃO bloqueia o botão — abre o modal de gerente (RN-08).
+  const podeEnviar = !gcOffline && !semUsuarioGc && !!cliente && !enviando;
 
-  async function enviar() {
-    if (!podeEnviar || !cliente) return;
+  /** Executa o POST. senhaGerente é exigida pelo backend quando desconto > limite. */
+  async function doSend(senhaGerente?: string): Promise<{ ok: boolean; senhaInvalida?: boolean }> {
+    if (!cliente) return { ok: false };
     setEnviando(true);
     try {
       const r = await api.post<{ orcamento: OrcamentoSalvo }>('/orcamentos', {
@@ -62,30 +66,39 @@ export function ResultadoPanel({
         desconto_pct: desconto,
         gc_cliente_id: cliente.id,
         nome_cliente: cliente.nome,
+        ...(senhaGerente ? { senha_gerente: senhaGerente } : {}),
       });
       showToast('success', `Orçamento #${r.orcamento.gc_orcamento_id} criado no GestãoClick`, cliente.nome);
       onEnviado(r.orcamento);
+      return { ok: true };
     } catch (e) {
       if (e instanceof ApiError) {
+        if (e.code === 'SENHA_GERENTE_INVALIDA') return { ok: false, senhaInvalida: true };
         if (e.code === 'APROVACAO_NECESSARIA') {
-          showToast('warning', 'Desconto acima do limite', 'Necessária aprovação do gerente (Fase 6).');
-        } else {
-          const erro = (e.data as { erro?: { codigo?: string; message?: string } } | null)?.erro;
-          if (erro?.codigo === 'GC_AUTH') {
-            showToast('error', 'Credenciais GestãoClick inválidas', 'Contate o administrador.');
-          } else {
-            showToast('error', 'Erro ao enviar ao GestãoClick', erro?.message ?? e.message);
-          }
-          // 502: orçamento foi salvo como "erro" → leva para a listagem (reenvio).
-          const orc = (e.data as { orcamento?: OrcamentoSalvo } | null)?.orcamento;
-          if (orc) onEnviado(orc);
+          setModalAberto(true);
+          return { ok: false };
         }
+        const erro = (e.data as { erro?: { codigo?: string; message?: string } } | null)?.erro;
+        if (erro?.codigo === 'GC_AUTH') {
+          showToast('error', 'Credenciais GestãoClick inválidas', 'Contate o administrador.');
+        } else {
+          showToast('error', 'Erro ao enviar ao GestãoClick', erro?.message ?? e.message);
+        }
+        const orc = (e.data as { orcamento?: OrcamentoSalvo } | null)?.orcamento;
+        if (orc) onEnviado(orc);
       } else {
         showToast('error', 'Falha inesperada ao enviar.');
       }
+      return { ok: false };
     } finally {
       setEnviando(false);
     }
+  }
+
+  function onClickEnviar() {
+    if (!podeEnviar) return;
+    if (acimaLimite) setModalAberto(true);
+    else void doSend();
   }
 
   return (
@@ -158,9 +171,20 @@ export function ResultadoPanel({
       {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Envio bloqueado.</span></div>}
       {semUsuarioGc && <div className="alert alert-error mb-3 text-xs-ui"><span>Seu usuário não está vinculado ao GestãoClick. Peça a um admin para vincular antes de enviar.</span></div>}
 
-      <button type="button" className="btn btn-success w-full" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={enviar}>
+      <button type="button" className="btn btn-success w-full" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={onClickEnviar}>
         {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar ao GestãoClick</>}
       </button>
+
+      <ModalSenhaGerente
+        aberto={modalAberto}
+        descontoPct={desconto}
+        onCancelar={() => setModalAberto(false)}
+        onConfirmar={async (senha) => {
+          const r = await doSend(senha);
+          if (r.ok) setModalAberto(false);
+          return r.ok; // false → ModalSenhaGerente faz o shake
+        }}
+      />
     </div>
   );
 }

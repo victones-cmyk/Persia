@@ -16,6 +16,7 @@ import { prisma } from './lib/prisma';
 import authRouter from './routes/auth';
 import calcularRouter from './routes/calcular';
 import orcamentosRouter from './routes/orcamentos';
+import adminRouter from './routes/admin';
 import gcRouter from './routes/gc';
 import { getGcHealth } from './services/gc/health';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -89,6 +90,9 @@ app.use('/api/calcular', calcularRouter);
 
 // Rotas de orçamento — envio/reenvio ao GestãoClick (Fase 5).
 app.use('/api/orcamentos', orcamentosRouter);
+
+// Rotas administrativas (somente admin) — usuários, configurações, log (Fase 6).
+app.use('/api/admin', adminRouter);
 
 // Rotas de leitura GestãoClick — clientes etc. (Fase 4).
 app.use('/api/gc', gcRouter);

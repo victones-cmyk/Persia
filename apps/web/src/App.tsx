@@ -6,8 +6,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Login } from './pages/Login';
 import { Layout } from './components/Layout';
 import { ProtectedRoute, AdminRoute } from './components/ProtectedRoute';
-import { Placeholder } from './pages/Placeholder';
 import { OrcamentoNovo } from './pages/OrcamentoNovo';
+import { Orcamentos } from './pages/Orcamentos';
+import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
+import { AdminUsuarios } from './pages/admin/AdminUsuarios';
+import { AdminConfiguracoes } from './pages/admin/AdminConfiguracoes';
+import { AdminLog } from './pages/admin/AdminLog';
 
 function App() {
   return (
@@ -17,26 +21,14 @@ function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/orcamentos" replace />} />
-          <Route path="/orcamentos" element={<Placeholder titulo="Orçamentos" fase="Fase 6" />} />
+          <Route path="/orcamentos" element={<Orcamentos />} />
           <Route path="/orcamentos/novo" element={<OrcamentoNovo />} />
-          <Route
-            path="/orcamentos/:id"
-            element={<Placeholder titulo="Detalhe do Orçamento" fase="Fase 6" />}
-          />
+          <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
 
           <Route element={<AdminRoute />}>
-            <Route
-              path="/admin/usuarios"
-              element={<Placeholder titulo="Usuários" fase="Fase 6" />}
-            />
-            <Route
-              path="/admin/configuracoes"
-              element={<Placeholder titulo="Configurações" fase="Fase 6" />}
-            />
-            <Route
-              path="/admin/log-acoes"
-              element={<Placeholder titulo="Log de Ações" fase="Fase 6" />}
-            />
+            <Route path="/admin/usuarios" element={<AdminUsuarios />} />
+            <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
+            <Route path="/admin/log-acoes" element={<AdminLog />} />
           </Route>
         </Route>
       </Route>
