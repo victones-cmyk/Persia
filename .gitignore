@@ -1,0 +1,48 @@
+# Dependências
+node_modules/
+.pnp
+.pnp.js
+
+# Variáveis de ambiente — NUNCA commitar .env (SRD §17, regra inviolável)
+.env
+.env.local
+.env.*.local
+apps/api/.env
+apps/web/.env
+
+# Build
+dist/
+build/
+apps/web/dist/
+apps/api/dist/
+
+# Prisma — client gerado
+apps/api/src/prisma/generated/
+**/.prisma/
+
+# Banco local de desenvolvimento (embedded-postgres)
+.pgdata/
+apps/api/.pgdata/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Editor / SO
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Vite
+apps/web/.vite/
+
+# Coverage de testes
+coverage/
+
+# Documentos de referência do projeto (binários grandes — não versionar)
+*.xlsx
+*.png

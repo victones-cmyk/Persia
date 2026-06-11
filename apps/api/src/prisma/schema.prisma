@@ -1,0 +1,137 @@
+// apps/api/src/prisma/schema.prisma
+// Projeto Pérsia — modelo de dados (SRD §9)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Perfil {
+  vendedor
+  admin
+}
+
+enum StatusOrcamento {
+  rascunho
+  enviado
+  erro
+  cancelado
+}
+
+enum TipoProduto {
+  persiana_rolo_blackout
+  persiana_rolo_screen
+  persiana_rolo_translucido
+  persiana_rolo_double_vision
+  persiana_romana_blackout
+  persiana_romana_screen
+  persiana_romana_translucido
+  cortina
+}
+
+model Loja {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome       String      @db.VarChar(50)
+  gc_loja_id String?     @db.VarChar(50)
+  ativo      Boolean     @default(true)
+  usuarios   Usuario[]
+  orcamentos Orcamento[]
+
+  @@map("lojas")
+}
+
+model Usuario {
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome             String      @db.VarChar(100)
+  email            String      @unique @db.VarChar(150)
+  senha_hash       String      @db.VarChar(255)
+  perfil           Perfil      @default(vendedor)
+  loja_id          String?     @db.Uuid
+  loja             Loja?       @relation(fields: [loja_id], references: [id])
+  gc_usuario_id    String?     @db.VarChar(50)
+  desconto_max_pct Decimal     @default(10.00) @db.Decimal(5, 2)
+  ativo            Boolean     @default(true)
+  criado_em        DateTime    @default(now()) @db.Timestamptz
+  atualizado_em    DateTime    @updatedAt @db.Timestamptz
+  orcamentos       Orcamento[] @relation("OrcamentosVendedor")
+  aprovacoes       Orcamento[] @relation("OrcamentosAprovados")
+  log_acoes        LogAcao[]
+
+  @@map("usuarios")
+}
+
+model Orcamento {
+  id                    String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tipo_produto          TipoProduto
+  usuario_id            String          @db.Uuid
+  usuario               Usuario         @relation("OrcamentosVendedor", fields: [usuario_id], references: [id])
+  loja_id               String          @db.Uuid
+  loja                  Loja            @relation(fields: [loja_id], references: [id])
+  gc_orcamento_id       String?         @db.VarChar(50)
+  gc_produto_id         String?         @db.VarChar(50)
+  status                StatusOrcamento @default(rascunho)
+  nome_cliente          String          @db.VarChar(150)
+  gc_cliente_id         String?         @db.VarChar(50)
+  tecido_codigo_gc      String          @db.VarChar(50)
+  tecido_nome           String          @db.VarChar(100)
+  largura_m             Decimal         @db.Decimal(6, 2)
+  altura_m              Decimal         @db.Decimal(6, 2)
+  dimensao_m            Decimal?        @db.Decimal(6, 2)
+  tc_m                  Decimal?        @db.Decimal(6, 2)
+  acionamento           String?         @db.VarChar(50)
+  cor_acessorio         String?         @db.VarChar(20)
+  rolamento             String?         @db.VarChar(20)
+  valor_bruto           Decimal         @db.Decimal(10, 2)
+  desconto_pct          Decimal         @default(0.00) @db.Decimal(5, 2)
+  valor_final           Decimal         @db.Decimal(10, 2)
+  desconto_aprovado_por String?         @db.Uuid
+  aprovador             Usuario?        @relation("OrcamentosAprovados", fields: [desconto_aprovado_por], references: [id])
+  payload_gc_enviado    Json?
+  resposta_gc           Json?
+  erro_gc               String?
+  criado_em             DateTime        @default(now()) @db.Timestamptz
+  atualizado_em         DateTime        @updatedAt @db.Timestamptz
+  itens                 ItemOrcamento[]
+
+  @@index([usuario_id, criado_em(sort: Desc)])
+  @@index([status])
+  @@index([gc_orcamento_id])
+  @@map("orcamentos")
+}
+
+model ItemOrcamento {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orcamento_id   String    @db.Uuid
+  orcamento      Orcamento @relation(fields: [orcamento_id], references: [id])
+  descricao      String    @db.VarChar(150)
+  quantidade     Decimal   @db.Decimal(10, 4)
+  unidade        String    @db.VarChar(20)
+  preco_unitario Decimal   @db.Decimal(10, 2)
+  valor_total    Decimal   @db.Decimal(10, 2)
+
+  @@map("itens_orcamento")
+}
+
+model Configuracao {
+  chave         String   @id @db.VarChar(100)
+  valor         String
+  descricao     String?  @db.VarChar(255)
+  atualizado_em DateTime @updatedAt @db.Timestamptz
+
+  @@map("configuracoes")
+}
+
+model LogAcao {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuario_id String   @db.Uuid
+  usuario    Usuario  @relation(fields: [usuario_id], references: [id])
+  acao       String   @db.VarChar(100)
+  detalhe    Json?
+  criado_em  DateTime @default(now()) @db.Timestamptz
+
+  @@map("log_acoes")
+}

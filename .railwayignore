@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.pgdata
+apps/api/.pgdata
+.git
+dist
+**/dist
+.env
+*.xlsx
+*.png
+*.md
+.claude
