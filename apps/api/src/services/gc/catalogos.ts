@@ -35,6 +35,11 @@ export interface GcSituacao {
   nome: string;
   tipo_lancamento: number | null;
 }
+export interface GcFuncionario {
+  id: string;
+  nome: string;
+  ativo: string;
+}
 
 // ID do grupo TECIDO no GestãoClick (verificado via GET /api/grupos_produtos).
 export const GRUPO_TECIDO_ID = '76944';
@@ -77,6 +82,11 @@ export async function listarLojas(): Promise<GcLoja[]> {
 export async function listarUsuarios(): Promise<GcUsuario[]> {
   const env = await gcRequest<GcEnvelope<GcUsuario[]>>({ method: 'GET', url: '/api/usuarios' });
   return env.data ?? [];
+}
+
+/** Funcionários (vendedores) do GestãoClick — usados para vincular ao usuário da Pérsia. */
+export function listarFuncionarios(): Promise<GcFuncionario[]> {
+  return buscarTodasPaginas<GcFuncionario>('/api/funcionarios', {});
 }
 
 export async function listarSituacoesOrcamentos(): Promise<GcSituacao[]> {

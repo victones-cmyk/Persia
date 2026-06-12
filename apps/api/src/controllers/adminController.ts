@@ -5,6 +5,7 @@ import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
+import { listarFuncionarios } from '../services/gc/catalogos';
 
 // ---------------------------------------------------------------------------
 // Usuários
@@ -28,6 +29,24 @@ export async function listarUsuarios(_req: Request, res: Response): Promise<void
   });
   const lojas = await prisma.loja.findMany({ select: { id: true, nome: true } });
   res.json({ usuarios, lojas });
+}
+
+/**
+ * Lista os funcionários (vendedores) do GestãoClick para o seletor "Vendedor GC".
+ * Retorna só os ativos, ordenados por nome. Se o GC estiver indisponível, devolve
+ * lista vazia + flag gc_offline (o frontend cai para o campo de texto manual).
+ */
+export async function listarFuncionariosGc(_req: Request, res: Response): Promise<void> {
+  try {
+    const todos = await listarFuncionarios();
+    const funcionarios = todos
+      .filter((f) => String(f.ativo) === '1')
+      .map((f) => ({ id: f.id, nome: f.nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    res.json({ funcionarios, gc_offline: false });
+  } catch {
+    res.json({ funcionarios: [], gc_offline: true });
+  }
 }
 
 export async function criarUsuario(req: Request, res: Response): Promise<void> {

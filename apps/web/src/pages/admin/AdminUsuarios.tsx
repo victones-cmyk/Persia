@@ -12,6 +12,10 @@ interface Loja {
   id: string;
   nome: string;
 }
+interface FuncionarioGc {
+  id: string;
+  nome: string;
+}
 interface Usuario {
   id: string;
   nome: string;
@@ -138,6 +142,34 @@ function ModalUsuario({
   const [descMax, setDescMax] = useState(usuario ? Number(usuario.desconto_max_pct) : 10);
   const [salvando, setSalvando] = useState(false);
 
+  // Seletor de vendedor: lista de funcionários do GestãoClick (carregada da API).
+  const [funcionarios, setFuncionarios] = useState<FuncionarioGc[]>([]);
+  const [carregandoFunc, setCarregandoFunc] = useState(true);
+  const [gcOffline, setGcOffline] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      try {
+        const r = await api.get<{ funcionarios: FuncionarioGc[]; gc_offline: boolean }>('/admin/funcionarios-gc');
+        if (!vivo) return;
+        setFuncionarios(r.funcionarios);
+        setGcOffline(r.gc_offline);
+      } catch {
+        if (vivo) setGcOffline(true);
+      } finally {
+        if (vivo) setCarregandoFunc(false);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // O vínculo atual pode apontar para um funcionário inativo/fora da lista —
+  // preserva como opção extra para não perder o vínculo ao editar.
+  const vinculoForaDaLista = gcUsuarioId && !funcionarios.some((f) => f.id === gcUsuarioId);
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setSalvando(true);
@@ -202,7 +234,29 @@ function ModalUsuario({
             </div>
             <div>
               <label className="form-label">Vendedor (GestãoClick)</label>
-              <input className="input" value={gcUsuarioId} onChange={(e) => setGcUsuarioId(e.target.value)} placeholder="ID do vendedor/funcionário no GC" />
+              {carregandoFunc ? (
+                <div className="input flex items-center text-neutral-500 text-sm-ui">
+                  <FontAwesomeIcon icon={faSpinner} spin className="mr-2" /> Carregando…
+                </div>
+              ) : gcOffline ? (
+                <>
+                  <input
+                    className="input"
+                    value={gcUsuarioId}
+                    onChange={(e) => setGcUsuarioId(e.target.value)}
+                    placeholder="ID do vendedor no GC"
+                  />
+                  <div className="helper-text mt-1" style={{ color: 'var(--action-edit)' }}>GestãoClick indisponível — informe o ID manualmente.</div>
+                </>
+              ) : (
+                <select className="input" value={gcUsuarioId} onChange={(e) => setGcUsuarioId(e.target.value)}>
+                  <option value="">(sem vendedor)</option>
+                  {vinculoForaDaLista && <option value={gcUsuarioId}>Vínculo atual (ID {gcUsuarioId})</option>}
+                  {funcionarios.map((f) => (
+                    <option key={f.id} value={f.id}>{f.nome}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
