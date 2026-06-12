@@ -1,7 +1,8 @@
 // apps/api/src/controllers/orcamentoController.ts
-// Envio de orçamento ao GestãoClick (SRD §11, Fase 5).
-// Fluxo: recalcula no servidor (RN-10 valor exato) → POST produto → POST orçamento
-// → salva local. Erros do GC salvam status='erro' para reenvio posterior.
+// Envio de orçamento ao GestãoClick (SRD §11, Fase 5) — MULTI-ITENS.
+// Um orçamento tem 1+ itens (janelas) do mesmo tipo de produto. Cada item vira:
+//  • um produto sintético no GC; • uma linha (qtd 1 × valor_final do item) no orçamento.
+// Soma das linhas = total exato (RN-10). Recalcula tudo no servidor (nunca confia no cliente).
 
 import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
@@ -19,23 +20,124 @@ import {
 } from '../services/calc/tipos';
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
-import { criarOrcamento as gcCriarOrcamento } from '../services/gc/orcamentos';
+import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
 
-interface EntradaEnvio {
-  tipo: TipoPersiana;
-  largura: number;
-  altura: number;
+/** Entrada de um item (janela) vinda do frontend. */
+interface ItemEntrada {
+  tecido_id: string;
   cor_acessorio: Cor;
   acionamento: Acionamento;
+  largura: number;
+  altura: number;
   tc?: number;
-  rolamento?: string;
-  desconto_pct: number;
-  cliente_id: string;
-  nome_cliente: string;
-  gc_cliente_id: string;
+  rolamento?: string | null;
+  base?: string | null;
+}
+
+/** Item já recalculado no servidor, pronto para enviar/salvar. */
+interface ItemPreparado {
+  tecido: TecidoGc;
+  cor_acessorio: Cor;
+  acionamento: Acionamento;
+  largura: number;
+  altura: number;
+  tc: number;
+  rolamento: string | null;
+  base: string | null;
+  qtd_venda: number;
+  qtd_producao: number;
+  valor_bruto: number;
+  valor_final: number;
+  valor_custo: number;
+  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
+  nome_produto: string;
+}
+
+/** Snapshot persistido em itens_json (independe do GC para reenvio/exibição). */
+interface ItemSnapshot {
+  tecido_codigo_gc: string;
+  tecido_nome: string;
+  dimensao_m: number;
+  largura_m: number;
+  altura_m: number;
+  tc_m: number;
+  cor_acessorio: string;
+  acionamento: string;
+  rolamento: string | null;
+  base: string | null;
+  qtd_venda: number;
+  qtd_producao: number;
+  valor_bruto: number;
+  valor_final: number;
+  valor_custo: number;
+  gc_produto_id: string | null;
+  nome_produto: string;
+  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
+}
+
+function nomeProdutoGc(tipo: TipoPersiana, it: { tecido_nome: string; largura: number; altura: number; cor_acessorio: string; acionamento: Acionamento }): string {
+  return `${TIPO_LABEL[tipo]} - ${it.tecido_nome} - ${it.largura.toFixed(2)}x${it.altura.toFixed(2)} - ${it.cor_acessorio} - ${ACIONAMENTO_LABEL[it.acionamento]}`.slice(0, 120);
+}
+
+/** Recalcula cada item no servidor e aplica o desconto (mesmo % em todos). */
+function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], descontoPct: number, tecidos: Map<string, TecidoGc>): {
+  preparados: ItemPreparado[];
+  valorBrutoTotal: number;
+  valorFinalTotal: number;
+} {
+  const preparados: ItemPreparado[] = [];
+  let valorBrutoTotal = 0;
+  let valorFinalTotal = 0;
+
+  for (const it of itens) {
+    const tecido = tecidos.get(String(it.tecido_id));
+    if (!tecido) throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido em todos os itens.');
+    const largura = Number(it.largura);
+    const altura = Number(it.altura);
+    if (!(largura > 0) || !(altura > 0)) {
+      throw new AppError(400, 'MEDIDAS_INVALIDAS', 'Largura e altura devem ser positivas em todos os itens.');
+    }
+
+    const calc = calcularPersiana({
+      tipo,
+      largura,
+      altura,
+      dimensao: tecido.dimensao_m,
+      cor_acessorio: it.cor_acessorio,
+      acionamento: it.acionamento,
+      tc: it.tc !== undefined && it.tc !== null ? Number(it.tc) : undefined,
+      preco_tecido: tecido.preco_venda,
+    });
+
+    const valorBruto = calc.valor_bruto!;
+    const valorFinal = aplicarDesconto(valorBruto, descontoPct);
+    const valorCusto = roundHalfUp(calc.qtd_venda * tecido.preco_custo);
+    valorBrutoTotal = roundHalfUp(valorBrutoTotal + valorBruto);
+    valorFinalTotal = roundHalfUp(valorFinalTotal + valorFinal);
+
+    preparados.push({
+      tecido,
+      cor_acessorio: it.cor_acessorio,
+      acionamento: it.acionamento,
+      largura,
+      altura,
+      tc: calc.tc,
+      rolamento: it.rolamento ?? null,
+      base: it.base ?? null,
+      qtd_venda: calc.qtd_venda,
+      qtd_producao: calc.qtd_producao,
+      valor_bruto: valorBruto,
+      valor_final: valorFinal,
+      valor_custo: valorCusto,
+      componentes: calc.componentes,
+      nome_produto: nomeProdutoGc(tipo, { tecido_nome: tecido.nome, largura, altura, cor_acessorio: it.cor_acessorio, acionamento: it.acionamento }),
+    });
+  }
+
+  return { preparados, valorBrutoTotal, valorFinalTotal };
 }
 
 /** Resolve a loja interna + gc_loja_id para o usuário (admin → loja matriz/SP). */
@@ -49,55 +151,88 @@ async function resolverLoja(lojaIdUsuario: string | null) {
   return matriz;
 }
 
-/** Executa o envio ao GestãoClick (produto + orçamento) com limpeza de órfão. */
+/**
+ * Cria N produtos no GC e 1 orçamento com N linhas. Em qualquer falha,
+ * remove TODOS os produtos já criados (best-effort) para não poluir o GC.
+ * Retorna os gc_produto_id na MESMA ORDEM dos itens.
+ */
 async function executarEnvioGc(args: {
-  entrada: EntradaEnvio;
-  tecido: TecidoGc;
-  valorBruto: number;
-  valorFinal: number;
-  qtdVenda: number;
+  itens: { nome_produto: string; valor_final: number; valor_custo: number }[];
+  gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
-}) {
-  const { entrada, tecido, valorFinal, qtdVenda, gcVendedorId, gcLojaId } = args;
-
-  const nomeProduto = `${TIPO_LABEL[entrada.tipo]} - ${tecido.nome} - ${entrada.largura.toFixed(2)}x${entrada.altura.toFixed(2)} - ${entrada.cor_acessorio} - ${ACIONAMENTO_LABEL[entrada.acionamento]}`.slice(0, 120);
-  const valorCusto = roundHalfUp(qtdVenda * tecido.preco_custo);
-
-  const produto = await criarProduto({
-    nome: nomeProduto,
-    valor_custo: valorCusto,
-    valor_venda: valorFinal,
-  });
-
+}): Promise<{ gc_orcamento_id: string; gc_produto_ids: string[]; payload: object; resposta: unknown }> {
+  const criados: string[] = [];
   try {
+    const linhas: LinhaProdutoGc[] = [];
+    for (const it of args.itens) {
+      const produto = await criarProduto({
+        nome: it.nome_produto,
+        valor_custo: it.valor_custo,
+        valor_venda: it.valor_final,
+      });
+      criados.push(produto.gc_produto_id);
+      linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
+    }
+
     const orc = await gcCriarOrcamento({
       codigo: Math.floor(Date.now() / 1000),
-      cliente_id: entrada.gc_cliente_id,
-      gc_produto_id: produto.gc_produto_id,
-      valor_final: valorFinal,
-      valor_custo: valorCusto,
+      cliente_id: args.gc_cliente_id,
+      produtos: linhas,
       data: new Date().toISOString().slice(0, 10),
-      usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null, // usuário de integração (ou master)
-      vendedor_id: gcVendedorId, // vendedor real atribuído ao orçamento
-      loja_id: gcLojaId,
+      usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
+      vendedor_id: args.gcVendedorId,
+      loja_id: args.gcLojaId,
     });
+
     return {
-      gc_produto_id: produto.gc_produto_id,
       gc_orcamento_id: orc.gc_orcamento_id,
-      payload: { produto: produto.payload, orcamento: orc.payload },
+      gc_produto_ids: criados,
+      payload: orc.payload,
       resposta: orc.resposta,
-      valorCusto,
     };
   } catch (err) {
-    // Orçamento falhou → remove o produto órfão criado (best-effort, não polui o GC).
-    try {
-      await deletarProduto(produto.gc_produto_id);
-    } catch {
-      /* ignora falha de limpeza */
+    for (const id of criados) {
+      try {
+        await deletarProduto(id);
+      } catch {
+        /* ignora falha de limpeza */
+      }
     }
     throw err;
   }
+}
+
+/** Verifica se a senha corresponde a algum usuário admin ativo. Retorna o admin ou null. */
+async function verificarSenhaGerente(senha: string): Promise<{ id: string } | null> {
+  const admins = await prisma.usuario.findMany({ where: { perfil: 'admin', ativo: true } });
+  for (const a of admins) {
+    if (bcrypt.compareSync(senha, a.senha_hash)) return { id: a.id };
+  }
+  return null;
+}
+
+function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[]): ItemSnapshot[] {
+  return preparados.map((p, i) => ({
+    tecido_codigo_gc: p.tecido.id,
+    tecido_nome: p.tecido.nome,
+    dimensao_m: p.tecido.dimensao_m,
+    largura_m: p.largura,
+    altura_m: p.altura,
+    tc_m: p.tc,
+    cor_acessorio: p.cor_acessorio,
+    acionamento: p.acionamento,
+    rolamento: p.rolamento,
+    base: p.base,
+    qtd_venda: p.qtd_venda,
+    qtd_producao: p.qtd_producao,
+    valor_bruto: p.valor_bruto,
+    valor_final: p.valor_final,
+    valor_custo: p.valor_custo,
+    gc_produto_id: gcProdutoIds[i] ?? null,
+    nome_produto: p.nome_produto,
+    componentes: p.componentes,
+  }));
 }
 
 export async function criarOrcamento(req: Request, res: Response): Promise<void> {
@@ -105,14 +240,10 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   const b = req.body ?? {};
 
   if (!isTipoPersiana(b.tipo)) throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
-  const largura = Number(b.largura);
-  const altura = Number(b.altura);
-  if (!(largura > 0) || !(altura > 0)) {
-    throw new AppError(400, 'MEDIDAS_INVALIDAS', 'Largura e altura devem ser positivas.');
-  }
-  if (!b.gc_cliente_id || !b.nome_cliente) {
-    throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
-  }
+  const tipo = b.tipo as TipoPersiana;
+  const itensEntrada: ItemEntrada[] = Array.isArray(b.itens) ? b.itens : [];
+  if (itensEntrada.length === 0) throw new AppError(400, 'SEM_ITENS', 'Adicione ao menos um item ao orçamento.');
+  if (!b.gc_cliente_id || !b.nome_cliente) throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
 
   const desconto_pct = Number(b.desconto_pct ?? 0);
   // RN-08: desconto acima do limite exige aprovação de gerente (senha de admin).
@@ -123,87 +254,65 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       throw new AppError(403, 'APROVACAO_NECESSARIA', 'Desconto acima do limite exige aprovação do gerente.');
     }
     const admin = await verificarSenhaGerente(senhaGerente);
-    if (!admin) {
-      throw new AppError(401, 'SENHA_GERENTE_INVALIDA', 'Senha de gerente incorreta.');
-    }
+    if (!admin) throw new AppError(401, 'SENHA_GERENTE_INVALIDA', 'Senha de gerente incorreta.');
     descontoAprovadoPor = admin.id;
   }
 
-  const tecido = await buscarTecidoGc(String(b.tecido_id));
-  if (!tecido) throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido.');
+  // Busca todos os tecidos referenciados (de uma vez).
+  const tecidos = new Map<string, TecidoGc>();
+  for (const it of itensEntrada) {
+    const id = String(it.tecido_id);
+    if (!tecidos.has(id)) {
+      const t = await buscarTecidoGc(id);
+      if (!t) throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido em todos os itens.');
+      tecidos.set(id, t);
+    }
+  }
 
-  // Recalcula no servidor — nunca confia no valor do cliente (RN-10).
-  const calc = calcularPersiana({
-    tipo: b.tipo,
-    largura,
-    altura,
-    dimensao: tecido.dimensao_m,
-    cor_acessorio: b.cor_acessorio,
-    acionamento: b.acionamento,
-    tc: b.tc !== undefined && b.tc !== null && b.tc !== '' ? Number(b.tc) : undefined,
-    preco_tecido: tecido.preco_venda,
-  });
-  const valorBruto = calc.valor_bruto!;
-  const valorFinal = aplicarDesconto(valorBruto, desconto_pct);
-
+  const { preparados, valorBrutoTotal, valorFinalTotal } = prepararItens(tipo, itensEntrada, desconto_pct, tecidos);
   const loja = await resolverLoja(sessao.loja_id);
+  const primeiro = preparados[0];
 
-  const entrada: EntradaEnvio = {
-    tipo: b.tipo,
-    largura,
-    altura,
-    cor_acessorio: b.cor_acessorio,
-    acionamento: b.acionamento,
-    tc: calc.tc,
-    rolamento: b.rolamento,
-    desconto_pct,
-    cliente_id: String(b.gc_cliente_id),
-    nome_cliente: String(b.nome_cliente),
-    gc_cliente_id: String(b.gc_cliente_id),
-  };
-
-  // Dados comuns ao salvar (sucesso ou erro).
+  // Campos comuns ao salvar (sucesso ou erro). Colunas single = 1º item (compat).
   const baseDados = {
-    tipo_produto: b.tipo,
+    tipo_produto: tipo,
     usuario_id: sessao.id,
     loja_id: loja.id,
-    nome_cliente: entrada.nome_cliente,
-    gc_cliente_id: entrada.gc_cliente_id,
-    tecido_codigo_gc: tecido.id,
-    tecido_nome: tecido.nome,
-    largura_m: largura,
-    altura_m: altura,
-    dimensao_m: tecido.dimensao_m,
-    tc_m: calc.tc,
-    acionamento: b.acionamento,
-    cor_acessorio: b.cor_acessorio,
-    rolamento: b.rolamento ?? null,
-    valor_bruto: valorBruto,
+    nome_cliente: String(b.nome_cliente),
+    gc_cliente_id: String(b.gc_cliente_id),
+    tecido_codigo_gc: primeiro.tecido.id,
+    tecido_nome: preparados.length > 1 ? `${primeiro.tecido.nome} (+${preparados.length - 1})` : primeiro.tecido.nome,
+    largura_m: primeiro.largura,
+    altura_m: primeiro.altura,
+    dimensao_m: primeiro.tecido.dimensao_m,
+    tc_m: primeiro.tc,
+    acionamento: primeiro.acionamento,
+    cor_acessorio: primeiro.cor_acessorio,
+    rolamento: primeiro.rolamento,
+    valor_bruto: valorBrutoTotal,
     desconto_pct,
-    valor_final: valorFinal,
+    valor_final: valorFinalTotal,
     desconto_aprovado_por: descontoAprovadoPor,
   };
 
   try {
     const envio = await executarEnvioGc({
-      entrada,
-      tecido,
-      valorBruto,
-      valorFinal,
-      qtdVenda: calc.qtd_venda,
+      itens: preparados.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+      gc_cliente_id: String(b.gc_cliente_id),
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
     });
 
+    const snapshots = snapshotsDe(preparados, envio.gc_produto_ids);
     const orcamento = await prisma.orcamento.create({
       data: {
         ...baseDados,
         status: 'enviado',
-        gc_produto_id: envio.gc_produto_id,
+        gc_produto_id: envio.gc_produto_ids[0] ?? null,
         gc_orcamento_id: envio.gc_orcamento_id,
+        itens_json: snapshots as unknown as Prisma.InputJsonValue,
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
         resposta_gc: envio.resposta as Prisma.InputJsonValue,
-        itens: { create: montarItens(tecido, calc, valorBruto) },
       },
     });
 
@@ -211,7 +320,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       data: {
         usuario_id: sessao.id,
         acao: 'orcamento_enviado_gc',
-        detalhe: { orcamento_id: orcamento.id, gc_orcamento_id: envio.gc_orcamento_id, valor_final: valorFinal },
+        detalhe: { orcamento_id: orcamento.id, gc_orcamento_id: envio.gc_orcamento_id, itens: preparados.length, valor_final: valorFinalTotal },
       },
     });
     if (descontoAprovadoPor) {
@@ -227,13 +336,14 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     res.status(201).json({ orcamento });
   } catch (err) {
     const gc = err instanceof GcError ? err : null;
+    const snapshots = snapshotsDe(preparados, []);
     const orcamento = await prisma.orcamento.create({
       data: {
         ...baseDados,
         status: 'erro',
+        itens_json: snapshots as unknown as Prisma.InputJsonValue,
         erro_gc: gc ? `HTTP ${gc.status}: ${gc.message}` : String((err as Error).message),
         payload_gc_enviado: (gc?.payload as object) ?? undefined,
-        itens: { create: montarItens(tecido, calc, valorBruto) },
       },
     });
     res.status(502).json({
@@ -247,28 +357,9 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   }
 }
 
-/** Monta os itens_orcamento (snapshot): tecido (com preço) + componentes (produção). */
-function montarItens(
-  tecido: TecidoGc,
-  calc: ReturnType<typeof calcularPersiana>,
-  valorBruto: number,
-) {
-  return [
-    {
-      descricao: tecido.nome,
-      quantidade: calc.qtd_venda,
-      unidade: 'm2',
-      preco_unitario: tecido.preco_venda,
-      valor_total: valorBruto,
-    },
-    ...calc.componentes.map((c) => ({
-      descricao: c.descricao,
-      quantidade: c.quantidade,
-      unidade: c.unidade,
-      preco_unitario: 0,
-      valor_total: 0,
-    })),
-  ];
+/** Reconstrói os itens preparados a partir do snapshot salvo (para reenvio). */
+function preparadosDoSnapshot(snaps: ItemSnapshot[]): { nome_produto: string; valor_final: number; valor_custo: number }[] {
+  return snaps.map((s) => ({ nome_produto: s.nome_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) }));
 }
 
 export async function reenviarOrcamento(req: Request, res: Response): Promise<void> {
@@ -280,50 +371,27 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
   }
   if (!orc.gc_cliente_id) throw new AppError(400, 'SEM_CLIENTE', 'Orçamento sem cliente vinculado.');
 
-  const tecido = await buscarTecidoGc(orc.tecido_codigo_gc);
-  if (!tecido) throw new AppError(400, 'TECIDO_INVALIDO', 'Tecido não encontrado no GestãoClick.');
-
-  const calc = calcularPersiana({
-    tipo: orc.tipo_produto as TipoPersiana,
-    largura: Number(orc.largura_m),
-    altura: Number(orc.altura_m),
-    dimensao: tecido.dimensao_m,
-    cor_acessorio: (orc.cor_acessorio ?? 'Branco') as Cor,
-    acionamento: (orc.acionamento ?? 'com_bando') as Acionamento,
-    tc: orc.tc_m ? Number(orc.tc_m) : undefined,
-    preco_tecido: tecido.preco_venda,
-  });
-  const valorFinal = Number(orc.valor_final);
+  const snaps = (orc.itens_json as unknown as ItemSnapshot[] | null) ?? [];
+  if (snaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento sem itens para reenviar.');
 
   const loja = await resolverLoja(orc.loja_id);
 
   try {
     const envio = await executarEnvioGc({
-      entrada: {
-        tipo: orc.tipo_produto as TipoPersiana,
-        largura: Number(orc.largura_m),
-        altura: Number(orc.altura_m),
-        cor_acessorio: (orc.cor_acessorio ?? 'Branco') as Cor,
-        acionamento: (orc.acionamento ?? 'com_bando') as Acionamento,
-        desconto_pct: Number(orc.desconto_pct),
-        cliente_id: orc.gc_cliente_id,
-        nome_cliente: orc.nome_cliente,
-        gc_cliente_id: orc.gc_cliente_id,
-      },
-      tecido,
-      valorBruto: Number(orc.valor_bruto),
-      valorFinal,
-      qtdVenda: calc.qtd_venda,
+      itens: preparadosDoSnapshot(snaps),
+      gc_cliente_id: orc.gc_cliente_id,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
     });
 
+    const novosSnaps = snaps.map((s, i) => ({ ...s, gc_produto_id: envio.gc_produto_ids[i] ?? null }));
     const atualizado = await prisma.orcamento.update({
       where: { id: orc.id },
       data: {
         status: 'enviado',
-        gc_produto_id: envio.gc_produto_id,
+        gc_produto_id: envio.gc_produto_ids[0] ?? null,
         gc_orcamento_id: envio.gc_orcamento_id,
+        itens_json: novosSnaps as unknown as Prisma.InputJsonValue,
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
         resposta_gc: envio.resposta as Prisma.InputJsonValue,
         erro_gc: null,
@@ -344,15 +412,6 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
       erro: { codigo: gc?.status === 401 ? 'GC_AUTH' : 'GC_ERRO', message: gc?.message ?? 'Falha no reenvio.' },
     });
   }
-}
-
-/** Verifica se a senha corresponde a algum usuário admin ativo. Retorna o admin ou null. */
-async function verificarSenhaGerente(senha: string): Promise<{ id: string } | null> {
-  const admins = await prisma.usuario.findMany({ where: { perfil: 'admin', ativo: true } });
-  for (const a of admins) {
-    if (bcrypt.compareSync(senha, a.senha_hash)) return { id: a.id };
-  }
-  return null;
 }
 
 /** GET /api/orcamentos — lista paginada (20/pág), filtros status e cliente. Vendedor vê só os seus. */

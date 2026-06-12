@@ -11,7 +11,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useGcHealth } from '../hooks/useGcHealth';
 import { PersianaForm } from '../components/PersianaForm';
 import { ResultadoPanel } from '../components/ResultadoPanel';
-import type { CalcularResposta, PersianaInputs } from '../lib/calcTypes';
+import type { OrcamentoCalculado } from '../lib/calcTypes';
 
 type TipoProduto = 'persiana' | 'cortina' | null;
 
@@ -20,13 +20,11 @@ export function OrcamentoNovo() {
   const { status: gcStatus } = useGcHealth();
   const navigate = useNavigate();
   const [tipoProduto, setTipoProduto] = useState<TipoProduto>(null);
-  const [resultado, setResultado] = useState<CalcularResposta | null>(null);
-  const [inputs, setInputs] = useState<PersianaInputs | null>(null);
+  const [resultado, setResultado] = useState<OrcamentoCalculado | null>(null);
 
   function escolher(tp: 'persiana' | 'cortina') {
     setTipoProduto(tp);
     setResultado(null);
-    setInputs(null);
   }
 
   return (
@@ -82,18 +80,12 @@ export function OrcamentoNovo() {
       {tipoProduto === 'persiana' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
-            <PersianaForm
-              onResult={(dados, ins) => {
-                setResultado(dados);
-                setInputs(ins);
-              }}
-            />
+            <PersianaForm onResult={setResultado} />
           </div>
           <div className="lg:col-span-1">
-            {resultado && inputs ? (
+            {resultado ? (
               <ResultadoPanel
                 dados={resultado}
-                inputs={inputs}
                 descontoMaxPct={usuario?.desconto_max_pct ?? 0}
                 gcStatus={gcStatus}
                 gcUsuarioId={usuario?.gc_usuario_id ?? null}

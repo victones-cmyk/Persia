@@ -1,12 +1,17 @@
 // apps/api/src/routes/calcular.ts
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { listarTecidos, calcularPersianaController } from '../controllers/calcularController';
+import {
+  listarTecidos,
+  calcularPersianaController,
+  calcularPersianaLoteController,
+} from '../controllers/calcularController';
 
 const router = Router();
 
 router.use(requireAuth);
 router.get('/tecidos', listarTecidos);
 router.post('/persiana', calcularPersianaController);
+router.post('/persiana/lote', calcularPersianaLoteController);
 
 export default router;

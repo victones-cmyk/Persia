@@ -53,16 +53,47 @@ export interface CalcularResposta {
   tecido: TecidoOpcao;
 }
 
-/** Snapshot dos campos do formulário usados no envio ao GestãoClick (Fase 5). */
-export interface PersianaInputs {
-  tipo: TipoPersiana;
-  largura: number;
-  altura: number;
+/** Campos de UM item (janela) enviados ao backend (cálculo em lote / orçamento). */
+export interface ItemInput {
+  tecido_id: string;
   cor_acessorio: Cor;
   acionamento: Acionamento;
+  largura: number;
+  altura: number;
   tc?: number;
-  rolamento?: string;
-  tecido_id: string;
+  rolamento?: string | null;
+  base?: string | null;
+}
+
+/** Resultado por item do cálculo em lote. */
+export type ItemResultado =
+  | { ok: true; index: number; resultado: ResultadoPersiana; tecido: TecidoOpcao }
+  | {
+      ok: false;
+      index: number;
+      error: string;
+      message: string;
+      dimensao_max?: number;
+      alternativos?: { id: string; nome: string; dimensao_m: number }[];
+    };
+
+export interface CalcularLoteResposta {
+  itens: ItemResultado[];
+  total_bruto: number;
+}
+
+/** Um item já calculado (ok), com a entrada original para reenvio. */
+export interface ItemCalculado {
+  input: ItemInput;
+  resultado: ResultadoPersiana;
+  tecido: TecidoOpcao;
+}
+
+/** Orçamento calculado (multi-itens) pronto para o painel de resultado. */
+export interface OrcamentoCalculado {
+  tipo: TipoPersiana;
+  itens: ItemCalculado[];
+  total_bruto: number;
 }
 
 export interface ClienteResumo {

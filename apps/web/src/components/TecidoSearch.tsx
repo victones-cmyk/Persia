@@ -105,7 +105,6 @@ export function TecidoSearch({
     <div className="relative" ref={boxRef}>
       <div className="relative">
         <input
-          id="f-tecido"
           className="input"
           disabled={disabled}
           placeholder={placeholder}

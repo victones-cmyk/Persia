@@ -10,6 +10,10 @@ import { useToast } from '../hooks/useToast';
 import { formatBRL, formatNum } from '../lib/formatacao';
 import { StatusBadge } from '../components/StatusBadge';
 import type { OrcamentoDetalhe as Orc } from '../lib/orcamentoTypes';
+import { TIPOS_PERSIANA, ACIONAMENTOS } from '../lib/calcTypes';
+
+const tipoLabel = (v: string) => TIPOS_PERSIANA.find((t) => t.value === v)?.label ?? v.replace(/_/g, ' ');
+const acionamentoLabel = (v: string | null) => (v ? ACIONAMENTOS.find((a) => a.value === v)?.label ?? v.replace(/_/g, ' ') : '—');
 
 function Linha({ label, valor }: { label: string; valor: React.ReactNode }) {
   return (
@@ -96,37 +100,51 @@ export function OrcamentoDetalhe() {
           </div>
         )}
 
-        <Linha label="Produto" valor={orc.tipo_produto.replace('persiana_', '').replace(/_/g, ' ')} />
-        <Linha label="Tecido" valor={orc.tecido_nome} />
-        <Linha label="Medidas (L × A)" valor={`${formatNum(Number(orc.largura_m))} × ${formatNum(Number(orc.altura_m))} m`} />
-        {orc.dimensao_m && <Linha label="Dimensão do rolo" valor={`${formatNum(Number(orc.dimensao_m))} m`} />}
-        {orc.tc_m && <Linha label="TC" valor={`${formatNum(Number(orc.tc_m))} m`} />}
-        {orc.acionamento && <Linha label="Acionamento" valor={orc.acionamento.replace(/_/g, ' ')} />}
-        {orc.cor_acessorio && <Linha label="Cor acessório" valor={orc.cor_acessorio} />}
-        {orc.rolamento && <Linha label="Rolamento" valor={orc.rolamento} />}
-        <Linha label="Valor bruto" valor={<span className="font-mono">{formatBRL(Number(orc.valor_bruto))}</span>} />
-        <Linha label="Desconto" valor={`${formatNum(Number(orc.desconto_pct), 0)}%`} />
-        <div className="flex justify-between py-3 mt-1" style={{ borderTop: '2px solid #ced4da' }}>
-          <span className="font-bold">Valor final</span>
-          <span className="font-mono font-bold text-xl-ui">{formatBRL(Number(orc.valor_final))}</span>
-        </div>
+        <Linha label="Produto" valor={tipoLabel(orc.tipo_produto)} />
 
-        {/* Breakdown de itens (snapshot) */}
-        {orc.itens?.length > 0 && (
-          <div className="mt-4">
-            <div className="text-xs-ui font-bold text-neutral-600 mb-1">Itens (snapshot)</div>
-            <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3 max-h-64 overflow-y-auto">
-              {orc.itens.map((it) => (
-                <div key={it.id} className="flex justify-between py-0.5 text-xs-ui border-b border-neutral-200">
-                  <span className="text-neutral-600 pr-2">{it.descricao}</span>
-                  <span className="font-mono tabular-nums text-neutral-800 whitespace-nowrap">
-                    {formatNum(Number(it.quantidade), it.unidade === 'un' ? 0 : 2)} {it.unidade}
-                  </span>
+        {/* Itens (janelas) do orçamento */}
+        {orc.itens_json && orc.itens_json.length > 0 ? (
+          <div className="mt-3 mb-1">
+            <div className="text-xs-ui font-bold text-neutral-600 mb-2">
+              {orc.itens_json.length} {orc.itens_json.length === 1 ? 'item' : 'itens'}
+            </div>
+            <div className="space-y-2">
+              {orc.itens_json.map((it, i) => (
+                <div key={i} className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
+                  <div className="flex justify-between items-start gap-2 mb-1">
+                    <span className="text-sm-ui font-semibold text-neutral-800">{i + 1}. {it.tecido_nome}</span>
+                    <span className="font-mono font-semibold tabular-nums whitespace-nowrap">{formatBRL(Number(it.valor_final))}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs-ui text-neutral-600">
+                    <span>Medidas: {formatNum(Number(it.largura_m))} × {formatNum(Number(it.altura_m))} m</span>
+                    <span>TC: {formatNum(Number(it.tc_m))} m</span>
+                    <span>Acionamento: {acionamentoLabel(it.acionamento)}</span>
+                    <span>Cor: {it.cor_acessorio || '—'}</span>
+                    {it.rolamento && <span>Rolamento: {it.rolamento}</span>}
+                    {it.base && <span>Base: {it.base}</span>}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
+        ) : (
+          <>
+            <Linha label="Tecido" valor={orc.tecido_nome} />
+            <Linha label="Medidas (L × A)" valor={`${formatNum(Number(orc.largura_m))} × ${formatNum(Number(orc.altura_m))} m`} />
+            {orc.acionamento && <Linha label="Acionamento" valor={acionamentoLabel(orc.acionamento)} />}
+            {orc.cor_acessorio && <Linha label="Cor acessório" valor={orc.cor_acessorio} />}
+            {orc.rolamento && <Linha label="Rolamento" valor={orc.rolamento} />}
+          </>
         )}
+
+        <div className="mt-2">
+          <Linha label="Valor bruto" valor={<span className="font-mono">{formatBRL(Number(orc.valor_bruto))}</span>} />
+          <Linha label="Desconto" valor={`${formatNum(Number(orc.desconto_pct), 0)}%`} />
+        </div>
+        <div className="flex justify-between py-3 mt-1" style={{ borderTop: '2px solid #ced4da' }}>
+          <span className="font-bold">Valor final</span>
+          <span className="font-mono font-bold text-xl-ui">{formatBRL(Number(orc.valor_final))}</span>
+        </div>
 
         {orc.status === 'erro' && (
           <button className="btn btn-warning w-full mt-4" disabled={reenviando} onClick={reenviar}>

@@ -1,11 +1,13 @@
 // apps/web/src/components/PersianaForm.tsx
-// Formulário de persiana (SRD §8 Etapa 2A). Tecidos do mock (Fase 4 → GestãoClick).
-// TC auto-preenchido (70% da altura) mas EDITÁVEL (RN-04). RN-01 com chips de alternativos.
+// Formulário de persiana MULTI-ITENS (SRD §8 Etapa 2A).
+// Produto Sob Medida é único para o orçamento; cada item (janela) tem sua Coleção
+// (Tecido), Cor, Acionamento, Largura, Altura, TC (70% editável, RN-04), Rolamento e Base.
+// Layout compacto: 2 linhas agrupadas por item. RN-01 por item com chips de alternativos.
 
 import { useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner, faCalculator } from '@fortawesome/free-solid-svg-icons';
-import { api, ApiError } from '../lib/api';
+import { faSpinner, faCalculator, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { api } from '../lib/api';
 import { roundHalfUp } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
 import {
@@ -17,115 +19,139 @@ import {
   type Cor,
   type Acionamento,
   type TecidoOpcao,
-  type CalcularResposta,
-  type RN01Resposta,
-  type PersianaInputs,
+  type ItemInput,
+  type ItemCalculado,
+  type CalcularLoteResposta,
+  type OrcamentoCalculado,
 } from '../lib/calcTypes';
 
-interface Alternativo {
+interface ItemForm {
   id: string;
-  nome: string;
-  dimensao_m: number;
+  tecido_id: string;
+  cor: Cor | '';
+  acionamento: Acionamento | '';
+  largura: string;
+  altura: string;
+  tc: string;
+  tcManual: boolean;
+  rolamento: string;
+  base: string;
+}
+
+interface ItemErro {
+  message: string;
+  alternativos?: { id: string; nome: string; dimensao_m: number }[];
+}
+
+function itemVazio(): ItemForm {
+  return { id: crypto.randomUUID(), tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '' };
 }
 
 export function PersianaForm({
   onResult,
 }: {
-  onResult: (dados: CalcularResposta | null, inputs: PersianaInputs | null) => void;
+  onResult: (dados: OrcamentoCalculado | null) => void;
 }) {
   const [tipo, setTipo] = useState<TipoPersiana | ''>('');
-  const [cor, setCor] = useState<Cor | ''>('');
-  const [acionamento, setAcionamento] = useState<Acionamento | ''>('');
-  const [tecidoId, setTecidoId] = useState('');
-  const [largura, setLargura] = useState('');
-  const [altura, setAltura] = useState('');
-  const [tc, setTc] = useState('');
-  const [tcManual, setTcManual] = useState(false);
-  const [rolamento, setRolamento] = useState('');
-  const [base, setBase] = useState('');
+  const [itens, setItens] = useState<ItemForm[]>([itemVazio()]);
   const [mesmoAmbiente, setMesmoAmbiente] = useState(false);
 
   const [tecidos, setTecidos] = useState<TecidoOpcao[]>([]);
   const [carregandoTecidos, setCarregandoTecidos] = useState(false);
   const [calculando, setCalculando] = useState(false);
-  const [larguraErro, setLarguraErro] = useState<string | null>(null);
-  const [alternativos, setAlternativos] = useState<Alternativo[]>([]);
+  const [erros, setErros] = useState<Record<number, ItemErro>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
 
-  // Recarrega tecidos quando o tipo muda (SRD §8: "ao mudar recarrega Coleção").
+  // Recarrega tecidos quando o tipo muda; limpa a seleção de tecido de todos os itens.
   useEffect(() => {
     if (!tipo) {
       setTecidos([]);
       return;
     }
     setCarregandoTecidos(true);
-    setTecidoId('');
+    setItens((prev) => prev.map((it) => ({ ...it, tecido_id: '' })));
+    setErros({});
+    onResult(null);
     api
       .get<{ tecidos: TecidoOpcao[] }>(`/calcular/tecidos?tipo=${tipo}`)
       .then((r) => setTecidos(r.tecidos))
       .catch(() => setTecidos([]))
       .finally(() => setCarregandoTecidos(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo]);
 
-  // TC auto = 70% da altura, até o vendedor editar manualmente (RN-04).
-  function onAlturaChange(v: string) {
-    setAltura(v);
-    const a = Number(v);
-    if (!tcManual && a > 0) setTc(String(roundHalfUp(a * 0.7)));
+  function atualizar(idx: number, patch: Partial<ItemForm>) {
+    setItens((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
 
-  const formValido =
-    tipo !== '' &&
-    cor !== '' &&
-    acionamento !== '' &&
-    tecidoId !== '' &&
-    Number(largura) > 0 &&
-    Number(altura) > 0;
+  function onAlturaChange(idx: number, v: string) {
+    const it = itens[idx];
+    const a = Number(v);
+    const patch: Partial<ItemForm> = { altura: v };
+    if (!it.tcManual && a > 0) patch.tc = String(roundHalfUp(a * 0.7));
+    atualizar(idx, patch);
+  }
+
+  function adicionarItem() {
+    setItens((prev) => [...prev, itemVazio()]);
+  }
+  function removerItem(idx: number) {
+    setItens((prev) => prev.filter((_, i) => i !== idx));
+    setErros({});
+    onResult(null);
+  }
+
+  const itemValido = (it: ItemForm) =>
+    it.tecido_id !== '' && it.cor !== '' && it.acionamento !== '' && Number(it.largura) > 0 && Number(it.altura) > 0;
+  const formValido = tipo !== '' && itens.length > 0 && itens.every(itemValido);
+
+  function toInput(it: ItemForm): ItemInput {
+    return {
+      tecido_id: it.tecido_id,
+      cor_acessorio: it.cor as Cor,
+      acionamento: it.acionamento as Acionamento,
+      largura: Number(it.largura),
+      altura: Number(it.altura),
+      tc: it.tc === '' ? undefined : Number(it.tc),
+      rolamento: it.rolamento || null,
+      base: it.base || null,
+    };
+  }
 
   async function calcular() {
     if (!formValido || calculando) return;
     setCalculando(true);
-    setLarguraErro(null);
-    setAlternativos([]);
+    setErros({});
     setErroGeral(null);
+    onResult(null);
     try {
-      const dados = await api.post<CalcularResposta>('/calcular/persiana', {
+      const r = await api.post<CalcularLoteResposta>('/calcular/persiana/lote', {
         tipo,
-        largura: Number(largura),
-        altura: Number(altura),
-        cor_acessorio: cor,
-        acionamento,
-        tc: tc === '' ? undefined : Number(tc),
-        tecido_id: tecidoId,
+        itens: itens.map(toInput),
       });
-      onResult(dados, {
-        tipo: tipo as TipoPersiana,
-        largura: Number(largura),
-        altura: Number(altura),
-        cor_acessorio: cor as Cor,
-        acionamento: acionamento as Acionamento,
-        tc: tc === '' ? undefined : Number(tc),
-        rolamento: rolamento || undefined,
-        tecido_id: tecidoId,
-      });
-    } catch (e) {
-      onResult(null, null);
-      if (e instanceof ApiError && e.status === 422) {
-        const d = e.data as RN01Resposta;
-        setLarguraErro(d.message);
-        setAlternativos(d.alternativos ?? []);
-      } else {
-        setErroGeral('Não foi possível calcular. Tente novamente.');
+
+      const novosErros: Record<number, ItemErro> = {};
+      const calculados: ItemCalculado[] = [];
+      for (const res of r.itens) {
+        if (res.ok) {
+          calculados[res.index] = { input: toInput(itens[res.index]), resultado: res.resultado, tecido: res.tecido };
+        } else {
+          novosErros[res.index] = { message: res.message, alternativos: res.alternativos };
+        }
       }
+
+      if (Object.keys(novosErros).length > 0) {
+        setErros(novosErros);
+        onResult(null);
+        return;
+      }
+      onResult({ tipo: tipo as TipoPersiana, itens: calculados.filter(Boolean), total_bruto: r.total_bruto });
+    } catch {
+      onResult(null);
+      setErroGeral('Não foi possível calcular. Tente novamente.');
     } finally {
       setCalculando(false);
     }
-  }
-
-  function escolherAlternativo(a: Alternativo) {
-    setTecidoId(a.id);
-    setLarguraErro(null);
-    setAlternativos([]);
   }
 
   return (
@@ -133,200 +159,137 @@ export function PersianaForm({
       <h4 className="text-lg-ui font-medium mb-4">Dados da Persiana</h4>
 
       <div className="space-y-4">
-        {/* Produto Sob Medida */}
-        <Campo id="f-tipo" label="Produto Sob Medida" obrigatorio>
+        {/* Produto Sob Medida — único para o orçamento */}
+        <div>
+          <label className="form-label" htmlFor="f-tipo">
+            Produto Sob Medida<span className="label-required">*</span>
+          </label>
           <select id="f-tipo" className="input" value={tipo} onChange={(e) => setTipo(e.target.value as TipoPersiana)}>
             <option value="">Selecione…</option>
             {TIPOS_PERSIANA.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
+              <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
-        </Campo>
-
-        {/* Coleção (Tecido) — busca com filtro (base grande) */}
-        <Campo id="f-tecido" label="Coleção (Tecido)" obrigatorio>
-          {carregandoTecidos ? (
-            <div className="skeleton" style={{ height: 38 }} />
-          ) : (
-            <TecidoSearch
-              tecidos={tecidos}
-              value={tecidoId}
-              onChange={setTecidoId}
-              disabled={!tipo}
-              placeholder={tipo ? 'Digite para buscar o tecido…' : 'Escolha o produto primeiro'}
-            />
-          )}
-        </Campo>
-
-        <div className="grid grid-cols-2 gap-4">
-          <Campo id="f-cor" label="Cor Acessório" obrigatorio>
-            <select id="f-cor" className="input" value={cor} onChange={(e) => setCor(e.target.value as Cor)}>
-              <option value="">Selecione…</option>
-              {CORES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </Campo>
-
-          <Campo id="f-acionamento" label="Acionamento" obrigatorio>
-            <select
-              id="f-acionamento"
-              className="input"
-              value={acionamento}
-              onChange={(e) => setAcionamento(e.target.value as Acionamento)}
-            >
-              <option value="">Selecione…</option>
-              {ACIONAMENTOS.map((a) => (
-                <option key={a.value} value={a.value}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </Campo>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
-          <Campo id="f-largura" label="Largura (m)" obrigatorio>
-            <input
-              id="f-largura"
-              type="number"
-              className={larguraErro ? 'input input-error' : 'input'}
-              min={0}
-              step={0.01}
-              value={largura}
-              onChange={(e) => {
-                setLargura(e.target.value);
-                setLarguraErro(null);
-              }}
-            />
-          </Campo>
-          <Campo id="f-altura" label="Altura (m)" obrigatorio>
-            <input
-              id="f-altura"
-              type="number"
-              className="input"
-              min={0}
-              step={0.01}
-              value={altura}
-              onChange={(e) => onAlturaChange(e.target.value)}
-            />
-          </Campo>
-          <Campo id="f-tc" label="TC (m)">
-            <input
-              id="f-tc"
-              type="number"
-              className="input"
-              min={0.01}
-              step={0.01}
-              value={tc}
-              onChange={(e) => {
-                setTc(e.target.value);
-                setTcManual(true);
-              }}
-              title="Pré-calculado como 70% da altura, mas editável (RN-04)"
-            />
-          </Campo>
-        </div>
+        {/* Itens (janelas) */}
+        {itens.map((it, idx) => (
+          <div key={it.id} className="rounded-sm border border-neutral-300 p-3" style={{ background: 'var(--neutral-50)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs-ui font-bold text-neutral-600">Item {idx + 1}</span>
+              {itens.length > 1 && (
+                <button
+                  type="button"
+                  className="text-error hover:opacity-80 text-xs-ui flex items-center gap-1"
+                  onClick={() => removerItem(idx)}
+                  title="Remover item"
+                >
+                  <FontAwesomeIcon icon={faTrash} /> Remover
+                </button>
+              )}
+            </div>
 
-        {/* RN-01: alerta de largura máxima + chips de alternativos */}
-        {larguraErro && (
-          <div style={{ padding: '10px 12px', background: 'var(--color-error-subtle)', border: '1px solid var(--color-error-border)', borderRadius: 4, color: '#721c24' }}>
-            <div className="text-xs-ui font-semibold">{larguraErro}</div>
-            {alternativos.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                <span className="text-xs-ui">Tecidos compatíveis:</span>
-                {alternativos.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => escolherAlternativo(a)}
-                    style={{ padding: '4px 10px', border: '1px solid var(--action-add)', borderRadius: 3, fontSize: 12, color: 'var(--action-add)', background: 'transparent' }}
-                  >
-                    {a.nome} ({a.dimensao_m.toFixed(2)}m)
-                  </button>
-                ))}
+            {/* Linha 1: Coleção (Tecido) · Cor · Acionamento */}
+            <div className="grid grid-cols-4 gap-3 mb-3">
+              <div className="col-span-2">
+                <label className="form-label">Coleção (Tecido)<span className="label-required">*</span></label>
+                {carregandoTecidos ? (
+                  <div className="skeleton" style={{ height: 38 }} />
+                ) : (
+                  <TecidoSearch
+                    tecidos={tecidos}
+                    value={it.tecido_id}
+                    onChange={(id) => atualizar(idx, { tecido_id: id })}
+                    disabled={!tipo}
+                    placeholder={tipo ? 'Buscar tecido…' : 'Escolha o produto'}
+                  />
+                )}
+              </div>
+              <div>
+                <label className="form-label">Cor Acessório<span className="label-required">*</span></label>
+                <select className="input" value={it.cor} onChange={(e) => atualizar(idx, { cor: e.target.value as Cor })}>
+                  <option value="">—</option>
+                  {CORES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Acionamento<span className="label-required">*</span></label>
+                <select className="input" value={it.acionamento} onChange={(e) => atualizar(idx, { acionamento: e.target.value as Acionamento })}>
+                  <option value="">—</option>
+                  {ACIONAMENTOS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Linha 2: Largura · Altura · TC · Rolamento · Base */}
+            <div className="grid grid-cols-5 gap-3">
+              <div>
+                <label className="form-label">Largura (m)<span className="label-required">*</span></label>
+                <input type="number" className={erros[idx] ? 'input input-error' : 'input'} min={0} step={0.01}
+                  value={it.largura} onChange={(e) => { atualizar(idx, { largura: e.target.value }); setErros((p) => { const n = { ...p }; delete n[idx]; return n; }); }} />
+              </div>
+              <div>
+                <label className="form-label">Altura (m)<span className="label-required">*</span></label>
+                <input type="number" className="input" min={0} step={0.01}
+                  value={it.altura} onChange={(e) => onAlturaChange(idx, e.target.value)} />
+              </div>
+              <div>
+                <label className="form-label" title="70% da altura, editável (RN-04)">TC (m)</label>
+                <input type="number" className="input" min={0.01} step={0.01}
+                  value={it.tc} onChange={(e) => atualizar(idx, { tc: e.target.value, tcManual: true })} />
+              </div>
+              <div>
+                <label className="form-label">Rolamento</label>
+                <select className="input" value={it.rolamento} onChange={(e) => atualizar(idx, { rolamento: e.target.value })}>
+                  <option value="">—</option>
+                  {ROLAMENTOS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="form-label">Base</label>
+                <select className="input" value={it.base} onChange={(e) => atualizar(idx, { base: e.target.value })}>
+                  <option value="">—</option>
+                  {CORES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* RN-01: erro de largura máxima + chips de alternativos (por item) */}
+            {erros[idx] && (
+              <div className="mt-2" style={{ padding: '8px 10px', background: 'var(--color-error-subtle)', border: '1px solid var(--color-error-border)', borderRadius: 4, color: '#721c24' }}>
+                <div className="text-xs-ui font-semibold">{erros[idx].message}</div>
+                {erros[idx].alternativos && erros[idx].alternativos!.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <span className="text-xs-ui">Tecidos compatíveis:</span>
+                    {erros[idx].alternativos!.map((a) => (
+                      <button key={a.id} type="button"
+                        onClick={() => { atualizar(idx, { tecido_id: a.id }); setErros((p) => { const n = { ...p }; delete n[idx]; return n; }); }}
+                        style={{ padding: '4px 10px', border: '1px solid var(--action-add)', borderRadius: 3, fontSize: 12, color: 'var(--action-add)', background: 'transparent' }}>
+                        {a.nome} ({a.dimensao_m.toFixed(2)}m)
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        )}
+        ))}
 
-        <div className="grid grid-cols-2 gap-4">
-          <Campo id="f-rolamento" label="Rolamento" obrigatorio>
-            <select id="f-rolamento" className="input" value={rolamento} onChange={(e) => setRolamento(e.target.value)}>
-              <option value="">Selecione…</option>
-              {ROLAMENTOS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </Campo>
-          <Campo id="f-base" label="Base">
-            <select id="f-base" className="input" value={base} onChange={(e) => setBase(e.target.value)}>
-              <option value="">Selecione…</option>
-              {CORES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </Campo>
-        </div>
+        <button type="button" className="btn btn-default w-full" onClick={adicionarItem} disabled={!tipo}>
+          <FontAwesomeIcon icon={faPlus} /> Adicionar item
+        </button>
 
         <label className="flex items-center gap-2 text-md-ui">
-          <input
-            type="checkbox"
-            checked={mesmoAmbiente}
-            onChange={(e) => setMesmoAmbiente(e.target.checked)}
-            style={{ accentColor: 'var(--action-add)' }}
-          />
+          <input type="checkbox" checked={mesmoAmbiente} onChange={(e) => setMesmoAmbiente(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
           Mesmo Ambiente
         </label>
 
         {erroGeral && <div className="helper-error">{erroGeral}</div>}
 
-        <button
-          type="button"
-          className="btn btn-success w-full"
-          disabled={!formValido || calculando}
-          aria-disabled={!formValido || calculando}
-          onClick={calcular}
-        >
-          {calculando ? (
-            <FontAwesomeIcon icon={faSpinner} spin />
-          ) : (
-            <>
-              <FontAwesomeIcon icon={faCalculator} /> Calcular
-            </>
-          )}
+        <button type="button" className="btn btn-success w-full" disabled={!formValido || calculando} aria-disabled={!formValido || calculando} onClick={calcular}>
+          {calculando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faCalculator} /> Calcular</>}
         </button>
       </div>
-    </div>
-  );
-}
-
-function Campo({
-  id,
-  label,
-  obrigatorio,
-  children,
-}: {
-  id: string;
-  label: string;
-  obrigatorio?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="form-label" htmlFor={id}>
-        {label}
-        {obrigatorio && <span className="label-required">*</span>}
-      </label>
-      {children}
     </div>
   );
 }

@@ -3,8 +3,9 @@
 
 import type { Request, Response } from 'express';
 import { calcularPersiana, RN01Error } from '../services/calc/persiana';
-import { isTipoPersiana } from '../services/calc/tipos';
+import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
 import { tecidosParaTipo, buscarTecidoGc } from '../services/gc/tecidos';
+import { roundHalfUp } from '../services/calc/arredondamento';
 import { AppError } from '../middleware/errorHandler';
 
 /** GET /api/calcular/tecidos?tipo=persiana_rolo_blackout — tecidos reais do GestãoClick. */
@@ -70,4 +71,87 @@ export async function calcularPersianaController(req: Request, res: Response): P
     }
     throw err;
   }
+}
+
+/**
+ * POST /api/calcular/persiana/lote — calcula vários itens (janelas) do mesmo
+ * tipo de produto. Retorna o resultado por item (ou o erro RN-01 do item) e o
+ * total bruto do orçamento. Não falha o lote inteiro por causa de um item.
+ */
+export async function calcularPersianaLoteController(req: Request, res: Response): Promise<void> {
+  const tipo = req.body?.tipo;
+  const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+
+  if (!isTipoPersiana(tipo)) {
+    throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
+  }
+  if (itens.length === 0) {
+    throw new AppError(400, 'SEM_ITENS', 'Adicione ao menos um item.');
+  }
+
+  // Tecidos compatíveis (para sugestões RN-01) — carregados sob demanda só se precisar.
+  let compatCache: { id: string; nome: string; dimensao_m: number }[] | null = null;
+  const compatPara = async (larguraN: number) => {
+    if (!compatCache) {
+      compatCache = (await tecidosParaTipo(tipo as TipoPersiana)).map((t) => ({
+        id: t.id,
+        nome: t.nome,
+        dimensao_m: t.dimensao_m,
+      }));
+    }
+    return compatCache.filter((t) => t.dimensao_m >= larguraN);
+  };
+
+  const resultados = [];
+  let totalBruto = 0;
+
+  for (let i = 0; i < itens.length; i++) {
+    const it = itens[i] ?? {};
+    const larguraN = Number(it.largura);
+    const alturaN = Number(it.altura);
+
+    if (!(larguraN > 0) || !(alturaN > 0)) {
+      resultados.push({ ok: false, index: i, error: 'MEDIDAS_INVALIDAS', message: 'Largura e altura devem ser positivas.' });
+      continue;
+    }
+    const tecido = await buscarTecidoGc(String(it.tecido_id));
+    if (!tecido) {
+      resultados.push({ ok: false, index: i, error: 'TECIDO_INVALIDO', message: 'Selecione um tecido válido.' });
+      continue;
+    }
+    try {
+      const resultado = calcularPersiana({
+        tipo: tipo as TipoPersiana,
+        largura: larguraN,
+        altura: alturaN,
+        dimensao: tecido.dimensao_m,
+        cor_acessorio: it.cor_acessorio,
+        acionamento: it.acionamento,
+        tc: it.tc !== undefined && it.tc !== null && it.tc !== '' ? Number(it.tc) : undefined,
+        preco_tecido: tecido.preco_venda,
+      });
+      totalBruto = roundHalfUp(totalBruto + (resultado.valor_bruto ?? 0));
+      resultados.push({
+        ok: true,
+        index: i,
+        resultado,
+        tecido: { id: tecido.id, nome: tecido.nome, dimensao_m: tecido.dimensao_m, preco_venda: tecido.preco_venda },
+      });
+    } catch (err) {
+      if (err instanceof RN01Error) {
+        resultados.push({
+          ok: false,
+          index: i,
+          error: 'RN01_LARGURA_EXCEDIDA',
+          message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2)}m.`,
+          dimensao_max: tecido.dimensao_m,
+          alternativos: await compatPara(larguraN),
+        });
+      } else {
+        throw err;
+      }
+    }
+  }
+
+  res.json({ itens: resultados, total_bruto: totalBruto });
 }

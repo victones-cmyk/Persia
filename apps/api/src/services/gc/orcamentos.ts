@@ -1,18 +1,24 @@
 // apps/api/src/services/gc/orcamentos.ts
 // Escrita de orçamentos no GestãoClick (SRD §11, Fase 5).
-// Linha única: quantidade 1 × valor_venda = valor_final → total exato (RN-10).
+// Cada item (janela) é uma linha de produto: quantidade 1 × valor_venda = valor_final
+// do item → soma das linhas = total exato do orçamento (RN-10).
 
 import { gcRequest, type GcEnvelope } from './client';
 
 // Situação "Em aberto" (GET /api/situacoes_orcamentos — verificado 11/06/2026).
 export const SITUACAO_EM_ABERTO = '92112';
 
+/** Uma linha de produto do orçamento (um item/janela). */
+export interface LinhaProdutoGc {
+  gc_produto_id: string;
+  valor_venda: number; // valor final do item (com desconto), RN-10
+  valor_custo: number;
+}
+
 export interface NovoOrcamentoGc {
   codigo: number; // timestamp unix (int)
   cliente_id: string;
-  gc_produto_id: string;
-  valor_final: number;
-  valor_custo: number;
+  produtos: LinhaProdutoGc[]; // uma linha por item do orçamento
   data: string; // YYYY-MM-DD
   usuario_id?: string | null; // usuário de login/integração (omitido → usuário master)
   vendedor_id?: string | null; // vendedor (cadastro de funcionários) atribuído ao orçamento
@@ -29,21 +35,19 @@ export interface ResultadoOrcamento {
   resposta: unknown;
 }
 
-function montarPayload(o: NovoOrcamentoGc): Record<string, unknown> {
+export function montarPayload(o: NovoOrcamentoGc): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     tipo: 'produto',
     codigo: o.codigo,
     cliente_id: o.cliente_id,
     situacao_id: SITUACAO_EM_ABERTO,
     data: o.data,
-    produtos: [
-      {
-        produto_id: o.gc_produto_id,
-        quantidade: 1,
-        valor_venda: o.valor_final,
-        valor_custo: o.valor_custo,
-      },
-    ],
+    produtos: o.produtos.map((p) => ({
+      produto_id: p.gc_produto_id,
+      quantidade: 1,
+      valor_venda: p.valor_venda,
+      valor_custo: p.valor_custo,
+    })),
   };
   if (o.usuario_id) payload.usuario_id = o.usuario_id;
   if (o.vendedor_id) payload.vendedor_id = o.vendedor_id;
