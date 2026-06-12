@@ -7,6 +7,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faCalculator } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { roundHalfUp } from '../lib/formatacao';
+import { TecidoSearch } from './TecidoSearch';
 import {
   TIPOS_PERSIANA,
   CORES,
@@ -144,25 +145,18 @@ export function PersianaForm({
           </select>
         </Campo>
 
-        {/* Coleção (Tecido) */}
+        {/* Coleção (Tecido) — busca com filtro (base grande) */}
         <Campo id="f-tecido" label="Coleção (Tecido)" obrigatorio>
           {carregandoTecidos ? (
             <div className="skeleton" style={{ height: 38 }} />
           ) : (
-            <select
-              id="f-tecido"
-              className="input"
+            <TecidoSearch
+              tecidos={tecidos}
               value={tecidoId}
+              onChange={setTecidoId}
               disabled={!tipo}
-              onChange={(e) => setTecidoId(e.target.value)}
-            >
-              <option value="">{tipo ? 'Selecione o tecido…' : 'Escolha o produto primeiro'}</option>
-              {tecidos.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.nome} — {t.dimensao_m.toFixed(2)}m
-                </option>
-              ))}
-            </select>
+              placeholder={tipo ? 'Digite para buscar o tecido…' : 'Escolha o produto primeiro'}
+            />
           )}
         </Campo>
 
