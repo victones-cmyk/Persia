@@ -15,6 +15,7 @@ export interface Usuario {
   loja_id: string | null;
   gc_usuario_id: string | null;
   desconto_max_pct: number;
+  senha_provisoria: boolean;
 }
 
 interface AuthContextValue {
@@ -24,6 +25,7 @@ interface AuthContextValue {
   login: (email: string, senha: string) => Promise<void>;
   logout: () => Promise<void>;
   limparSessaoExpirada: () => void;
+  atualizarUsuario: (u: Usuario) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -75,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         limparSessaoExpirada: () => setSessaoExpirada(false),
+        atualizarUsuario: setUsuario,
       }}
     >
       {children}

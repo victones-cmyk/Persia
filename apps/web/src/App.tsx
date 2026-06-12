@@ -4,8 +4,9 @@
 
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Login } from './pages/Login';
+import { TrocarSenha } from './pages/TrocarSenha';
 import { Layout } from './components/Layout';
-import { ProtectedRoute, AdminRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, AdminRoute, SenhaDefinitivaRoute } from './components/ProtectedRoute';
 import { OrcamentoNovo } from './pages/OrcamentoNovo';
 import { Orcamentos } from './pages/Orcamentos';
 import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
@@ -19,16 +20,22 @@ function App() {
       <Route path="/login" element={<Login />} />
 
       <Route element={<ProtectedRoute />}>
-        <Route element={<Layout />}>
-          <Route index element={<Navigate to="/orcamentos" replace />} />
-          <Route path="/orcamentos" element={<Orcamentos />} />
-          <Route path="/orcamentos/novo" element={<OrcamentoNovo />} />
-          <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
+        {/* Troca de senha fica fora do Layout (sem navbar/sidebar). */}
+        <Route path="/trocar-senha" element={<TrocarSenha />} />
 
-          <Route element={<AdminRoute />}>
-            <Route path="/admin/usuarios" element={<AdminUsuarios />} />
-            <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
-            <Route path="/admin/log-acoes" element={<AdminLog />} />
+        {/* Demais rotas exigem senha definitiva (não provisória). */}
+        <Route element={<SenhaDefinitivaRoute />}>
+          <Route element={<Layout />}>
+            <Route index element={<Navigate to="/orcamentos" replace />} />
+            <Route path="/orcamentos" element={<Orcamentos />} />
+            <Route path="/orcamentos/novo" element={<OrcamentoNovo />} />
+            <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
+
+            <Route element={<AdminRoute />}>
+              <Route path="/admin/usuarios" element={<AdminUsuarios />} />
+              <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
+              <Route path="/admin/log-acoes" element={<AdminLog />} />
+            </Route>
           </Route>
         </Route>
       </Route>

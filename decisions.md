@@ -179,3 +179,22 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 - **Fases 1–6 concluídas e em produção:** https://persia-api-production.up.railway.app
 - **CI/CD:** auto-deploy via GitHub funcionando (verificado de ponta a ponta).
 - **Próximas:** Fase 7 (cortina — bloqueada por BLOQUEANTE-02) e Fase 8 (homologação/go-live).
+
+---
+
+## 8. Autenticação e identidade do usuário (atualização 12/06/2026)
+
+### 8.1 ✅ Vínculo vendedor ↔ GestãoClick por seletor de nome
+- **Decisão:** no cadastro de usuário (Admin → Usuários), o campo "Vendedor (GestãoClick)" virou um **`<select>` com os nomes dos funcionários ativos do GC** (`GET /api/admin/funcionarios-gc`); ao escolher o nome, o `gc_usuario_id` é gravado automaticamente. Fallback para campo de texto se o GC estiver offline; vínculo a funcionário inativo/fora da lista é preservado ao editar.
+- **Razão:** o admin não precisa descobrir o ID interno do GC (não é óbvio na UI do GestãoClick). Reduz erro e facilita o handover. Substituiu a abordagem anterior (planilha de IDs enviada ao Victor — descartada).
+
+### 8.2 ✅ Login é "Usuário", não e-mail
+- **Decisão:** o campo de login passou de "E-mail" para **"Usuário"**, aceitando qualquer texto (mín. 3 caracteres); removida a exigência de formato de e-mail (`type="email"` → `text`; `emailValido` → `usuarioValido`). Banco e backend inalterados (coluna `email` permanece como identificador único; `lowerCase().trim()`); logins atuais que são e-mails continuam válidos.
+- **Razão:** o sistema **não envia nem valida e-mail real** (sem confirmação/recuperação por e-mail). O campo sempre foi, na prática, só um nome de usuário. Permite logins simples (ex.: `maria.sp`).
+
+### 8.3 ✅ Recuperação de senha: admin + autoatendimento (sem e-mail)
+- **Decisão:** **não** implementar autenticação por e-mail (convite/reset por link). Em vez disso:
+  - **Admin redefine** a senha em Admin → Usuários (já existia).
+  - **Autoatendimento:** usuário logado troca a própria senha em `/trocar-senha` (link "Alterar senha" na navbar) via `POST /api/auth/alterar-senha` (exige senha atual).
+  - **Troca obrigatória no 1º acesso:** novo campo `Usuario.senha_provisoria` (migration `20260612040000_add_senha_provisoria`). Admin que **cria** usuário ou **reseta** senha → `senha_provisoria = true`; o usuário é **forçado** à tela de troca antes de acessar o app (`SenhaDefinitivaRoute`); ao trocar, vira `false`. Badge "senha provisória" na lista de usuários.
+- **Razão:** para uma ferramenta interna de ~8 usuários, autenticação por e-mail exige provedor de envio (SES/Resend/SMTP), SPF/DKIM, fluxos e templates — custo/manutenção desproporcionais. Admin + autoatendimento + troca no 1º acesso resolve "esqueci a senha" sem nenhuma infraestrutura de e-mail e mantém o "Usuário livre" (8.2).

@@ -28,3 +28,11 @@ export function AdminRoute() {
   if (usuario.perfil !== 'admin') return <Navigate to="/orcamentos" replace />;
   return <Outlet />;
 }
+
+/** Força a troca de senha provisória antes de liberar o restante do app. */
+export function SenhaDefinitivaRoute() {
+  const { usuario, carregando } = useAuth();
+  if (carregando) return <TelaCarregando />;
+  if (usuario?.senha_provisoria) return <Navigate to="/trocar-senha" replace />;
+  return <Outlet />;
+}

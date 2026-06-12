@@ -25,6 +25,7 @@ interface Usuario {
   gc_usuario_id: string | null;
   desconto_max_pct: string;
   ativo: boolean;
+  senha_provisoria: boolean;
   loja?: Loja | null;
 }
 
@@ -85,7 +86,18 @@ export function AdminUsuarios() {
             ) : (
               usuarios.map((u) => (
                 <tr key={u.id} style={{ borderTop: '1px solid #dee2e6', opacity: u.ativo ? 1 : 0.5 }}>
-                  <td style={{ padding: 12 }} className="td-strong">{u.nome}</td>
+                  <td style={{ padding: 12 }} className="td-strong">
+                    {u.nome}
+                    {u.senha_provisoria && (
+                      <span
+                        className="badge ml-2"
+                        style={{ background: 'var(--color-warning-subtle)', color: '#856404', borderColor: 'var(--color-warning-border)' }}
+                        title="Senha provisória — o usuário trocará no primeiro acesso"
+                      >
+                        senha provisória
+                      </span>
+                    )}
+                  </td>
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{u.email}</td>
                   <td style={{ padding: 12 }}><span className="badge badge-secondary">{u.perfil === 'admin' ? 'Admin' : 'Vendedor'}</span></td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.loja?.nome ?? '—'}</td>
@@ -210,6 +222,7 @@ function ModalUsuario({
           <div>
             <label className="form-label">Senha {novo ? <span className="label-required">*</span> : <span className="label-optional">(deixe em branco p/ manter)</span>}</label>
             <input className="input" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required={novo} />
+            <div className="helper-text">{novo ? 'Senha provisória — o usuário definirá a sua no primeiro acesso.' : 'Se preenchida, vira provisória e o usuário troca no próximo login.'}</div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

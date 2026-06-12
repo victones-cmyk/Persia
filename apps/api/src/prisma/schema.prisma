@@ -55,6 +55,8 @@ model Usuario {
   gc_usuario_id    String?     @db.VarChar(50)
   desconto_max_pct Decimal     @default(10.00) @db.Decimal(5, 2)
   ativo            Boolean     @default(true)
+  // true → senha definida pelo admin (provisória); usuário deve trocá-la no próximo login.
+  senha_provisoria Boolean     @default(false)
   criado_em        DateTime    @default(now()) @db.Timestamptz
   atualizado_em    DateTime    @updatedAt @db.Timestamptz
   orcamentos       Orcamento[] @relation("OrcamentosVendedor")

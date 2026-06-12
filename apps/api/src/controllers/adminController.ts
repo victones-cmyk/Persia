@@ -19,6 +19,7 @@ const USUARIO_SELECT = {
   gc_usuario_id: true,
   desconto_max_pct: true,
   ativo: true,
+  senha_provisoria: true,
   loja: { select: { id: true, nome: true } },
 } as const;
 
@@ -69,6 +70,8 @@ export async function criarUsuario(req: Request, res: Response): Promise<void> {
       loja_id: b.loja_id || null,
       gc_usuario_id: b.gc_usuario_id || null,
       desconto_max_pct: b.desconto_max_pct !== undefined ? Number(b.desconto_max_pct) : 10,
+      // Senha definida pelo admin é provisória — o usuário troca no primeiro acesso.
+      senha_provisoria: true,
     },
     select: USUARIO_SELECT,
   });
@@ -91,6 +94,8 @@ export async function editarUsuario(req: Request, res: Response): Promise<void> 
   if (b.senha) {
     if (String(b.senha).length < 6) throw new AppError(400, 'SENHA_CURTA', 'Senha muito curta.');
     data.senha_hash = bcrypt.hashSync(String(b.senha), 10);
+    // Reset de senha pelo admin → provisória; o usuário deve trocá-la no próximo login.
+    data.senha_provisoria = true;
   }
 
   const usuario = await prisma.usuario.update({ where: { id }, data, select: USUARIO_SELECT });

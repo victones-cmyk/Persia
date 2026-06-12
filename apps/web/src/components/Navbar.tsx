@@ -1,8 +1,9 @@
 // apps/web/src/components/Navbar.tsx
 // Header preto de 50px (DS §7): marca à esquerda, indicador GC + usuário à direita.
 
+import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faScissors, faRightFromBracket } from '@fortawesome/free-solid-svg-icons';
+import { faScissors, faRightFromBracket, faKey } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useGcHealth } from '../hooks/useGcHealth';
 import { GcIndicator } from './GcIndicator';
@@ -28,6 +29,14 @@ export function Navbar({ gcStatus }: { gcStatus: ReturnType<typeof useGcHealth>[
                 {usuario.perfil === 'admin' ? 'Admin' : 'Vendedor'}
               </span>
             </span>
+            <Link
+              to="/trocar-senha"
+              className="text-neutral-300 hover:text-neutral-0 flex items-center gap-2"
+              title="Alterar senha"
+            >
+              <FontAwesomeIcon icon={faKey} />
+              <span className="hidden sm:inline">Alterar senha</span>
+            </Link>
             <button
               type="button"
               onClick={() => void logout()}
