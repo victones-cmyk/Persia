@@ -217,7 +217,7 @@ function ModalUsuario({
           </div>
           <div>
             <label className="form-label">Usuário<span className="label-required">*</span></label>
-            <input className="input" type="text" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={!novo} />
+            <input className="input" type="text" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div>
             <label className="form-label">Senha {novo ? <span className="label-required">*</span> : <span className="label-optional">(deixe em branco p/ manter)</span>}</label>

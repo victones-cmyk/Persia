@@ -86,6 +86,16 @@ export async function editarUsuario(req: Request, res: Response): Promise<void> 
 
   const data: Record<string, unknown> = {};
   if (b.nome !== undefined) data.nome = String(b.nome);
+  // Login (campo email) é editável pelo admin; normaliza e garante unicidade.
+  if (b.email !== undefined) {
+    const novoLogin = String(b.email).toLowerCase().trim();
+    if (!novoLogin) throw new AppError(400, 'CAMPOS_OBRIGATORIOS', 'O usuário (login) não pode ficar vazio.');
+    if (novoLogin !== existe.email) {
+      const dup = await prisma.usuario.findUnique({ where: { email: novoLogin } });
+      if (dup) throw new AppError(409, 'EMAIL_EXISTENTE', 'Já existe um usuário com este login.');
+      data.email = novoLogin;
+    }
+  }
   if (b.perfil !== undefined) data.perfil = b.perfil === 'admin' ? 'admin' : 'vendedor';
   if (b.loja_id !== undefined) data.loja_id = b.loja_id || null;
   if (b.gc_usuario_id !== undefined) data.gc_usuario_id = b.gc_usuario_id || null;

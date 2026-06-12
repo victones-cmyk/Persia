@@ -27,7 +27,7 @@ async function main() {
 
   // 2. Usuário Administrador (Victor)
   await prisma.usuario.upsert({
-    where: { email: 'victor@rainhadascortinas.com.br' },
+    where: { email: 'victor.pavoni' },
     update: {
       nome: 'Victor Nogueira Pavoni',
       perfil: 'admin',
@@ -37,7 +37,7 @@ async function main() {
     },
     create: {
       nome: 'Victor Nogueira Pavoni',
-      email: 'victor@rainhadascortinas.com.br',
+      email: 'victor.pavoni',
       senha_hash: bcrypt.hashSync('Admin@2026', 10),
       perfil: 'admin',
       loja_id: null,
@@ -48,7 +48,7 @@ async function main() {
 
   // 3. Vendedor SP (homologação)
   await prisma.usuario.upsert({
-    where: { email: 'vendedor.sp@rainhadascortinas.com.br' },
+    where: { email: 'loja.sp' },
     update: {
       nome: 'Vendedor SP Teste',
       perfil: 'vendedor',
@@ -57,7 +57,7 @@ async function main() {
     },
     create: {
       nome: 'Vendedor SP Teste',
-      email: 'vendedor.sp@rainhadascortinas.com.br',
+      email: 'loja.sp',
       senha_hash: bcrypt.hashSync('Vendedor@2026', 10),
       perfil: 'vendedor',
       loja_id: lojaSP.id,
@@ -68,7 +68,7 @@ async function main() {
 
   // 4. Vendedor SBC (homologação)
   await prisma.usuario.upsert({
-    where: { email: 'vendedor.sbc@rainhadascortinas.com.br' },
+    where: { email: 'loja.sbc' },
     update: {
       nome: 'Vendedor SBC Teste',
       perfil: 'vendedor',
@@ -77,7 +77,7 @@ async function main() {
     },
     create: {
       nome: 'Vendedor SBC Teste',
-      email: 'vendedor.sbc@rainhadascortinas.com.br',
+      email: 'loja.sbc',
       senha_hash: bcrypt.hashSync('Vendedor@2026', 10),
       perfil: 'vendedor',
       loja_id: lojaSBC.id,
