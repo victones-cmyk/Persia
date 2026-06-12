@@ -1,10 +1,10 @@
 // apps/web/src/lib/validacao.ts
 // Validações de formulário no cliente.
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-export function emailValido(email: string): boolean {
-  return EMAIL_RE.test(email.trim());
+// O login não é um e-mail real (o sistema não envia e-mails); é só um nome de
+// usuário. Aceita qualquer texto não vazio (mín. 3 caracteres).
+export function usuarioValido(usuario: string): boolean {
+  return usuario.trim().length >= 3;
 }
 
 export function senhaValida(senha: string): boolean {

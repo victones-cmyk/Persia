@@ -74,7 +74,7 @@ export function AdminUsuarios() {
         <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
-              {['Nome', 'Email', 'Perfil', 'Loja', 'Desc. máx', 'Vendedor GC', 'Ativo', 'Ações'].map((h) => (
+              {['Nome', 'Usuário', 'Perfil', 'Loja', 'Desc. máx', 'Vendedor GC', 'Ativo', 'Ações'].map((h) => (
                 <th key={h} style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
@@ -204,8 +204,8 @@ function ModalUsuario({
             <input className="input" value={nome} onChange={(e) => setNome(e.target.value)} required />
           </div>
           <div>
-            <label className="form-label">E-mail<span className="label-required">*</span></label>
-            <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={!novo} />
+            <label className="form-label">Usuário<span className="label-required">*</span></label>
+            <input className="input" type="text" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={!novo} />
           </div>
           <div>
             <label className="form-label">Senha {novo ? <span className="label-required">*</span> : <span className="label-optional">(deixe em branco p/ manter)</span>}</label>

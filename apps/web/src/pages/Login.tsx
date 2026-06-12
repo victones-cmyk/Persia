@@ -1,7 +1,7 @@
 // apps/web/src/pages/Login.tsx
 // Tela de login (SRD §8): card centralizado sem sidebar.
-// Email + senha (min 6), botão "Entrar" (btn-primary) desabilitado enquanto inválido.
-// Erro genérico de credenciais; redireciona p/ /orcamentos; aviso de sessão expirada.
+// Usuário + senha (min 6), botão "Entrar" (btn-primary) desabilitado enquanto inválido.
+// O login é só um nome de usuário (não é e-mail real). Erro genérico de credenciais.
 
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
@@ -9,7 +9,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faScissors, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../hooks/useAuth';
 import { ApiError } from '../lib/api';
-import { emailValido, senhaValida } from '../lib/validacao';
+import { usuarioValido, senhaValida } from '../lib/validacao';
 
 export function Login() {
   const { usuario, carregando, login, sessaoExpirada, limparSessaoExpirada } = useAuth();
@@ -23,7 +23,7 @@ export function Login() {
   // Já autenticado → vai direto para a listagem.
   if (!carregando && usuario) return <Navigate to="/orcamentos" replace />;
 
-  const formValido = emailValido(email) && senhaValida(senha);
+  const formValido = usuarioValido(email) && senhaValida(senha);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -35,7 +35,7 @@ export function Login() {
       navigate('/orcamentos', { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        setErro('E-mail ou senha incorretos');
+        setErro('Usuário ou senha incorretos');
       } else {
         setErro('Não foi possível entrar. Tente novamente.');
       }
@@ -62,11 +62,11 @@ export function Login() {
         <form onSubmit={onSubmit} noValidate>
           <div className="mb-4">
             <label htmlFor="email" className="form-label">
-              E-mail
+              Usuário
             </label>
             <input
               id="email"
-              type="email"
+              type="text"
               className="input"
               autoComplete="username"
               value={email}
