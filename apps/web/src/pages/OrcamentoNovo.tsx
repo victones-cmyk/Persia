@@ -38,10 +38,10 @@ export function OrcamentoNovo() {
         <div className="alert alert-warning max-w-form mb-4">
           <FontAwesomeIcon icon={faTriangleExclamation} />
           <div>
-            <div className="font-semibold">Usuário não vinculado ao GestãoClick</div>
+            <div className="font-semibold">Usuário sem vendedor vinculado</div>
             <div className="text-xs-ui opacity-85">
-              O orçamento será atribuído ao usuário master. Um admin pode vincular seu
-              <code> gc_usuario_id</code> em Administração → Usuários.
+              Você pode enviar normalmente, mas o orçamento sairá sem vendedor no GestãoClick.
+              Um admin pode vincular seu vendedor em Administração → Usuários.
             </div>
           </div>
         </div>

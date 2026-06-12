@@ -7,6 +7,7 @@ import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { env } from '../config/env';
 import { calcularPersiana, aplicarDesconto } from '../services/calc/persiana';
 import {
   isTipoPersiana,
@@ -55,10 +56,10 @@ async function executarEnvioGc(args: {
   valorBruto: number;
   valorFinal: number;
   qtdVenda: number;
-  gcUsuarioId: string | null;
+  gcVendedorId: string | null;
   gcLojaId: string | null;
 }) {
-  const { entrada, tecido, valorFinal, qtdVenda, gcUsuarioId, gcLojaId } = args;
+  const { entrada, tecido, valorFinal, qtdVenda, gcVendedorId, gcLojaId } = args;
 
   const nomeProduto = `${TIPO_LABEL[entrada.tipo]} - ${tecido.nome} - ${entrada.largura.toFixed(2)}x${entrada.altura.toFixed(2)} - ${entrada.cor_acessorio} - ${ACIONAMENTO_LABEL[entrada.acionamento]}`.slice(0, 120);
   const valorCusto = roundHalfUp(qtdVenda * tecido.preco_custo);
@@ -77,7 +78,8 @@ async function executarEnvioGc(args: {
       valor_final: valorFinal,
       valor_custo: valorCusto,
       data: new Date().toISOString().slice(0, 10),
-      usuario_id: gcUsuarioId,
+      usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null, // usuário de integração (ou master)
+      vendedor_id: gcVendedorId, // vendedor real atribuído ao orçamento
       loja_id: gcLojaId,
     });
     return {
@@ -189,7 +191,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       valorBruto,
       valorFinal,
       qtdVenda: calc.qtd_venda,
-      gcUsuarioId: sessao.gc_usuario_id,
+      gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
     });
 
@@ -312,7 +314,7 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
       valorBruto: Number(orc.valor_bruto),
       valorFinal,
       qtdVenda: calc.qtd_venda,
-      gcUsuarioId: sessao.gc_usuario_id,
+      gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
     });
 

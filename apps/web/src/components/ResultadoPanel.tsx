@@ -52,9 +52,10 @@ export function ResultadoPanel({
   const grupos = ['fixo', 'condicional', 'base'] as const;
 
   const gcOffline = gcStatus !== 'online';
-  const semUsuarioGc = !gcUsuarioId;
+  const semVendedor = !gcUsuarioId; // usuário não vinculado a um vendedor do GestãoClick
   // Acima do limite NÃO bloqueia o botão — abre o modal de gerente (RN-08).
-  const podeEnviar = !gcOffline && !semUsuarioGc && !!cliente && !enviando;
+  // Sem vendedor NÃO bloqueia (orçamento sai pelo usuário de integração, sem vendedor).
+  const podeEnviar = !gcOffline && !!cliente && !enviando;
 
   /** Executa o POST. senhaGerente é exigida pelo backend quando desconto > limite. */
   async function doSend(senhaGerente?: string): Promise<{ ok: boolean; senhaInvalida?: boolean }> {
@@ -169,7 +170,7 @@ export function ResultadoPanel({
 
       {/* Avisos de bloqueio de envio */}
       {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Envio bloqueado.</span></div>}
-      {semUsuarioGc && <div className="alert alert-error mb-3 text-xs-ui"><span>Seu usuário não está vinculado ao GestãoClick. Peça a um admin para vincular antes de enviar.</span></div>}
+      {semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento será enviado sem vendedor. Um admin pode vincular em Administração → Usuários.</span></div>}
 
       <button type="button" className="btn btn-success w-full" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={onClickEnviar}>
         {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar ao GestãoClick</>}

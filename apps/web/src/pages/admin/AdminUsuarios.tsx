@@ -70,7 +70,7 @@ export function AdminUsuarios() {
         <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
-              {['Nome', 'Email', 'Perfil', 'Loja', 'Desc. máx', 'GC usuário', 'Ativo', 'Ações'].map((h) => (
+              {['Nome', 'Email', 'Perfil', 'Loja', 'Desc. máx', 'Vendedor GC', 'Ativo', 'Ações'].map((h) => (
                 <th key={h} style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
@@ -201,8 +201,8 @@ function ModalUsuario({
               <input className="input" type="number" min={0} max={100} value={descMax} onChange={(e) => setDescMax(Number(e.target.value))} />
             </div>
             <div>
-              <label className="form-label">gc_usuario_id</label>
-              <input className="input" value={gcUsuarioId} onChange={(e) => setGcUsuarioId(e.target.value)} placeholder="ID no GestãoClick" />
+              <label className="form-label">Vendedor (GestãoClick)</label>
+              <input className="input" value={gcUsuarioId} onChange={(e) => setGcUsuarioId(e.target.value)} placeholder="ID do vendedor/funcionário no GC" />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">

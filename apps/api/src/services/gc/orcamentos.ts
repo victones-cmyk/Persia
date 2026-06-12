@@ -14,7 +14,8 @@ export interface NovoOrcamentoGc {
   valor_final: number;
   valor_custo: number;
   data: string; // YYYY-MM-DD
-  usuario_id?: string | null; // gc_usuario_id (omitido → usuário master)
+  usuario_id?: string | null; // usuário de login/integração (omitido → usuário master)
+  vendedor_id?: string | null; // vendedor (cadastro de funcionários) atribuído ao orçamento
   loja_id?: string | null; // gc_loja_id
 }
 
@@ -45,6 +46,7 @@ function montarPayload(o: NovoOrcamentoGc): Record<string, unknown> {
     ],
   };
   if (o.usuario_id) payload.usuario_id = o.usuario_id;
+  if (o.vendedor_id) payload.vendedor_id = o.vendedor_id;
   if (o.loja_id) payload.loja_id = o.loja_id;
   return payload;
 }

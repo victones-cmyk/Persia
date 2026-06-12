@@ -1,19 +1,16 @@
 // apps/api/src/services/gc/tecidos.ts
-// Tecidos reais do GestãoClick (substitui tecidos.mock.ts — Fase 4).
+// Tecidos reais do GestãoClick.
 //
-// DECISÕES (verificadas via API em 11/06/2026 — confirmar com Victor):
-//  • Não existe campo `dimensao` nem `largura` preenchido no produto. A largura do
-//    rolo está no NOME (ex: "...3.00M..."). Parseada por regex; sem metragem → tecido
-//    é ignorado na lista (não dá para validar RN-01 sem dimensão).
-//  • Preço (CONFIRMADO por Victor 11/06/2026): PERSIANAS usam tabela VAREJO (10969)
-//    para todos os componentes. CORTINAS (Fase 7) usam SOB MEDIDA (230813) APENAS para
-//    tecidos; trilhos/acessórios/demais componentes de cortina usam VAREJO. Use
-//    precoByTier(produto, tier) com o tier correto conforme o contexto. Fallback: valor_venda.
-//  • Tecidos não são agrupados por trama no GC (tudo em TECIDO 76944). Filtramos por
-//    palavra-chave da trama (BLACKOUT/SCREEN/TRANSLUC/DOUBLE) derivada do tipo; se a
-//    filtragem não achar nada, devolve todos os tecidos com dimensão.
+// DECISÕES (confirmadas com Victor em 11/06/2026):
+//  • CATEGORIAS: a calculadora de PERSIANA usa o grupo "TECIDOS PARA PERSIANA" (235486);
+//    a de CORTINA (Fase 7) usa o grupo "TECIDO" (76944).
+//  • LARGURA do rolo: lida do CAMPO `largura` do produto (Victor vai preencher cada tecido).
+//    Fallback temporário: parse do nome ("...2,80M..."), enquanto as larguras não estão
+//    todas preenchidas. Tecido sem largura (campo vazio E sem metragem no nome) fica de fora.
+//  • PREÇO: PERSIANA usa VAREJO (10969). CORTINA usa SOB MEDIDA (230813) só no tecido e
+//    VAREJO nos demais componentes. Use precoByTier(produto, tier).
 
-import { listarProdutos, GRUPO_TECIDO_ID, type GcProduto } from './catalogos';
+import { listarProdutos, type GcProduto } from './catalogos';
 import type { TipoPersiana } from '../calc/tipos';
 
 export interface TecidoGc {
@@ -24,11 +21,15 @@ export interface TecidoGc {
   preco_custo: number;
 }
 
-// Tabelas de preço do GestãoClick (GET /api/produtos → valores[].tipo_id).
+// Grupos de produto no GestãoClick (GET /api/grupos_produtos).
+export const GRUPO_TECIDOS_PERSIANA = '235486'; // "TECIDOS PARA PERSIANA"
+export const GRUPO_TECIDO_CORTINA = '76944'; // "TECIDO" (Fase 7)
+
+// Tabelas de preço (GET /api/produtos → valores[].tipo_id).
 export const VAREJO_TIPO_ID = '10969';
 export const SOB_MEDIDA_TIPO_ID = '230813';
 
-/** Tier de preço por contexto. Persiana sempre 'varejo' (regra Victor 11/06/2026). */
+/** Tier de preço por contexto. Persiana sempre 'varejo' (regra Victor). */
 export type PriceTier = 'varejo' | 'sob_medida';
 
 const TIER_ID: Record<PriceTier, string> = {
@@ -40,29 +41,18 @@ const TIER_NOME: Record<PriceTier, string> = {
   sob_medida: 'SOB MEDIDA',
 };
 
-const PALAVRA_TRAMA: Record<TipoPersiana, string> = {
-  persiana_rolo_blackout: 'BLACKOUT',
-  persiana_romana_blackout: 'BLACKOUT',
-  persiana_rolo_screen: 'SCREEN',
-  persiana_romana_screen: 'SCREEN',
-  persiana_rolo_translucido: 'TRANSLUC',
-  persiana_romana_translucido: 'TRANSLUC',
-  persiana_rolo_double_vision: 'DOUBLE',
-};
-
 const DIM_RE = /(\d+[.,]\d{1,2})\s*M\b/i;
 
-function semAcento(s: string): string {
-  return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase();
-}
-
-/** Extrai a dimensão (largura do rolo, m) do nome. null se não houver metragem plausível. */
-export function parseDimensao(nome: string): number | null {
-  const m = DIM_RE.exec(nome);
-  if (!m) return null;
-  const v = parseFloat(m[1].replace(',', '.'));
-  // Largura de rolo plausível: entre 1,0m e 4,0m.
-  return v >= 1 && v <= 4 ? v : null;
+/** Largura do rolo (m): prioriza o campo `largura`; fallback no nome. null se indisponível. */
+export function dimensaoDoProduto(p: GcProduto): number | null {
+  const campo = Number(String(p.largura ?? '').replace(',', '.'));
+  if (Number.isFinite(campo) && campo >= 1 && campo <= 4) return campo;
+  const m = DIM_RE.exec(p.nome);
+  if (m) {
+    const v = parseFloat(m[1].replace(',', '.'));
+    if (v >= 1 && v <= 4) return v;
+  }
+  return null;
 }
 
 /** Preço (venda/custo) de um produto na tabela indicada. Fallback: valor_venda padrão. */
@@ -76,20 +66,20 @@ export function precoByTier(p: GcProduto, tier: PriceTier): { venda: number; cus
   };
 }
 
-// Cache server-side dos tecidos por tier (a base muda pouco; evita refetch de 5 páginas).
+// Cache server-side dos tecidos de persiana (a base muda pouco; evita refetch das páginas).
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const cache = new Map<PriceTier, { tecidos: TecidoGc[]; expiresAt: number }>();
+let cache: { tecidos: TecidoGc[]; expiresAt: number } | null = null;
 
-async function todosTecidos(tier: PriceTier): Promise<TecidoGc[]> {
-  const atual = cache.get(tier);
-  if (atual && atual.expiresAt > Date.now()) return atual.tecidos;
+/** Todos os tecidos de PERSIANA (grupo 235486), preço VAREJO. */
+async function tecidosPersiana(): Promise<TecidoGc[]> {
+  if (cache && cache.expiresAt > Date.now()) return cache.tecidos;
 
-  const produtos = await listarProdutos({ grupo_id: GRUPO_TECIDO_ID, ativo: 1 });
+  const produtos = await listarProdutos({ grupo_id: GRUPO_TECIDOS_PERSIANA, ativo: 1 });
   const tecidos: TecidoGc[] = [];
   for (const p of produtos) {
-    const dimensao = parseDimensao(p.nome);
-    if (dimensao === null) continue; // sem dimensão não dá para usar (RN-01)
-    const preco = precoByTier(p, tier);
+    const dimensao = dimensaoDoProduto(p);
+    if (dimensao === null) continue; // sem largura não dá para calcular (RN-01/RN-02)
+    const preco = precoByTier(p, 'varejo');
     tecidos.push({
       id: p.id,
       nome: p.nome,
@@ -98,29 +88,24 @@ async function todosTecidos(tier: PriceTier): Promise<TecidoGc[]> {
       preco_custo: preco.custo,
     });
   }
-  cache.set(tier, { tecidos, expiresAt: Date.now() + CACHE_TTL_MS });
+  cache = { tecidos, expiresAt: Date.now() + CACHE_TTL_MS };
   return tecidos;
 }
 
 /**
- * Tecidos para um tipo de persiana, filtrados pela palavra-chave da trama.
- * Persiana usa SEMPRE a tabela VAREJO (regra Victor). Cortina (Fase 7) deverá
- * chamar todosTecidos('sob_medida') para tecidos e VAREJO para os demais componentes.
+ * Tecidos para a calculadora de persiana. Mostra TODOS os tecidos da categoria
+ * "TECIDOS PARA PERSIANA" (regra Victor) — o vendedor escolhe o adequado ao tipo.
  */
-export async function tecidosParaTipo(tipo: TipoPersiana): Promise<TecidoGc[]> {
-  const todos = await todosTecidos('varejo');
-  const palavra = PALAVRA_TRAMA[tipo];
-  const filtrados = todos.filter((t) => semAcento(t.nome).includes(palavra));
-  // Se a heurística de trama não achar nada, devolve todos (vendedor escolhe).
-  return filtrados.length > 0 ? filtrados : todos;
+export async function tecidosParaTipo(_tipo: TipoPersiana): Promise<TecidoGc[]> {
+  return tecidosPersiana();
 }
 
-/** Busca um tecido pelo id. tier padrão 'varejo' (persiana). */
-export async function buscarTecidoGc(id: string, tier: PriceTier = 'varejo'): Promise<TecidoGc | undefined> {
-  const todos = await todosTecidos(tier);
+/** Busca um tecido de persiana pelo id. */
+export async function buscarTecidoGc(id: string): Promise<TecidoGc | undefined> {
+  const todos = await tecidosPersiana();
   return todos.find((t) => t.id === id);
 }
 
 export function invalidarCacheTecidos(): void {
-  cache.clear();
+  cache = null;
 }

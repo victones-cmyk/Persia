@@ -49,6 +49,9 @@ export const env = {
   GC_API_BASE_URL: optional('GC_API_BASE_URL', 'https://api.gestaoclick.com'),
   GC_LOJA_ID_SP: optional('GC_LOJA_ID_SP', '8274'),
   GC_LOJA_ID_SBC: optional('GC_LOJA_ID_SBC', '8284'),
+  // Usuário (login) do GestãoClick usado como "usuário de integração" nos orçamentos.
+  // Vazio → omitido (GC usa o usuário master). O vendedor real vai em vendedor_id.
+  GC_USUARIO_INTEGRACAO_ID: optional('GC_USUARIO_INTEGRACAO_ID', ''),
   GC_DEBUG_LOG: optional('GC_DEBUG_LOG', 'false') === 'true',
   GC_TIMEOUT_MS: Number(optional('GC_TIMEOUT_MS', '10000')),
 
