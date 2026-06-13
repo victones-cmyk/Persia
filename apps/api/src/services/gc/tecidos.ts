@@ -43,14 +43,31 @@ const TIER_NOME: Record<PriceTier, string> = {
 
 const DIM_RE = /(\d+[.,]\d{1,2})\s*M\b/i;
 
-/** Largura do rolo (m): prioriza o campo `largura`; fallback no nome. null se indisponível. */
+function larguraValida(v: number): boolean {
+  return Number.isFinite(v) && v >= 1 && v <= 4;
+}
+
+/**
+ * Largura do rolo (m). Ordem de prioridade (verificado no GestãoClick 12/06/2026):
+ *  1) campo extra/atributo "LARGURA" (onde o Victor cadastra de fato);
+ *  2) campo nativo `largura` (hoje vem vazio, mas pode ser usado no futuro);
+ *  3) parse do nome ("...2,80M..."), fallback legado.
+ * Retorna null se nenhuma fonte tiver uma largura válida (1–4 m).
+ */
 export function dimensaoDoProduto(p: GcProduto): number | null {
+  for (const a of p.atributos ?? []) {
+    const desc = String(a?.atributo?.descricao ?? '').trim().toUpperCase();
+    if (desc.startsWith('LARGURA')) {
+      const v = Number(String(a.atributo.conteudo ?? '').replace(',', '.').trim());
+      if (larguraValida(v)) return v;
+    }
+  }
   const campo = Number(String(p.largura ?? '').replace(',', '.'));
-  if (Number.isFinite(campo) && campo >= 1 && campo <= 4) return campo;
+  if (larguraValida(campo)) return campo;
   const m = DIM_RE.exec(p.nome);
   if (m) {
     const v = parseFloat(m[1].replace(',', '.'));
-    if (v >= 1 && v <= 4) return v;
+    if (larguraValida(v)) return v;
   }
   return null;
 }

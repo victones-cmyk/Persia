@@ -4,6 +4,10 @@
 
 import { gcRequest, type GcEnvelope } from './client';
 
+export interface GcAtributo {
+  atributo: { tipo: string; conteudo: string; descricao: string; atributo_id: number };
+}
+
 export interface GcProduto {
   id: string;
   nome: string;
@@ -14,6 +18,8 @@ export interface GcProduto {
   largura: string;
   valor_venda: string;
   valores: { tipo_id: string; nome_tipo: string; valor_venda: string; valor_custo: string }[];
+  // Campos extras do produto. A largura do rolo é cadastrada aqui (descricao "LARGURA").
+  atributos?: GcAtributo[];
 }
 
 export interface GcGrupo {
