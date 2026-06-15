@@ -100,7 +100,7 @@ export function OrcamentoNovo() {
                 gcStatus={gcStatus}
                 gcUsuarioId={usuario?.gc_usuario_id ?? null}
                 onEnviado={(orc) => {
-                  if (orc.status === 'enviado') navigate('/orcamentos');
+                  if (orc.status === 'enviado' || orc.status === 'rascunho') navigate('/orcamentos');
                 }}
               />
             ) : (

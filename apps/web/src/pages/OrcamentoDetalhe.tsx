@@ -146,9 +146,15 @@ export function OrcamentoDetalhe() {
           <span className="font-mono font-bold text-xl-ui">{formatBRL(Number(orc.valor_final))}</span>
         </div>
 
-        {orc.status === 'erro' && (
-          <button className="btn btn-warning w-full mt-4" disabled={reenviando} onClick={reenviar}>
-            {reenviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faRotateRight} /> Reenviar ao GestãoClick</>}
+        {(orc.status === 'erro' || orc.status === 'rascunho') && (
+          <button
+            className={`btn w-full mt-4 ${orc.status === 'rascunho' ? 'btn-success' : 'btn-warning'}`}
+            disabled={reenviando}
+            onClick={reenviar}
+          >
+            {reenviando ? <FontAwesomeIcon icon={faSpinner} spin /> : (
+              <><FontAwesomeIcon icon={faRotateRight} /> {orc.status === 'rascunho' ? 'Enviar ao GestãoClick' : 'Reenviar ao GestãoClick'}</>
+            )}
           </button>
         )}
       </div>

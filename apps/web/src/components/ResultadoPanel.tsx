@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner, faPaperPlane } from '@fortawesome/free-solid-svg-icons';
+import { faSpinner, faPaperPlane, faFloppyDisk } from '@fortawesome/free-solid-svg-icons';
 import type { OrcamentoCalculado, ClienteResumo, OrcamentoSalvo } from '../lib/calcTypes';
 import type { GcStatus } from '../hooks/useGcHealth';
 import { formatBRL, formatNum, roundHalfUp } from '../lib/formatacao';
@@ -32,11 +32,13 @@ export function ResultadoPanel({
   onEnviado: (orc: OrcamentoSalvo) => void;
 }) {
   const { showToast } = useToast();
-  const [desconto, setDesconto] = useState(0);
+  const [descontoStr, setDescontoStr] = useState('');
   const [cliente, setCliente] = useState<ClienteResumo | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
 
+  const desconto = Math.max(0, Math.min(100, Number(descontoStr) || 0));
   const acimaLimite = desconto > descontoMaxPct;
 
   // Valor por item e totais (mesma regra do backend: desconto por item, RN-10).
@@ -50,21 +52,28 @@ export function ResultadoPanel({
 
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !gcUsuarioId;
-  const podeEnviar = !gcOffline && !!cliente && !enviando;
+  const ocupado = enviando || salvando;
+  const podeEnviar = !gcOffline && !!cliente && !ocupado;
 
-  async function doSend(senhaGerente?: string): Promise<{ ok: boolean; senhaInvalida?: boolean }> {
-    if (!cliente) return { ok: false };
-    setEnviando(true);
+  /** apenasSalvar=true grava rascunho local (cliente opcional, sem enviar ao GC). */
+  async function doSubmit(apenasSalvar: boolean, senhaGerente?: string): Promise<{ ok: boolean; senhaInvalida?: boolean }> {
+    if (!apenasSalvar && !cliente) return { ok: false };
+    if (apenasSalvar) setSalvando(true);
+    else setEnviando(true);
     try {
       const r = await api.post<{ orcamento: OrcamentoSalvo }>('/orcamentos', {
         tipo: dados.tipo,
         itens: dados.itens.map((it) => it.input),
         desconto_pct: desconto,
-        gc_cliente_id: cliente.id,
-        nome_cliente: cliente.nome,
+        ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
+        ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(senhaGerente ? { senha_gerente: senhaGerente } : {}),
       });
-      showToast('success', `Orçamento #${r.orcamento.gc_orcamento_id} criado no GestãoClick`, cliente.nome);
+      showToast(
+        'success',
+        apenasSalvar ? 'Orçamento salvo (rascunho)' : `Orçamento #${r.orcamento.gc_orcamento_id} criado no GestãoClick`,
+        cliente?.nome,
+      );
       onEnviado(r.orcamento);
       return { ok: true };
     } catch (e) {
@@ -78,23 +87,24 @@ export function ResultadoPanel({
         if (erro?.codigo === 'GC_AUTH') {
           showToast('error', 'Credenciais GestãoClick inválidas', 'Contate o administrador.');
         } else {
-          showToast('error', 'Erro ao enviar ao GestãoClick', erro?.message ?? e.message);
+          showToast('error', apenasSalvar ? 'Erro ao salvar' : 'Erro ao enviar ao GestãoClick', erro?.message ?? e.message);
         }
         const orc = (e.data as { orcamento?: OrcamentoSalvo } | null)?.orcamento;
         if (orc) onEnviado(orc);
       } else {
-        showToast('error', 'Falha inesperada ao enviar.');
+        showToast('error', 'Falha inesperada.');
       }
       return { ok: false };
     } finally {
-      setEnviando(false);
+      if (apenasSalvar) setSalvando(false);
+      else setEnviando(false);
     }
   }
 
   function onClickEnviar() {
     if (!podeEnviar) return;
     if (acimaLimite) setModalAberto(true);
-    else void doSend();
+    else void doSubmit(false);
   }
 
   return (
@@ -129,8 +139,8 @@ export function ResultadoPanel({
         <label className="form-label" htmlFor="desconto">
           Desconto (%) <span className="label-optional">(limite {formatNum(descontoMaxPct, 0)}%)</span>
         </label>
-        <input id="desconto" type="number" className="input" min={0} max={100} step={1} value={desconto}
-          onChange={(e) => setDesconto(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} />
+        <input id="desconto" type="number" className="input" min={0} max={100} step={1} placeholder="0" value={descontoStr}
+          onChange={(e) => setDescontoStr(e.target.value)} />
         {acimaLimite && <div className="helper-error mt-1">Acima do limite. Exigirá senha de gerente.</div>}
       </div>
 
@@ -139,25 +149,30 @@ export function ResultadoPanel({
         style={{ color: desconto === 0 ? 'var(--color-success)' : 'var(--neutral-800)', fontSize: 20 }}
         value={formatBRL(valorFinal)} readOnly tabIndex={-1} onClick={selectAll} />
 
-      {/* Cliente */}
-      <label className="form-label">Cliente <span className="label-required">*</span></label>
+      {/* Cliente — obrigatório só para enviar ao GestãoClick (opcional para salvar) */}
+      <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar)</span></label>
       <div className="mb-3">
         <ClienteSearch selecionado={cliente} onSelecionar={setCliente} />
       </div>
 
-      {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Envio bloqueado.</span></div>}
-      {semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento será enviado sem vendedor. Um admin pode vincular em Administração → Usuários.</span></div>}
+      {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong> o orçamento.</span></div>}
+      {!gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor. Um admin pode vincular em Administração → Usuários.</span></div>}
 
-      <button type="button" className="btn btn-success w-full" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={onClickEnviar}>
-        {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar ao GestãoClick</>}
-      </button>
+      <div className="flex gap-2">
+        <button type="button" className="btn btn-default flex-1" disabled={ocupado} aria-disabled={ocupado} onClick={() => void doSubmit(true)} title="Salva o orçamento sem enviar ao GestãoClick">
+          {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
+        </button>
+        <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={onClickEnviar}>
+          {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar</>}
+        </button>
+      </div>
 
       <ModalSenhaGerente
         aberto={modalAberto}
         descontoPct={desconto}
         onCancelar={() => setModalAberto(false)}
         onConfirmar={async (senha) => {
-          const r = await doSend(senha);
+          const r = await doSubmit(false, senha);
           if (r.ok) setModalAberto(false);
           return r.ok;
         }}

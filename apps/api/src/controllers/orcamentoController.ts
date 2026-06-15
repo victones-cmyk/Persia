@@ -243,12 +243,17 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   const tipo = b.tipo as TipoPersiana;
   const itensEntrada: ItemEntrada[] = Array.isArray(b.itens) ? b.itens : [];
   if (itensEntrada.length === 0) throw new AppError(400, 'SEM_ITENS', 'Adicione ao menos um item ao orçamento.');
-  if (!b.gc_cliente_id || !b.nome_cliente) throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
+
+  // apenas_salvar = rascunho local (não envia ao GestãoClick; cliente opcional).
+  const apenasSalvar = b.apenas_salvar === true;
+  if (!apenasSalvar && (!b.gc_cliente_id || !b.nome_cliente)) {
+    throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
+  }
 
   const desconto_pct = Number(b.desconto_pct ?? 0);
-  // RN-08: desconto acima do limite exige aprovação de gerente (senha de admin).
+  // RN-08: desconto acima do limite exige aprovação de gerente (só no envio ao GC).
   let descontoAprovadoPor: string | null = null;
-  if (desconto_pct > Number(sessao.desconto_max_pct)) {
+  if (!apenasSalvar && desconto_pct > Number(sessao.desconto_max_pct)) {
     const senhaGerente = typeof b.senha_gerente === 'string' ? b.senha_gerente : '';
     if (!senhaGerente) {
       throw new AppError(403, 'APROVACAO_NECESSARIA', 'Desconto acima do limite exige aprovação do gerente.');
@@ -278,8 +283,8 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     tipo_produto: tipo,
     usuario_id: sessao.id,
     loja_id: loja.id,
-    nome_cliente: String(b.nome_cliente),
-    gc_cliente_id: String(b.gc_cliente_id),
+    nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
+    gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
     tecido_codigo_gc: primeiro.tecido.id,
     tecido_nome: preparados.length > 1 ? `${primeiro.tecido.nome} (+${preparados.length - 1})` : primeiro.tecido.nome,
     largura_m: primeiro.largura,
@@ -294,6 +299,22 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     valor_final: valorFinalTotal,
     desconto_aprovado_por: descontoAprovadoPor,
   };
+
+  // Apenas salvar: grava rascunho local, sem tocar no GestãoClick.
+  if (apenasSalvar) {
+    const orcamento = await prisma.orcamento.create({
+      data: {
+        ...baseDados,
+        status: 'rascunho',
+        itens_json: snapshotsDe(preparados, []) as unknown as Prisma.InputJsonValue,
+      },
+    });
+    await prisma.logAcao.create({
+      data: { usuario_id: sessao.id, acao: 'orcamento_salvo_rascunho', detalhe: { orcamento_id: orcamento.id, itens: preparados.length, valor_final: valorFinalTotal } },
+    });
+    res.status(201).json({ orcamento });
+    return;
+  }
 
   try {
     const envio = await executarEnvioGc({
