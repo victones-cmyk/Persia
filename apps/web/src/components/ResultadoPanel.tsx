@@ -11,7 +11,6 @@ import type { GcStatus } from '../hooks/useGcHealth';
 import { formatBRL, formatNum, roundHalfUp } from '../lib/formatacao';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { ClienteSearch } from './ClienteSearch';
 import { ModalSenhaGerente } from './ModalSenhaGerente';
 
 function selectAll(e: React.MouseEvent<HTMLInputElement>) {
@@ -20,12 +19,14 @@ function selectAll(e: React.MouseEvent<HTMLInputElement>) {
 
 export function ResultadoPanel({
   dados,
+  cliente,
   descontoMaxPct,
   gcStatus,
   gcUsuarioId,
   onEnviado,
 }: {
   dados: OrcamentoCalculado;
+  cliente: ClienteResumo | null;
   descontoMaxPct: number;
   gcStatus: GcStatus;
   gcUsuarioId: string | null;
@@ -33,7 +34,6 @@ export function ResultadoPanel({
 }) {
   const { showToast } = useToast();
   const [descontoStr, setDescontoStr] = useState('');
-  const [cliente, setCliente] = useState<ClienteResumo | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
@@ -149,12 +149,7 @@ export function ResultadoPanel({
         style={{ color: desconto === 0 ? 'var(--color-success)' : 'var(--neutral-800)', fontSize: 20 }}
         value={formatBRL(valorFinal)} readOnly tabIndex={-1} onClick={selectAll} />
 
-      {/* Cliente — obrigatório só para enviar ao GestãoClick (opcional para salvar) */}
-      <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar)</span></label>
-      <div className="mb-3">
-        <ClienteSearch selecionado={cliente} onSelecionar={setCliente} />
-      </div>
-
+      {!cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar ao GestãoClick (ou use <strong>Salvar</strong>).</span></div>}
       {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong> o orçamento.</span></div>}
       {!gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor. Um admin pode vincular em Administração → Usuários.</span></div>}
 

@@ -13,7 +13,8 @@ import { PersianaForm } from '../components/PersianaForm';
 import { ResultadoPanel } from '../components/ResultadoPanel';
 import { CortinaForm } from '../components/CortinaForm';
 import { CortinaResultado } from '../components/CortinaResultado';
-import type { OrcamentoCalculado } from '../lib/calcTypes';
+import { ClienteSearch } from '../components/ClienteSearch';
+import type { OrcamentoCalculado, ClienteResumo } from '../lib/calcTypes';
 import type { CalcularCortinaResposta } from '../lib/cortinaTypes';
 
 type TipoProduto = 'persiana' | 'cortina' | null;
@@ -25,6 +26,7 @@ export function OrcamentoNovo() {
   const [tipoProduto, setTipoProduto] = useState<TipoProduto>(null);
   const [resultado, setResultado] = useState<OrcamentoCalculado | null>(null);
   const [cortina, setCortina] = useState<CalcularCortinaResposta | null>(null);
+  const [cliente, setCliente] = useState<ClienteResumo | null>(null);
 
   function escolher(tp: 'persiana' | 'cortina') {
     setTipoProduto(tp);
@@ -68,6 +70,14 @@ export function OrcamentoNovo() {
         />
       </div>
 
+      {/* Cliente — no topo (padrão GestãoClick). Obrigatório só para enviar ao GC. */}
+      {tipoProduto && (
+        <div className="card p-4 max-w-form mb-4">
+          <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar)</span></label>
+          <ClienteSearch selecionado={cliente} onSelecionar={setCliente} />
+        </div>
+      )}
+
       {/* Etapa 2 — Cortina (Fase 7: calculadora; modelos Ilhós/Prega/Franzido/Wave) */}
       {tipoProduto === 'cortina' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -96,6 +106,7 @@ export function OrcamentoNovo() {
             {resultado ? (
               <ResultadoPanel
                 dados={resultado}
+                cliente={cliente}
                 descontoMaxPct={usuario?.desconto_max_pct ?? 0}
                 gcStatus={gcStatus}
                 gcUsuarioId={usuario?.gc_usuario_id ?? null}
