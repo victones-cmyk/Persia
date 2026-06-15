@@ -4,7 +4,7 @@ Decisões técnicas e de produto tomadas durante o desenvolvimento, com o racioc
 por trás de cada uma. Fonte de verdade do produto continua o SRD; este documento
 registra as escolhas feitas na execução e os pontos onde divergimos do SRD (e por quê).
 
-Sessão: 11/06/2026 · Stratos Lab · Executor: Claude Code (Opus 4.8)
+Sessões: 11–15/06/2026 · Stratos Lab · Executor: Claude Code (Opus 4.8)
 Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoClick) · ⚠️ a confirmar
 
 ---
@@ -79,18 +79,18 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 - **Decisão:** **persiana usa VAREJO (10969)**; **cortina usará SOB MEDIDA (230813) só no tecido e VAREJO nos demais componentes**. Implementado via `precoByTier(produto, tier)`.
 - **Razão:** inicialmente assumimos SOB MEDIDA (por ter mão de obra embutida), mas o Victor confirmou que persiana é Varejo. O valor caiu de ~R$95 para ~R$40/m² no exemplo.
 
-### 3.3 ✅ Dimensão do rolo: campo `largura` do produto (corrigido após Victor)
-- **Decisão:** ler a largura do rolo do **campo `largura`** do produto no GestãoClick; fallback temporário: parse do nome ("...2,80M...").
-- **Razão:** a API não expõe campo `dimensao`, e o `largura` estava vazio. Os nomes têm metragem inconsistente (ex.: "PANAMA PERS PLUS 300" = 3,00m, sem "M"), então parse de nome é frágil. O Victor decidiu preencher o campo `largura` de cada tecido.
-- **Pendência:** Victor preencher o `largura` dos 162 tecidos (até lá, só ~80 aparecem).
+### 3.3 ✅ Dimensão do rolo: campo extra/atributo "LARGURA" (ATUALIZADO 12/06/2026)
+- **Decisão:** ler a largura do rolo do **campo extra/atributo "LARGURA"** do produto (array `atributos[]` da API). Ordem: **atributo LARGURA → campo nativo `largura` → metragem no nome** (`dimensaoDoProduto`, commit d9ca642).
+- **Razão:** verificado no GC que o campo nativo `largura` vem **vazio em 100%**; o Victor cadastra a largura num **campo customizado "LARGURA"** (o GC não tem campo nativo para isso). Sem ler o atributo, o trabalho dele era ignorado e os tecidos não apareciam.
+- **Impacto:** tecidos de persiana com largura subiram de 59 → 98. Vale também para a cortina (mesmo campo).
 
-### 3.4 ✅ Categorias de tecido por tipo de produto (após Victor)
-- **Decisão:** calculadora de **persiana** lê do grupo **"TECIDOS PARA PERSIANA" (235486)**; **cortina** lerá de **"TECIDO" (76944)**. Sem filtro por palavra-chave de trama.
-- **Razão:** o Victor esclareceu que existem categorias separadas; a persiana deve mostrar todos os tecidos da categoria de persiana (o vendedor escolhe o adequado).
+### 3.4 ✅ Categorias de tecido por tipo de produto (ATUALIZADO 15/06/2026)
+- **Decisão:** **persiana** lê o grupo **"TECIDOS PARA PERSIANA" (235486)**; **cortina** lê o grupo PAI **"TECIDOS PARA CORTINA" (5913111)** — **não** o 76944 (que estava como suposição inicial). O filtro `grupo_id` já inclui os **descendentes**.
+- **Razão:** o Victor reorganizou: a persiana ganhou subgrupos por tipo (BLACKOUT/TELA SOLAR/TRANSLÚCIDO/DOUBLE VISION/PERSIANA FD) e a cortina tem a árvore "TECIDOS PARA CORTINA" (com "BOOKS TEXHAUS" etc.). Ele confirmou: usar o grupo pai, que pega todos. Sem filtro por trama (o vendedor escolhe).
 
-### 3.5 ✅ Valor exato no GestãoClick + recálculo no servidor
-- **Decisão:** o produto criado no GC tem `valor_venda = valor_final`; o orçamento usa linha única (quantidade 1 × `valor_final`) → total exato. O servidor **recalcula** tudo a partir dos inputs (não confia em valores vindos do cliente).
-- **Razão:** RN-10 ("nenhuma transformação adicional entre cálculo e envio") e segurança (cliente não pode forjar o valor).
+### 3.5 ✅ Valor exato no GestãoClick + recálculo no servidor (multi-itens)
+- **Decisão:** cada **item** (janela) vira um produto sintético no GC e uma **linha** no orçamento (quantidade 1 × `valor_final` do item); a soma das linhas = total exato. O servidor **recalcula** tudo a partir dos inputs (não confia em valores do cliente).
+- **Razão:** RN-10 ("nenhuma transformação adicional entre cálculo e envio") e segurança. (Antes era linha única; virou N linhas com o multi-itens — ver §10.1.)
 
 ### 3.6 ✅ Limpeza de produto órfão em falha
 - **Decisão:** se o POST do produto der certo mas o POST do orçamento falhar, o produto recém-criado é deletado (best-effort).
@@ -165,20 +165,19 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 ## 6. Pendências que dependem do Victor (não são decisões nossas)
 
-- **Regras de cálculo de cortina** (BLOQUEANTE-02) — Victor vai enviar um Excel. Sem isso, a Fase 7 não anda.
-- **Preencher o campo `largura`** dos 162 tecidos do grupo "Tecidos para Persiana".
+- **Cortina — fechar os modelos:** fórmula do **Wave** (confirmar 3 m → ~7,95 m de tecido); modelos **Prega Francesa, Argolas, Alças**; detalhes de **trilho** (deslizante/suporte/final); **inversão de tecido**; **tipos de costura**; e confirmar (suporte manual?, entretela com 2 tecidos = só frente?, metragem vende em metro/meio/fração?, acessórios já cadastrados no GC?).
 - **Vincular cada vendedora** ao id de funcionário do GC (via Admin → Usuários).
 - **Confirmar:** % de desconto (10/30), TC (70% ou 75%), fitas em metros.
 - **Homologação:** ~10 orçamentos plataforma × DecorSoft.
-- **WAVE FÁCIL (cód. 24):** confirmado por Victor como modelo distinto do WAVE (BLOQUEANTE-04 resolvido).
+- **(Resolvido)** Largura dos tecidos: Victor cadastrou no campo customizado "LARGURA" e a calc já lê (§3.3). WAVE FÁCIL ≠ WAVE (BLOQUEANTE-04).
 
 ---
 
-## 7. Estado atual
+## 7. Estado atual (15/06/2026)
 
-- **Fases 1–6 concluídas e em produção:** https://persia-api-production.up.railway.app
-- **CI/CD:** auto-deploy via GitHub funcionando (verificado de ponta a ponta).
-- **Próximas:** Fase 7 (cortina — bloqueada por BLOQUEANTE-02) e Fase 8 (homologação/go-live).
+- **Em produção** (commit `d9ca642`): https://persia-api-production.up.railway.app — persiana **multi-itens**, largura via atributo, login "Usuário" + senha provisória, seletor de vendedor, busca de tecido. Auto-deploy GitHub→Railway OK.
+- **Commitado localmente, aguardando respostas do Victor antes do push:** motor de cortina (4 modelos: Ilhós/Prega/Franzido/Wave), **calculadora de cortina na UI**, **Salvar (rascunho)**, **cliente no topo**, padronização de largura e ajuste do desconto. 60/60 testes.
+- **Próximas:** fechar modelos de cortina restantes + **envio de cortina ao GestãoClick** (mapeamento acessório→produto); Fase 8 (homologação/go-live).
 
 ---
 
@@ -203,7 +202,7 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 ## 9. Cortina — modelo Ilhós/Varão (Fase 7, 1º modelo, 15/06/2026)
 
-Fonte: planilha "CORTINA SOB MEDIDA" do Victor (aba CORTINA MODELO ILHOS) + método de emenda da Cortinas Fênix (link enviado por ele). Implementado em `services/calc/cortina.ts` (`calcularCortinaIlhos`), só motor (funções puras) + testes — sem UI/rota/GC ainda. Demais modelos pendentes (Victor enviará).
+Fonte: planilhas "CORTINA SOB MEDIDA" v1→v3 do Victor + áudios do Wave + método de emenda da Cortinas Fênix. Motor em `services/calc/cortina.ts` (`calcularCortina`), funções puras + testes. Cobre **4 modelos**: Ilhós, Prega (=Americana/Macho/Fêmea), Franzido e Wave. **A UI/calculadora já existe** (ver §10.2) — é só cálculo; o **envio ao GestãoClick** ainda não está ligado (depende do mapeamento acessório→produto do GC). Modelos restantes (Prega Francesa, Argolas, Alças) e detalhes de trilho/inversão/costura: pendentes do Victor.
 
 ### 9.1 Regras confirmadas (modelo Ilhós)
 - **Tecido (método normal)** = `largura × franzido` (m lineares). O tecido roda deitado: a largura do rolo vira a altura da cortina. Tabela **SOB MEDIDA**.
@@ -237,3 +236,28 @@ Aba "CORTINA WAVE" (serve só trilho/varão suíço). Fórmula deduzida dos 2 á
 - **Terminais** 4; trilho não usa ponteira; varão suíço usa.
 - Demais (folga topo 0,12, entretela, emenda, 2 tecidos = mesma qtd) seguem o padrão geral.
 - **A confirmar com o Victor (1 número):** para largura 3 m, o tecido dá ~7,95 m? Isso trava se a alternância começa por 15 ou 10. Testes: 60/60.
+
+---
+
+## 10. Orçamento — multi-itens, rascunho e UX (12–15/06/2026)
+
+### 10.1 ✅ Persiana multi-itens (vários itens por orçamento)
+- **Decisão:** o orçamento de persiana aceita **N itens** (janelas). Produto Sob Medida é **único** para o orçamento; cada item tem sua coleção/cor/acionamento/medidas/TC/rolamento/base. Layout compacto (2 linhas por item), com **+ Adicionar item** e **Remover**. `POST /api/calcular/persiana/lote` calcula todos; o envio cria **N produtos + 1 orçamento com N linhas** no GC (desconto por item, soma exata RN-10). Itens persistidos em `Orcamento.itens_json` (snapshot) — migration `20260612060000_orcamento_itens_json`.
+- **Razão:** um orçamento real tem várias janelas; espelha o GestãoClick (orçamento com vários produtos).
+
+### 10.2 ✅ Calculadora de cortina na UI
+- **Decisão:** a aba **Cortina** do Novo Orçamento abre uma calculadora real (`CortinaForm` + `CortinaResultado`): modelo/fixação/config/medidas/franzido/barra/aberturas + busca de tecido (grupo 5913111, SOB MEDIDA). Endpoints `GET /api/calcular/cortina/tecidos` e `POST /api/calcular/cortina`. Mostra método (normal/emenda), metragem, valor do tecido e a **lista de itens (quantidades)**.
+- **Razão:** entregar a calculadora dos 4 modelos prontos sem esperar o módulo completo. **Sem envio ao GC ainda** (acessórios vêm do GC; mapeamento acessório→produto será definido com o Victor).
+
+### 10.3 ✅ Salvar (rascunho) além de Enviar
+- **Decisão:** dois botões no resultado da persiana — **Salvar** grava `status='rascunho'` localmente (sem tocar no GC; cliente e aprovação de desconto opcionais), e **Enviar** faz o fluxo ao GestãoClick. Um rascunho pode ser **enviado depois** pela tela de detalhe (`apenas_salvar` no `criarOrcamento`).
+- **Razão:** o vendedor pode querer só calcular/guardar sem integrar ao GC naquele momento.
+
+### 10.4 ✅ Cliente no topo (padrão GestãoClick)
+- **Decisão:** o seletor de **cliente** subiu para um card no **topo** do Novo Orçamento (após escolher Persiana/Cortina), acima do formulário; o `ResultadoPanel` recebe o cliente por prop. A lista de clientes vem do **GestãoClick em tempo real** (`GET /api/gc/clientes`, debounce 300ms; ~19 mil; sem cópia local). Obrigatório só para **Enviar**.
+- **Razão:** segue o fluxo do GestãoClick (cliente primeiro) e fica visível o tempo todo.
+
+### 10.5 ✅ Ajustes de UX
+- **Busca de tecido por filtro** (digita → filtra a lista carregada; cada palavra precisa constar no nome) no campo Coleção/Tecido (persiana e cortina), no lugar do `<select>` com a base inteira.
+- **Login editável + renomeação:** admin pode editar o "Usuário" (login) no cadastro; contas de homologação renomeadas para `victor.pavoni` / `loja.sp` / `loja.sbc`.
+- **Largura/padrões:** resultado, formulário e cards de seleção padronizados na mesma largura (`max-w-form`); campo de **desconto** começa vazio (placeholder "0", sem zero à esquerda).
