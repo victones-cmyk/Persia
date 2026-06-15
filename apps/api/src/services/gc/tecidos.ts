@@ -22,8 +22,10 @@ export interface TecidoGc {
 }
 
 // Grupos de produto no GestãoClick (GET /api/grupos_produtos).
-export const GRUPO_TECIDOS_PERSIANA = '235486'; // "TECIDOS PARA PERSIANA"
-export const GRUPO_TECIDO_CORTINA = '76944'; // "TECIDO" (Fase 7)
+export const GRUPO_TECIDOS_PERSIANA = '235486'; // "TECIDOS PARA PERSIANA" (inclui subgrupos)
+// "TECIDOS PARA CORTINA" — grupo PAI que já engloba todos (Victor 15/06/2026).
+// O filtro grupo_id retorna também os descendentes (ex.: BOOKS TEXHAUS 5829560).
+export const GRUPO_TECIDO_CORTINA = '5913111';
 
 // Tabelas de preço (GET /api/produtos → valores[].tipo_id).
 export const VAREJO_TIPO_ID = '10969';
@@ -123,6 +125,38 @@ export async function buscarTecidoGc(id: string): Promise<TecidoGc | undefined> 
   return todos.find((t) => t.id === id);
 }
 
+// Cache separado dos tecidos de cortina (grupo pai 5913111, preço SOB MEDIDA).
+let cacheCortina: { tecidos: TecidoGc[]; expiresAt: number } | null = null;
+
+/** Tecidos de CORTINA (grupo pai "TECIDOS PARA CORTINA", inclui descendentes), preço SOB MEDIDA. */
+export async function tecidosCortina(): Promise<TecidoGc[]> {
+  if (cacheCortina && cacheCortina.expiresAt > Date.now()) return cacheCortina.tecidos;
+
+  const produtos = await listarProdutos({ grupo_id: GRUPO_TECIDO_CORTINA, ativo: 1 });
+  const tecidos: TecidoGc[] = [];
+  for (const p of produtos) {
+    const dimensao = dimensaoDoProduto(p);
+    if (dimensao === null) continue; // sem largura não dá para calcular
+    const preco = precoByTier(p, 'sob_medida');
+    tecidos.push({
+      id: p.id,
+      nome: p.nome,
+      dimensao_m: dimensao,
+      preco_venda: preco.venda,
+      preco_custo: preco.custo,
+    });
+  }
+  cacheCortina = { tecidos, expiresAt: Date.now() + CACHE_TTL_MS };
+  return tecidos;
+}
+
+/** Busca um tecido de cortina pelo id. */
+export async function buscarTecidoCortinaGc(id: string): Promise<TecidoGc | undefined> {
+  const todos = await tecidosCortina();
+  return todos.find((t) => t.id === id);
+}
+
 export function invalidarCacheTecidos(): void {
   cache = null;
+  cacheCortina = null;
 }
