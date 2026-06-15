@@ -78,7 +78,7 @@ export function OrcamentoNovo() {
             {cortina ? (
               <CortinaResultado dados={cortina} />
             ) : (
-              <div className="card p-4 text-sm-ui text-neutral-500" style={{ position: 'sticky', top: 'calc(50px + 16px)' }}>
+              <div className="card p-4 text-sm-ui text-neutral-500 max-w-form" style={{ position: 'sticky', top: 'calc(50px + 16px)' }}>
                 Preencha os dados e clique em <strong>Calcular</strong> para ver o resultado.
               </div>
             )}
@@ -104,7 +104,7 @@ export function OrcamentoNovo() {
                 }}
               />
             ) : (
-              <div className="card p-4 text-sm-ui text-neutral-500" style={{ position: 'sticky', top: 'calc(50px + 16px)' }}>
+              <div className="card p-4 text-sm-ui text-neutral-500 max-w-form" style={{ position: 'sticky', top: 'calc(50px + 16px)' }}>
                 Preencha os dados e clique em <strong>Calcular</strong> para ver o resultado.
               </div>
             )}

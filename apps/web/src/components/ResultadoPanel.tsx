@@ -98,7 +98,7 @@ export function ResultadoPanel({
   }
 
   return (
-    <div className="card sticky p-4" style={{ top: 'calc(50px + 16px)' }}>
+    <div className="card sticky p-4 max-w-form" style={{ top: 'calc(50px + 16px)' }}>
       <h4 className="text-lg-ui font-medium mb-3">Resultado</h4>
 
       {/* Itens do orçamento */}
