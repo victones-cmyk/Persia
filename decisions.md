@@ -198,3 +198,25 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
   - **Autoatendimento:** usuário logado troca a própria senha em `/trocar-senha` (link "Alterar senha" na navbar) via `POST /api/auth/alterar-senha` (exige senha atual).
   - **Troca obrigatória no 1º acesso:** novo campo `Usuario.senha_provisoria` (migration `20260612040000_add_senha_provisoria`). Admin que **cria** usuário ou **reseta** senha → `senha_provisoria = true`; o usuário é **forçado** à tela de troca antes de acessar o app (`SenhaDefinitivaRoute`); ao trocar, vira `false`. Badge "senha provisória" na lista de usuários.
 - **Razão:** para uma ferramenta interna de ~8 usuários, autenticação por e-mail exige provedor de envio (SES/Resend/SMTP), SPF/DKIM, fluxos e templates — custo/manutenção desproporcionais. Admin + autoatendimento + troca no 1º acesso resolve "esqueci a senha" sem nenhuma infraestrutura de e-mail e mantém o "Usuário livre" (8.2).
+
+---
+
+## 9. Cortina — modelo Ilhós/Varão (Fase 7, 1º modelo, 15/06/2026)
+
+Fonte: planilha "CORTINA SOB MEDIDA" do Victor (aba CORTINA MODELO ILHOS) + método de emenda da Cortinas Fênix (link enviado por ele). Implementado em `services/calc/cortina.ts` (`calcularCortinaIlhos`), só motor (funções puras) + testes — sem UI/rota/GC ainda. Demais modelos pendentes (Victor enviará).
+
+### 9.1 Regras confirmadas (modelo Ilhós)
+- **Tecido (método normal)** = `largura × franzido` (m lineares). O tecido roda deitado: a largura do rolo vira a altura da cortina. Tabela **SOB MEDIDA**.
+- **Método de emenda** (quando `altura + barra > largura do tecido`): emenda tiras verticais. `nº tiras = ceil((largura × franzido) / largura_tecido)`; `metragem = nº tiras × (altura + barra)`. (Ex. Fênix: 3,50×3,00 em tecido 2,80 → 4 tiras × 3,30 = 13,20 m.)
+- **Barra consumida na altura** = `0,10 (folga ilhós) + tamanho_barra × (1 simples | 2 dupla)`. Default 0,10 + 0,10×2 = **0,30 m**.
+- **Franzido**: frente default 3, trás default 2 — editáveis.
+- **3 configurações**: (a) um tecido; (b) forro no mesmo varão → metragem do forro = **igual à frente**; (c) varão duplo → trás usa o **próprio franzido**.
+- **Ilhoses** = `ceil(consumo / 0,15)` arredondado **sempre p/ cima** até **par** (0–1 abertura) ou **múltiplo de 4** (≥2 aberturas). [Victor: "43 → 44".]
+- **Argolas** (só varão duplo, tecido de trás) = `ceil(largura / 0,10)` (1 a cada 10 cm de varão).
+- **Varão** = largura (m); varão duplo = 2 varões. **Ponteiras** = 2 por varão.
+- **Suportes**: regra é varão suíço 1/m, varão normal 1/abertura — mas por ora **entrada manual** do vendedor (decisão do Victor para destravar).
+- **Preços dos acessórios saem do GestãoClick** (o vendedor escolhe o produto). O motor calcula só **quantidades** + metragem de tecido; preços/valores são aplicados na montagem do orçamento.
+- **Validação**: os 3 totais da planilha (R$ 672 / 852 / 847) e o exemplo de emenda batem 100% nos testes.
+
+### 9.2 Pendente do Victor (item 5) — antes do módulo completo
+Demais modelos de cortina + tipos de **trilho/fixação**, **inversão de tecido** e **tipos de costura** (campos da tela do GestãoClick). UI/formulário de cortina será desenhada quando isso chegar; o motor do Ilhós já está pronto e à prova de retrabalho.
