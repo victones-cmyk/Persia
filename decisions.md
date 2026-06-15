@@ -229,5 +229,11 @@ Motor generalizado em `calcularCortina(e)` para 3 modelos: **ilhos**, **prega** 
 - **Fixação:** Ilhós só **varão**; Prega/Franzido servem **varão, trilho ou varão suíço**. **Trilho não usa ponteira**; varão/varão suíço usam (2/varão).
 - **Validação:** totais batem — Ilhós 1 tecido **685,50** (= 672 + entretela 13,50, confere com a célula F36 da v.3); Prega 1 tecido **676,50**; Franzido 1 tecido **663** (sem entretela). Motor: funções puras + testes (58/58). Ainda sem UI/rota/GC.
 
-### 9.4 WAVE — bloqueado por fórmula (15/06/2026)
-Aba "CORTINA WAVE" (serve só trilho/varão suíço). Claro: cordão/rodízio wave/base click = 1 botão a cada 5 cm começando no zero, arredondado p/ cima até **divisível por 4** (ex.: 3 m → 64); terminais 4. **Bloqueio:** a metragem de **tecido** depende da **fita wave** (10×15) e o Victor escreveu na célula R28 que **não tem a fórmula**. Aguardando dele um exemplo numérico (largura 3 m → metros de fita/tecido) para deduzir o fator.
+### 9.4 WAVE — fórmula deduzida dos áudios + implementada (15/06/2026)
+Aba "CORTINA WAVE" (serve só trilho/varão suíço). Fórmula deduzida dos 2 áudios do Victor e implementada (`modelo: 'wave'`):
+- **Botões** (cordão = rodízio wave = base click): `N = múltiplo de 4 ≥ (largura/0,05 + 1)`. Ex.: 3 m → 61 → **64**.
+- **Cordão** (m) = `(N−1) × 0,05` = **3,15 m** (bate com a célula R27 da planilha).
+- **Fita wave = tecido** (e = entretela): a fita tem N botões com vãos alternados 15/10 cm começando com 5 cm → `0,05 + 0,15×⌈vãos/2⌉ + 0,10×⌊vãos/2⌋`. Ex.: **7,95 m** (fator ≈ 2,6×).
+- **Terminais** 4; trilho não usa ponteira; varão suíço usa.
+- Demais (folga topo 0,12, entretela, emenda, 2 tecidos = mesma qtd) seguem o padrão geral.
+- **A confirmar com o Victor (1 número):** para largura 3 m, o tecido dá ~7,95 m? Isso trava se a alternância começa por 15 ou 10. Testes: 60/60.

@@ -18,7 +18,7 @@ export class NotImplementedError extends Error {
   }
 }
 
-export type ModeloCortina = 'ilhos' | 'prega' | 'franzido';
+export type ModeloCortina = 'ilhos' | 'prega' | 'franzido' | 'wave';
 export type FixacaoCortina = 'varao' | 'trilho' | 'varao_suico';
 export type ConfigTecidoCortina =
   | 'um_tecido'
@@ -67,11 +67,24 @@ const FOLGA_TOPO: Record<ModeloCortina, number> = {
   ilhos: 0.1, // "10 cm gastos na cortina de ilhós"
   prega: 0.12, // cabeçote da entretela (12 cm)
   franzido: 0.08, // sem entretela: ~8 cm de acabamento
+  wave: 0.12, // cabeçote da entretela (12 cm)
 };
-const TEM_ENTRETELA: Record<ModeloCortina, boolean> = { ilhos: true, prega: true, franzido: false };
+const TEM_ENTRETELA: Record<ModeloCortina, boolean> = { ilhos: true, prega: true, franzido: false, wave: true };
 
 function arredondaParaMultiplo(n: number, mult: number): number {
   return Math.ceil(n / mult) * mult;
+}
+
+/**
+ * Dados do Wave (deduzido dos áudios do Victor): cordão com 1 botão a cada 5 cm
+ * a partir do zero, arredondado p/ cima até múltiplo de 4. A fita wave (= tecido)
+ * tem os mesmos N botões, com vãos alternados 15/10 cm começando com 5 cm.
+ */
+function dadosWave(largura: number): { botoes: number; cordao_m: number; fita_m: number } {
+  const botoes = arredondaParaMultiplo(Math.ceil(largura / 0.05 + 1), 4);
+  const vaos = botoes - 1;
+  const fita = 0.05 + 0.15 * Math.ceil(vaos / 2) + 0.1 * Math.floor(vaos / 2);
+  return { botoes, cordao_m: roundHalfUp(vaos * 0.05), fita_m: roundHalfUp(fita) };
 }
 
 function nomeVarao(f: FixacaoCortina): string {
@@ -97,7 +110,7 @@ function metragemFace(
 
 /** Calcula uma cortina dos modelos Ilhós / Prega / Franzido. */
 export function calcularCortina(e: EntradaCortina): ResultadoCortina {
-  if (!['ilhos', 'prega', 'franzido'].includes(e.modelo)) throw new NotImplementedError(e.modelo);
+  if (!['ilhos', 'prega', 'franzido', 'wave'].includes(e.modelo)) throw new NotImplementedError(e.modelo);
   if (!(e.largura > 0) || !(e.altura > 0) || !(e.largura_tecido > 0)) {
     throw new Error('Largura, altura e largura do tecido devem ser positivas.');
   }
@@ -116,7 +129,9 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   const metodo: 'normal' | 'emenda' = e.altura + barraConsumo <= e.largura_tecido ? 'normal' : 'emenda';
 
   // ---- Tecido frente ----
-  const consumoFrente = roundHalfUp(e.largura * franzidoFrente);
+  // No Wave a largura franzida (consumo) vem da fita wave; nos demais é largura × franzido.
+  const wave = e.modelo === 'wave' ? dadosWave(e.largura) : null;
+  const consumoFrente = roundHalfUp(wave ? wave.fita_m : e.largura * franzidoFrente);
   const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo);
 
   // ---- Tecido de trás / forro ----
@@ -145,15 +160,22 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   // ---- Suporte: ENTRADA MANUAL (Victor) ----
   itens.push({ tipo: 'acessorio', item: varaoDuplo ? 'Suporte duplo' : 'Suporte', quantidade: 0, unidade: 'un', auto: false });
 
-  // ---- Ferragem da frente: ilhós (a cada 15 cm da largura franzida) ou argola/rodízio
-  //      (a cada 10 cm do varão). Sempre arredonda P/ CIMA até par / múltiplo de 4. ----
-  if (e.modelo === 'ilhos') {
+  // ---- Ferragem da frente ----
+  if (wave) {
+    // Wave: cordão (m), rodízio wave e base click (= nº de botões), terminais (2 por ponta).
+    itens.push({ tipo: 'acessorio', item: 'Cordão wave', quantidade: wave.cordao_m, unidade: 'm', auto: true });
+    itens.push({ tipo: 'acessorio', item: 'Rodízio wave', quantidade: wave.botoes, unidade: 'un', auto: true });
+    itens.push({ tipo: 'acessorio', item: 'Base click', quantidade: wave.botoes, unidade: 'un', auto: true });
+    itens.push({ tipo: 'acessorio', item: 'Terminais', quantidade: 4, unidade: 'un', auto: true });
+  } else if (e.modelo === 'ilhos') {
+    // Ilhós: 1 a cada 15 cm da largura franzida. Arredonda p/ cima até par / múltiplo de 4.
     itens.push({ tipo: 'acessorio', item: 'Ilhoses', quantidade: arredondaParaMultiplo(Math.ceil(consumoFrente / espIlhos), multParidade), unidade: 'un', auto: true });
   } else {
+    // Prega/Franzido: argola (varão) ou rodízio (trilho/varão suíço), 1 a cada 10 cm do varão.
     itens.push({ tipo: 'acessorio', item: nomeFerragem(e.fixacao), quantidade: arredondaParaMultiplo(Math.ceil(e.largura / espFerragem), multParidade), unidade: 'un', auto: true });
   }
   // Face de trás (varão duplo) sempre usa argola/rodízio a cada 10 cm do varão.
-  if (varaoDuplo) {
+  if (varaoDuplo && !wave) {
     itens.push({ tipo: 'acessorio', item: `${nomeFerragem(e.fixacao)} (traseiro)`, quantidade: arredondaParaMultiplo(Math.ceil(e.largura / espFerragem), multParidade), unidade: 'un', auto: true });
   }
 
