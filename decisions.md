@@ -219,4 +219,15 @@ Fonte: planilha "CORTINA SOB MEDIDA" do Victor (aba CORTINA MODELO ILHOS) + mét
 - **Validação**: os 3 totais da planilha (R$ 672 / 852 / 847) e o exemplo de emenda batem 100% nos testes.
 
 ### 9.2 Pendente do Victor (item 5) — antes do módulo completo
-Demais modelos de cortina + tipos de **trilho/fixação**, **inversão de tecido** e **tipos de costura** (campos da tela do GestãoClick). UI/formulário de cortina será desenhada quando isso chegar; o motor do Ilhós já está pronto e à prova de retrabalho.
+Demais modelos de cortina + tipos de **trilho/fixação**, **inversão de tecido** e **tipos de costura** (campos da tela do GestãoClick). UI/formulário de cortina será desenhada quando isso chegar.
+
+### 9.3 Atualização planilha v.3 — Prega/Franzido + entretela (15/06/2026)
+Motor generalizado em `calcularCortina(e)` para 3 modelos: **ilhos**, **prega** (= Americana = Macho = Fêmea) e **franzido**. Regras confirmadas pelo Victor:
+- **Entretela (KOS):** modelos com entretela = Ilhós e Prega (Franzido NÃO tem). Qtd = metragem do tecido frente; total = qtd × preço/metro (os "9" na planilha eram erro de célula `#VALUE!`).
+- **Folga de topo (altura):** Ilhós 0,10 m · Prega 0,12 m (cabeçote) · Franzido 0,08 m. `barra_consumo = folga_topo + tamanho_barra × (1 simples | 2 dupla)`.
+- **Ferragem:** Ilhós → **ilhoses** `ceil(consumo/0,15)`; Prega/Franzido → **argolas** (varão) ou **rodízios/ganchos** (trilho/varão suíço) `ceil(largura/0,10)`. Tudo arredondado p/ cima até par (0–1 abertura) ou múltiplo de 4 (≥2). Varão duplo: ferragem por face (frente + trás).
+- **Fixação:** Ilhós só **varão**; Prega/Franzido servem **varão, trilho ou varão suíço**. **Trilho não usa ponteira**; varão/varão suíço usam (2/varão).
+- **Validação:** totais batem — Ilhós 1 tecido **685,50** (= 672 + entretela 13,50, confere com a célula F36 da v.3); Prega 1 tecido **676,50**; Franzido 1 tecido **663** (sem entretela). Motor: funções puras + testes (58/58). Ainda sem UI/rota/GC.
+
+### 9.4 WAVE — bloqueado por fórmula (15/06/2026)
+Aba "CORTINA WAVE" (serve só trilho/varão suíço). Claro: cordão/rodízio wave/base click = 1 botão a cada 5 cm começando no zero, arredondado p/ cima até **divisível por 4** (ex.: 3 m → 64); terminais 4. **Bloqueio:** a metragem de **tecido** depende da **fita wave** (10×15) e o Victor escreveu na célula R28 que **não tem a fórmula**. Aguardando dele um exemplo numérico (largura 3 m → metros de fita/tecido) para deduzir o fator.

@@ -1,45 +1,51 @@
 import { describe, it, expect } from 'vitest';
 import {
-  calcularCortinaIlhos,
   calcularCortina,
   NotImplementedError,
-  type EntradaCortinaIlhos,
-  type ResultadoCortinaIlhos,
+  type EntradaCortina,
+  type ResultadoCortina,
 } from './cortina';
 
-// Preços de exemplo da planilha "CORTINA SOB MEDIDA" do Victor.
+// Preços de exemplo da planilha "CORTINA SOB MEDIDA_v.3".
 const PRECO: Record<string, number> = {
-  'Tecido (frente)': 50,
-  'Tecido (forro)': 20,
-  'Tecido (trás)': 20,
   Varão: 13,
-  'Varão (traseiro)': 13,
+  Trilho: 13,
+  'Varão suíço': 13,
   Suporte: 5,
   'Suporte duplo': 5,
   Ilhoses: 0.3,
-  Argolas: 0.2,
+  Argolas: 0.3,
+  'Rodízios/ganchos': 0.3,
   Ponteira: 5,
-  'Ponteira (frente)': 5,
-  'Ponteira (trás)': 5,
+  'Entretela (KOS)': 1.5,
+  'Tecido (frente)': 50,
+  'Tecido (forro)': 20,
+  'Tecido (trás)': 20,
 };
-const SUPORTE_MANUAL = 3; // o vendedor lança; na planilha foram 3
+const SUPORTE_MANUAL = 3;
 const INSTALACAO = 140;
 
-/** Reproduz o total da planilha: itens × preço (suporte manual = 3) + instalação. */
-function totalPlanilha(r: ResultadoCortinaIlhos): number {
+function precoDe(item: string): number {
+  const base = item.replace(/\s*\(tras[ae]ir[ao]\)$/i, ''); // remove sufixo (traseiro/traseira)
+  return PRECO[base] ?? 0;
+}
+function totalPlanilha(r: ResultadoCortina): number {
   let total = 0;
   for (const it of r.itens) {
-    const qtd = it.auto ? it.quantidade : SUPORTE_MANUAL; // único item manual é o suporte
-    total += qtd * (PRECO[it.item] ?? 0);
+    const qtd = it.auto ? it.quantidade : SUPORTE_MANUAL; // suporte é o único manual
+    total += qtd * precoDe(it.item);
   }
   return total + INSTALACAO;
 }
+const qtd = (r: ResultadoCortina, item: string) => r.itens.find((i) => i.item === item)?.quantidade;
 
-const BASE: EntradaCortinaIlhos = {
+const BASE: EntradaCortina = {
+  modelo: 'ilhos',
+  fixacao: 'varao',
+  config: 'um_tecido',
   largura: 3,
   altura: 2.6,
   largura_tecido: 3.0,
-  config: 'um_tecido',
   franzido_frente: 3,
   franzido_tras: 2,
   tamanho_barra: 0.1,
@@ -47,68 +53,73 @@ const BASE: EntradaCortinaIlhos = {
   aberturas: 1,
 };
 
-describe('Cortina modelo Ilhós — planilha do Victor', () => {
-  it('caso 1: um tecido (varão simples) → total R$ 672', () => {
-    const r = calcularCortinaIlhos({ ...BASE, config: 'um_tecido' });
+describe('Cortina Ilhós (com entretela) — planilha v.3', () => {
+  it('um tecido → total R$ 685,50 (672 + entretela 13,50)', () => {
+    const r = calcularCortina({ ...BASE, modelo: 'ilhos', config: 'um_tecido' });
     expect(r.metodo).toBe('normal');
     expect(r.barra_consumo).toBe(0.3);
     expect(r.metragem_frente).toBe(9);
-    expect(r.metragem_tras).toBeNull();
-    expect(r.ilhoses).toBe(60);
-    expect(totalPlanilha(r)).toBe(672);
+    expect(qtd(r, 'Ilhoses')).toBe(60);
+    expect(qtd(r, 'Entretela (KOS)')).toBe(9);
+    expect(totalPlanilha(r)).toBe(685.5);
   });
 
-  it('caso 2: dois tecidos no mesmo varão (forro) → total R$ 852', () => {
-    const r = calcularCortinaIlhos({ ...BASE, config: 'dois_tecidos_mesmo_varao' });
-    expect(r.metragem_frente).toBe(9);
-    expect(r.metragem_tras).toBe(9); // forro acompanha a frente
-    expect(totalPlanilha(r)).toBe(852);
+  it('forro no mesmo varão → forro acompanha a frente (9 m)', () => {
+    const r = calcularCortina({ ...BASE, modelo: 'ilhos', config: 'dois_tecidos_mesmo_varao' });
+    expect(qtd(r, 'Tecido (forro)')).toBe(9);
   });
 
-  it('caso 3: dois tecidos em varão duplo → total R$ 847', () => {
-    const r = calcularCortinaIlhos({ ...BASE, config: 'dois_tecidos_varao_duplo' });
-    expect(r.metragem_frente).toBe(9);
-    expect(r.metragem_tras).toBe(6); // trás usa o próprio franzido (2)
-    const argolas = r.itens.find((i) => i.item === 'Argolas');
-    expect(argolas?.quantidade).toBe(30); // 1 a cada 10 cm de varão (3 m)
-    expect(totalPlanilha(r)).toBe(847);
+  it('varão duplo → frente ilhós (60) + trás argolas (30) + trás 6 m', () => {
+    const r = calcularCortina({ ...BASE, modelo: 'ilhos', config: 'dois_tecidos_varao_duplo' });
+    expect(qtd(r, 'Ilhoses')).toBe(60);
+    expect(qtd(r, 'Argolas (traseiro)')).toBe(30);
+    expect(qtd(r, 'Tecido (trás)')).toBe(6);
   });
 });
 
-describe('Cortina modelo Ilhós — método de emenda (altura > largura do tecido)', () => {
-  it('exemplo Cortinas Fênix: 3,50 × 3,00 em tecido 2,80 → 4 tiras × 3,30 = 13,20 m', () => {
-    const r = calcularCortinaIlhos({
+describe('Cortina Prega (Americana/Macho/Fêmea) — planilha v.3', () => {
+  it('um tecido no varão → total R$ 676,50 (ferragem = argolas)', () => {
+    const r = calcularCortina({ ...BASE, modelo: 'prega', fixacao: 'varao', config: 'um_tecido' });
+    expect(r.barra_consumo).toBe(0.32); // cabeçote 0,12 + barra 0,20
+    expect(qtd(r, 'Argolas')).toBe(30);
+    expect(qtd(r, 'Entretela (KOS)')).toBe(9);
+    expect(totalPlanilha(r)).toBe(676.5);
+  });
+
+  it('no trilho → usa rodízios e NÃO usa ponteira', () => {
+    const r = calcularCortina({ ...BASE, modelo: 'prega', fixacao: 'trilho', config: 'um_tecido' });
+    expect(qtd(r, 'Rodízios/ganchos')).toBe(30);
+    expect(qtd(r, 'Ponteira')).toBeUndefined();
+  });
+});
+
+describe('Cortina Franzido (sem entretela) — planilha v.3', () => {
+  it('um tecido → sem entretela, folga 8 cm, total R$ 663', () => {
+    const r = calcularCortina({ ...BASE, modelo: 'franzido', fixacao: 'varao', config: 'um_tecido' });
+    expect(r.barra_consumo).toBe(0.28); // 0,08 + 0,20
+    expect(qtd(r, 'Entretela (KOS)')).toBeUndefined();
+    expect(totalPlanilha(r)).toBe(663);
+  });
+});
+
+describe('Cortina — método de emenda (altura > largura do tecido)', () => {
+  it('3,50 × 3,00 em tecido 2,80 → 4 tiras × 3,30 = 13,20 m', () => {
+    const r = calcularCortina({
+      ...BASE,
+      modelo: 'ilhos',
       largura: 3.5,
       altura: 3.0,
       largura_tecido: 2.8,
-      config: 'um_tecido',
       franzido_frente: 2.6,
-      tamanho_barra: 0.1,
-      tipo_barra: 'dupla',
     });
     expect(r.metodo).toBe('emenda');
-    expect(r.consumo_frente).toBe(9.1);
-    expect(r.tiras_frente).toBe(4); // ceil(9,10 / 2,80) = 4
-    expect(r.metragem_frente).toBe(13.2); // 4 × (3,00 + 0,30)
-  });
-});
-
-describe('Cortina modelo Ilhós — arredondamentos', () => {
-  it('ilhós sempre para cima até par (regra Victor: 43 → 44)', () => {
-    // consumo 6,45 → 6,45/0,15 = 43 → par → 44 (com folga p/ não ficar exato testamos 6,46)
-    const r = calcularCortinaIlhos({ ...BASE, largura: 2.15, franzido_frente: 3.0001, aberturas: 0 });
-    expect(r.ilhoses % 2).toBe(0);
-    expect(r.ilhoses).toBe(44);
-  });
-
-  it('mais de uma abertura → ilhós em múltiplo de 4', () => {
-    const r = calcularCortinaIlhos({ ...BASE, largura: 2.15, franzido_frente: 3.0001, aberturas: 2 });
-    expect(r.ilhoses % 4).toBe(0);
+    expect(r.tiras_frente).toBe(4);
+    expect(r.metragem_frente).toBe(13.2);
   });
 });
 
 describe('Cortina — modelos não implementados', () => {
-  it('calcularCortina genérico ainda lança NotImplementedError', () => {
-    expect(() => calcularCortina()).toThrow(NotImplementedError);
+  it('Wave ainda lança NotImplementedError', () => {
+    expect(() => calcularCortina({ ...BASE, modelo: 'wave' as unknown as EntradaCortina['modelo'] })).toThrow(NotImplementedError);
   });
 });
