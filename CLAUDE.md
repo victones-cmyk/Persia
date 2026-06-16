@@ -117,12 +117,14 @@ npm ci && npx prisma migrate deploy && npm run build && npm start
 
 ## BLOQUEANTES ATIVOS
 - ~~BLOQUEANTE-01: Credenciais GestãoClick~~ — RESOLVIDO em 11/06/2026. Preencher GESTAOCLICK_ACCESS_TOKEN e GESTAOCLICK_SECRET_ACCESS_TOKEN no .env.
-- BLOQUEANTE-02: Regras de cálculo de cortina — levantamento com vendedores pendente
+- ~~BLOQUEANTE-02: Regras de cálculo de cortina~~ — RESOLVIDO em 16/06/2026 com Victor. 4 modelos no motor (Ilhós/Prega/Franzido/Wave). "Argolas" do DecorSoft = Franzido no varão. Inversão de tecido = método de emenda (altura > largura do tecido). Entretela só na frente. Tecido cortado de 5 em 5 cm. Deslizante: tipo escolhido pelo usuário, qtd automática.
 - BLOQUEANTE-03: Percentuais reais de desconto máximo — confirmar com Victor
 - BLOQUEANTE-04: Confirmar se CORTINA WAVE FÁCIL (cód. 24) é 16º tipo ativo ou duplicata de CORTINA WAVE FACIL 2.4
+- BLOQUEANTE-05: Fator de tecido do WAVE = 2,7 (Victor mediu 3,00 m → 8,10 m). TENTATIVO — ele vai medir mais larguras para confirmar se o fator se mantém.
+- BLOQUEANTE-06: Envio de cortina ao GestãoClick — pendente. (a) confirmar se os acessórios (varão/trilho, suportes, ilhós, argolas, rodízios, ponteiras, cordão/rodízio/base click do wave, entretela) já estão cadastrados no GC e seus IDs; (b) Victor mencionou ter uma ideia para simplificar cortinas duplas/triplas — aguardar antes de mapear acessório→produto.
 
 ## PLACEHOLDERS PENDENTES
 - ~~PLACEHOLDER-01~~ RESOLVIDO em 11/06/2026. gc_loja_id Matriz (SP): "8274", FILIAL SBC: "8284"
 - PLACEHOLDER-02: gc_usuario_id de cada vendedor — PENDENTE. GET /api/usuarios retornou apenas Victor (10512), CAIXA (11420), ESTOQUE (652101). Nenhum vendedor cadastrado no GestãoClick ainda. Criar contas no GC antes da Fase 4.
 - PLACEHOLDER-03: Percentuais de desconto por perfil (padrão temporário: 10% vendedor, 30% admin)
-- PLACEHOLDER-04: Fórmulas de cálculo de cortina (após BLOQUEANTE-02)
+- ~~PLACEHOLDER-04: Fórmulas de cálculo de cortina~~ RESOLVIDO em 16/06/2026 — ver calc/cortina.ts (Ilhós/Prega/Franzido/Wave). Resta só o envio ao GC (BLOQUEANTE-06).

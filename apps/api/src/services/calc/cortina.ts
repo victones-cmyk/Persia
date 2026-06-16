@@ -1,12 +1,16 @@
 // apps/api/src/services/calc/cortina.ts
-// Motor de cálculo de CORTINA (Fase 7). Modelos prontos: ILHÓS, PREGA
-// (Americana = Macho = Fêmea) e FRANZIDO. WAVE pendente (falta a fórmula da
-// fita wave). Regras: planilha "CORTINA SOB MEDIDA_v.3" + respostas do Victor
-// (12–15/06/2026) + método de emenda da Cortinas Fênix.
+// Motor de cálculo de CORTINA (Fase 7). Modelos: ILHÓS, PREGA (Americana = Macho
+// = Fêmea), FRANZIDO e WAVE. "Argolas" do DecorSoft = FRANZIDO no varão (Victor),
+// não é modelo à parte. Regras: planilha "CORTINA SOB MEDIDA_v.3" + respostas do
+// Victor (12–16/06/2026) + método de emenda da Cortinas Fênix.
 //
 // Preços: tecido = SOB MEDIDA (por metro); acessórios = VAREJO, SAEM DO GESTÃOCLICK
 // (vendedor escolhe o produto). O motor calcula QUANTIDADES + metragem de tecido;
 // os preços são aplicados depois, na montagem do orçamento.
+//
+// Tecido vendido/cortado FRACIONADO em passos de 5 cm (Victor 16/06: "calcular de
+// 5 em 5 cm para evitar erros de corte"). A metragem de tecido é arredondada p/
+// cima ao múltiplo de 0,05 m em PASSO_TECIDO.
 
 import { roundHalfUp } from './arredondamento';
 
@@ -71,20 +75,30 @@ const FOLGA_TOPO: Record<ModeloCortina, number> = {
 };
 const TEM_ENTRETELA: Record<ModeloCortina, boolean> = { ilhos: true, prega: true, franzido: false, wave: true };
 
+// Fator de franzimento do WAVE. Victor (16/06): trilho 3,00 m → 8,10 m de tecido
+// ⇒ 8,10 / 3,00 = 2,7. TENTATIVO: ele vai medir mais larguras p/ confirmar se o
+// fator se mantém (BLOQUEANTE-05).
+const FRANZIDO_WAVE = 2.7;
+
+// Tecido cortado de 5 em 5 cm (Victor 16/06). Arredonda p/ cima ao múltiplo de 0,05 m.
+const PASSO_TECIDO = 0.05;
+
 function arredondaParaMultiplo(n: number, mult: number): number {
-  return Math.ceil(n / mult) * mult;
+  return roundHalfUp(Math.ceil(roundHalfUp(n / mult, 6)) * mult);
+}
+function arredondaTecido(n: number): number {
+  return arredondaParaMultiplo(n, PASSO_TECIDO);
 }
 
 /**
- * Dados do Wave (deduzido dos áudios do Victor): cordão com 1 botão a cada 5 cm
- * a partir do zero, arredondado p/ cima até múltiplo de 4. A fita wave (= tecido)
- * tem os mesmos N botões, com vãos alternados 15/10 cm começando com 5 cm.
+ * Acessórios do Wave (deduzido dos áudios do Victor): cordão com 1 botão a cada
+ * 5 cm a partir do zero, arredondado p/ cima até múltiplo de 4. O TECIDO do wave
+ * NÃO sai daqui — usa FRANZIDO_WAVE (largura × 2,7), medido pelo Victor.
  */
-function dadosWave(largura: number): { botoes: number; cordao_m: number; fita_m: number } {
+function dadosWave(largura: number): { botoes: number; cordao_m: number } {
   const botoes = arredondaParaMultiplo(Math.ceil(largura / 0.05 + 1), 4);
   const vaos = botoes - 1;
-  const fita = 0.05 + 0.15 * Math.ceil(vaos / 2) + 0.1 * Math.floor(vaos / 2);
-  return { botoes, cordao_m: roundHalfUp(vaos * 0.05), fita_m: roundHalfUp(fita) };
+  return { botoes, cordao_m: roundHalfUp(vaos * 0.05) };
 }
 
 function nomeVarao(f: FixacaoCortina): string {
@@ -95,7 +109,11 @@ function nomeFerragem(f: FixacaoCortina): string {
   return f === 'varao' ? 'Argolas' : 'Rodízios/ganchos';
 }
 
-/** Metragem de tecido de uma face (normal = largura×franzido; emenda = tiras verticais). */
+/**
+ * Metragem de tecido de uma face (normal = largura×franzido; emenda = tiras
+ * verticais). Cortado de 5 em 5 cm: cada corte arredonda p/ cima ao múltiplo de
+ * 0,05 m (Victor 16/06). No método emenda arredonda o comprimento de CADA tira.
+ */
 function metragemFace(
   consumo: number,
   larguraTecido: number,
@@ -103,9 +121,9 @@ function metragemFace(
   barraConsumo: number,
   metodo: 'normal' | 'emenda',
 ): { metragem: number; tiras: number | null } {
-  if (metodo === 'normal') return { metragem: roundHalfUp(consumo), tiras: null };
+  if (metodo === 'normal') return { metragem: arredondaTecido(consumo), tiras: null };
   const tiras = Math.ceil(consumo / larguraTecido);
-  return { metragem: roundHalfUp(tiras * (altura + barraConsumo)), tiras };
+  return { metragem: roundHalfUp(tiras * arredondaTecido(altura + barraConsumo)), tiras };
 }
 
 /** Calcula uma cortina dos modelos Ilhós / Prega / Franzido. */
@@ -129,9 +147,9 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   const metodo: 'normal' | 'emenda' = e.altura + barraConsumo <= e.largura_tecido ? 'normal' : 'emenda';
 
   // ---- Tecido frente ----
-  // No Wave a largura franzida (consumo) vem da fita wave; nos demais é largura × franzido.
+  // Wave usa fator próprio (2,7, medido pelo Victor); nos demais é largura × franzido.
   const wave = e.modelo === 'wave' ? dadosWave(e.largura) : null;
-  const consumoFrente = roundHalfUp(wave ? wave.fita_m : e.largura * franzidoFrente);
+  const consumoFrente = roundHalfUp(e.largura * (wave ? FRANZIDO_WAVE : franzidoFrente));
   const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo);
 
   // ---- Tecido de trás / forro ----

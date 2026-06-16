@@ -155,7 +155,7 @@ export function CortinaForm({ onResult }: { onResult: (r: CalcularCortinaRespost
             </div>
           )}
           {isWave && (
-            <div className="col-span-1 text-xs-ui text-neutral-500 self-end pb-2">Franzido do Wave é calculado pela fita.</div>
+            <div className="col-span-1 text-xs-ui text-neutral-500 self-end pb-2">Franzido do Wave é fixo (fator 2,7).</div>
           )}
           {varaoDuplo && (
             <div>

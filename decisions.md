@@ -165,7 +165,7 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 ## 6. Pendências que dependem do Victor (não são decisões nossas)
 
-- **Cortina — fechar os modelos:** fórmula do **Wave** (confirmar 3 m → ~7,95 m de tecido); modelos **Prega Francesa, Argolas, Alças**; detalhes de **trilho** (deslizante/suporte/final); **inversão de tecido**; **tipos de costura**; e confirmar (suporte manual?, entretela com 2 tecidos = só frente?, metragem vende em metro/meio/fração?, acessórios já cadastrados no GC?).
+- **(Resolvido 16/06)** Cortina — modelos fechados pelo Victor (ver §9.5): 4 modelos cobrem tudo (Argolas = Franzido/varão), inversão = emenda, deslizante qtd automática, entretela só frente, tecido de 5 em 5 cm. **Resta:** confirmar o fator do Wave (3 m → 8,10 m, BLOQUEANTE-05) e o **envio ao GC** (acessórios cadastrados? + ideia do Victor p/ duplas/triplas — BLOQUEANTE-06).
 - **Vincular cada vendedora** ao id de funcionário do GC (via Admin → Usuários).
 - **Confirmar:** % de desconto (10/30), TC (70% ou 75%), fitas em metros.
 - **Homologação:** ~10 orçamentos plataforma × DecorSoft.
@@ -173,11 +173,12 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 ---
 
-## 7. Estado atual (15/06/2026)
+## 7. Estado atual (16/06/2026)
 
 - **Em produção** (commit `d9ca642`): https://persia-api-production.up.railway.app — persiana **multi-itens**, largura via atributo, login "Usuário" + senha provisória, seletor de vendedor, busca de tecido. Auto-deploy GitHub→Railway OK.
-- **Commitado localmente, aguardando respostas do Victor antes do push:** motor de cortina (4 modelos: Ilhós/Prega/Franzido/Wave), **calculadora de cortina na UI**, **Salvar (rascunho)**, **cliente no topo**, padronização de largura e ajuste do desconto. 60/60 testes.
-- **Próximas:** fechar modelos de cortina restantes + **envio de cortina ao GestãoClick** (mapeamento acessório→produto); Fase 8 (homologação/go-live).
+- **Commitado localmente, ainda não enviado (push) p/ produção:** motor de cortina (4 modelos: Ilhós/Prega/Franzido/Wave) com as **respostas finais do Victor** (Argolas=Franzido/varão, inversão=emenda, tecido de 5 em 5 cm, Wave fator 2,7), **calculadora de cortina na UI**, **Salvar (rascunho)**, **cliente no topo**, padronização de largura e ajuste do desconto. **61/61 testes.**
+- **Próximas:** **envio de cortina ao GestãoClick** (depende do BLOQUEANTE-06: acessórios cadastrados + ideia do Victor p/ duplas/triplas) e confirmar o fator do Wave (BLOQUEANTE-05); Fase 8 (homologação/go-live).
+- **Obs.:** a calculadora de cortina, se for ao ar agora, é **só cálculo** (sem botão Enviar/Salvar) — a aba mostra `CortinaForm` + `CortinaResultado`, sem integração ao GC.
 
 ---
 
@@ -217,8 +218,8 @@ Fonte: planilhas "CORTINA SOB MEDIDA" v1→v3 do Victor + áudios do Wave + mét
 - **Preços dos acessórios saem do GestãoClick** (o vendedor escolhe o produto). O motor calcula só **quantidades** + metragem de tecido; preços/valores são aplicados na montagem do orçamento.
 - **Validação**: os 3 totais da planilha (R$ 672 / 852 / 847) e o exemplo de emenda batem 100% nos testes.
 
-### 9.2 Pendente do Victor (item 5) — antes do módulo completo
-Demais modelos de cortina + tipos de **trilho/fixação**, **inversão de tecido** e **tipos de costura** (campos da tela do GestãoClick). UI/formulário de cortina será desenhada quando isso chegar.
+### 9.2 ✅ Pendências do item 5 — resolvidas pelo Victor (16/06/2026, ver §9.5)
+Modelos, trilho/fixação, inversão de tecido e costura fechados pelas respostas do Victor. Resta só o **envio ao GestãoClick** (BLOQUEANTE-06).
 
 ### 9.3 Atualização planilha v.3 — Prega/Franzido + entretela (15/06/2026)
 Motor generalizado em `calcularCortina(e)` para 3 modelos: **ilhos**, **prega** (= Americana = Macho = Fêmea) e **franzido**. Regras confirmadas pelo Victor:
@@ -228,14 +229,21 @@ Motor generalizado em `calcularCortina(e)` para 3 modelos: **ilhos**, **prega** 
 - **Fixação:** Ilhós só **varão**; Prega/Franzido servem **varão, trilho ou varão suíço**. **Trilho não usa ponteira**; varão/varão suíço usam (2/varão).
 - **Validação:** totais batem — Ilhós 1 tecido **685,50** (= 672 + entretela 13,50, confere com a célula F36 da v.3); Prega 1 tecido **676,50**; Franzido 1 tecido **663** (sem entretela). Motor: funções puras + testes (58/58). Ainda sem UI/rota/GC.
 
-### 9.4 WAVE — fórmula deduzida dos áudios + implementada (15/06/2026)
-Aba "CORTINA WAVE" (serve só trilho/varão suíço). Fórmula deduzida dos 2 áudios do Victor e implementada (`modelo: 'wave'`):
-- **Botões** (cordão = rodízio wave = base click): `N = múltiplo de 4 ≥ (largura/0,05 + 1)`. Ex.: 3 m → 61 → **64**.
+### 9.4 WAVE — tecido medido pelo Victor + acessórios deduzidos (16/06/2026)
+Aba "CORTINA WAVE" (serve só trilho/varão suíço). `modelo: 'wave'`:
+- **Tecido = `largura × 2,7`** (e = entretela). Victor mediu **trilho 3,00 m → 8,10 m** ⇒ fator **2,7**. Substituiu a metragem antes deduzida da fita (7,95). **TENTATIVO** (BLOQUEANTE-05): Victor vai medir mais larguras p/ confirmar o fator.
+- **Botões** (rodízio wave = base click): `N = múltiplo de 4 ≥ (largura/0,05 + 1)`. Ex.: 3 m → 61 → **64**. (Deduzido dos áudios — ainda não confirmado.)
 - **Cordão** (m) = `(N−1) × 0,05` = **3,15 m** (bate com a célula R27 da planilha).
-- **Fita wave = tecido** (e = entretela): a fita tem N botões com vãos alternados 15/10 cm começando com 5 cm → `0,05 + 0,15×⌈vãos/2⌉ + 0,10×⌊vãos/2⌋`. Ex.: **7,95 m** (fator ≈ 2,6×).
 - **Terminais** 4; trilho não usa ponteira; varão suíço usa.
 - Demais (folga topo 0,12, entretela, emenda, 2 tecidos = mesma qtd) seguem o padrão geral.
-- **A confirmar com o Victor (1 número):** para largura 3 m, o tecido dá ~7,95 m? Isso trava se a alternância começa por 15 ou 10. Testes: 60/60.
+
+### 9.5 Respostas finais do Victor (16/06/2026) — fecha o BLOQUEANTE-02
+- **"Argolas" não é modelo novo:** é **Franzido no varão** (o DecorSoft separava). Os 4 modelos cobrem tudo. Idem Prega Francesa/Alças: variações de prega, sem fórmula distinta levantada.
+- **Inversão de tecido = método de emenda:** usada em cortinas pequenas ou quando `altura > largura do tecido`. Já é o que o motor faz.
+- **Deslizante:** o **tipo** é escolhido pelo usuário; a **quantidade** é calculada automaticamente (é a ferragem do trilho, `ceil(largura/0,10)`).
+- **Entretela só na cortina da frente** (confirmado).
+- **Tecido fracionado, cortado de 5 em 5 cm** (evita erro de corte): a metragem de tecido agora arredonda p/ cima ao **múltiplo de 0,05 m** (`PASSO_TECIDO`, `arredondaTecido`). Testes: 61/61.
+- **Cortinas duplas/triplas:** Victor disse que talvez tenha uma forma mais simples de implementar — **aguardar** antes de fechar o envio ao GC (BLOQUEANTE-06).
 
 ---
 

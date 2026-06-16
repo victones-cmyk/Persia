@@ -118,22 +118,31 @@ describe('Cortina — método de emenda (altura > largura do tecido)', () => {
   });
 });
 
-describe('Cortina Wave (fórmula deduzida dos áudios)', () => {
-  it('largura 3 m → 64 botões, cordão 3,15 m, tecido/entretela 7,95 m', () => {
+describe('Cortina Wave (fator de tecido medido pelo Victor + acessórios deduzidos)', () => {
+  it('trilho 3 m → tecido/entretela 8,10 m (fator 2,7), 64 botões, cordão 3,15 m', () => {
     const r = calcularCortina({ ...BASE, modelo: 'wave', fixacao: 'trilho', largura: 3, largura_tecido: 3.0 });
     expect(r.metodo).toBe('normal');
+    expect(r.metragem_frente).toBe(8.1); // 3,00 × 2,7 (Victor 16/06)
+    expect(qtd(r, 'Entretela (KOS)')).toBe(8.1);
     expect(qtd(r, 'Rodízio wave')).toBe(64);
     expect(qtd(r, 'Base click')).toBe(64);
     expect(qtd(r, 'Cordão wave')).toBe(3.15);
     expect(qtd(r, 'Terminais')).toBe(4);
-    expect(r.metragem_frente).toBe(7.95); // = fita wave
-    expect(qtd(r, 'Entretela (KOS)')).toBe(7.95);
     expect(qtd(r, 'Ponteira')).toBeUndefined(); // trilho não usa
   });
 
   it('no varão suíço usa ponteira (2)', () => {
     const r = calcularCortina({ ...BASE, modelo: 'wave', fixacao: 'varao_suico', largura: 3, largura_tecido: 3.0 });
     expect(qtd(r, 'Ponteira')).toBe(2);
+  });
+});
+
+describe('Cortina — tecido cortado de 5 em 5 cm (Victor 16/06)', () => {
+  it('consumo 3,81 m (1,27 × 3) arredonda p/ cima → 3,85 m', () => {
+    const r = calcularCortina({ ...BASE, modelo: 'franzido', largura: 1.27, altura: 2.0, largura_tecido: 3.0, franzido_frente: 3 });
+    expect(r.metodo).toBe('normal');
+    expect(r.consumo_frente).toBe(3.81);
+    expect(r.metragem_frente).toBe(3.85); // múltiplo de 0,05 m
   });
 });
 
