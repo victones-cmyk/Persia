@@ -126,7 +126,7 @@ export function AdminUsuarios() {
                     )}
                   </td>
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{u.email}</td>
-                  <td style={{ padding: 12 }}><span className="badge badge-secondary">{u.perfil === 'admin' ? 'Admin' : 'Vendedor'}</span></td>
+                  <td style={{ padding: 12 }}><span className="badge badge-secondary">{u.perfil === 'admin' ? 'Administrador' : 'Vendedor'}</span></td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.loja?.nome ?? '—'}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.gc_usuario_id ? (funcMap[u.gc_usuario_id] ?? `ID ${u.gc_usuario_id}`) : <span className="text-error">—</span>}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.ativo ? 'Sim' : 'Não'}</td>
@@ -256,7 +256,7 @@ function ModalUsuario({
               <label className="form-label">Perfil</label>
               <select className="input" value={perfil} onChange={(e) => setPerfil(e.target.value as 'vendedor' | 'admin')}>
                 <option value="vendedor">Vendedor</option>
-                <option value="admin">Admin</option>
+                <option value="admin">Administrador</option>
               </select>
             </div>
             <div>

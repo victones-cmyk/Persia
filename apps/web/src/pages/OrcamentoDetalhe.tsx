@@ -75,7 +75,7 @@ export function OrcamentoDetalhe() {
   }
 
   return (
-    <div className="max-w-form">
+    <div>
       <Link to="/orcamentos" className="text-sm-ui text-neutral-600 inline-flex items-center gap-2 mb-3">
         <FontAwesomeIcon icon={faArrowLeft} /> Voltar para orçamentos
       </Link>

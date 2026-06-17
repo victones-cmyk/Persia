@@ -26,7 +26,7 @@ export function Navbar({ gcStatus }: { gcStatus: ReturnType<typeof useGcHealth>[
             <span className="text-neutral-300 hidden sm:inline">
               {usuario.nome}
               <span className="badge badge-secondary ml-2">
-                {usuario.perfil === 'admin' ? 'Admin' : 'Vendedor'}
+                {usuario.perfil === 'admin' ? 'Administrador' : 'Vendedor'}
               </span>
             </span>
             <Link
