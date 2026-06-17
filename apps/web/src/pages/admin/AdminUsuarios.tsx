@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback, type FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faPen, faUserSlash, faUserCheck, faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faPen, faUserSlash, faUserCheck, faTrash, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 
@@ -78,6 +78,17 @@ export function AdminUsuarios() {
     }
   }
 
+  async function excluir(u: Usuario) {
+    if (!confirm(`Excluir DEFINITIVAMENTE o usuário "${u.nome}"? Esta ação não pode ser desfeita.`)) return;
+    try {
+      await api.del(`/admin/usuarios/${u.id}`);
+      showToast('success', 'Usuário excluído');
+      carregar();
+    } catch (e) {
+      showToast('error', 'Não foi possível excluir', e instanceof ApiError ? e.message : '');
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -125,6 +136,7 @@ export function AdminUsuarios() {
                       {u.ativo
                         ? <button className="btn btn-danger btn-xs" onClick={() => desativar(u)} title="Desativar"><FontAwesomeIcon icon={faUserSlash} /></button>
                         : <button className="btn btn-success btn-xs" onClick={() => reativar(u)} title="Reativar"><FontAwesomeIcon icon={faUserCheck} /></button>}
+                      <button className="btn btn-danger btn-xs" onClick={() => excluir(u)} title="Excluir definitivamente"><FontAwesomeIcon icon={faTrash} /></button>
                     </div>
                   </td>
                 </tr>

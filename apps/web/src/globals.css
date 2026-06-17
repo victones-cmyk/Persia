@@ -236,7 +236,7 @@ input[type='number'] {
   .btn[aria-disabled='true'] { opacity: 0.65; cursor: not-allowed; filter: none; }
 
   .btn-sm { padding: 3px 8px 4px; font-size: var(--text-md); line-height: 20px; }
-  .btn-xs { padding: 1px 5px; font-size: var(--text-xs); line-height: 18px; }
+  .btn-xs { padding: 4px 8px; font-size: var(--text-xs); line-height: 16px; }
 
   .btn-primary { background: var(--brand); color: var(--neutral-0); border-color: var(--brand); }
   .btn-success { background: var(--action-add); color: var(--neutral-0); border-color: var(--action-add-border); }

@@ -119,6 +119,29 @@ export async function desativarUsuario(req: Request, res: Response): Promise<voi
   res.json({ usuario });
 }
 
+/** Exclui DEFINITIVAMENTE um usuário — só se não tiver orçamentos (senão, desative). */
+export async function excluirUsuario(req: Request, res: Response): Promise<void> {
+  const id = String(req.params.id);
+  const sessao = req.session.usuario!;
+  if (id === sessao.id) throw new AppError(400, 'AUTO_EXCLUSAO', 'Você não pode excluir a si mesmo.');
+  const existe = await prisma.usuario.findUnique({ where: { id } });
+  if (!existe) throw new AppError(404, 'NAO_ENCONTRADO', 'Usuário não encontrado.');
+
+  // Orçamentos referenciam o vendedor — não dá para excluir sem perder histórico.
+  const orcamentos = await prisma.orcamento.count({ where: { usuario_id: id } });
+  if (orcamentos > 0) {
+    throw new AppError(409, 'USUARIO_COM_ORCAMENTOS', `Este usuário tem ${orcamentos} orçamento(s) e não pode ser excluído. Desative-o em vez de excluir.`);
+  }
+
+  // Sem orçamentos: limpa vínculos residuais (aprovações antigas, log de ações) e exclui.
+  await prisma.$transaction([
+    prisma.orcamento.updateMany({ where: { desconto_aprovado_por: id }, data: { desconto_aprovado_por: null } }),
+    prisma.logAcao.deleteMany({ where: { usuario_id: id } }),
+    prisma.usuario.delete({ where: { id } }),
+  ]);
+  res.json({ ok: true });
+}
+
 // ---------------------------------------------------------------------------
 // Log de ações
 // ---------------------------------------------------------------------------
