@@ -175,10 +175,10 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 ## 7. Estado atual (17/06/2026)
 
-- **Em produção** (commit `dca818b`): https://persia-api-production.up.railway.app
-  - **Persiana** completa (multi-itens, largura via atributo, TC 75%, **sem desconto**), envio ao GC.
-  - **Cortina** completa: modelo "+" (vários ambientes + 1–3 camadas), seletor de acessório por grupo (preço VAREJO do GC), instalação como serviço, **envio ao GestãoClick** (1 produto sintético por cortina + 1 linha de serviço, `tipo:'ambos'`). Servidor recalcula tudo. **65 testes.**
-  - Login "Usuário" + senha provisória, seletor de vendedor (funcionários GC), busca de tecido. Auto-deploy GitHub→Railway OK.
+- **Em produção** (commit `4a0998c`): https://persia-api-production.up.railway.app
+  - **Persiana** completa (multi-itens, **cálculo em tempo real**, largura via atributo, TC 75%, **sem desconto**, validação de obrigatórios), envio ao GC.
+  - **Cortina** completa: modelo "+" (vários ambientes + 1–3 camadas), seletor de acessório por grupo (preço VAREJO do GC), instalação como serviço, **envio ao GestãoClick** (1 produto sintético por cortina + 1 linha de serviço, `tipo:'ambos'`), inclusive **salvar como rascunho e enviar depois**. Servidor recalcula tudo. **65 testes.**
+  - Login "Usuário" + senha provisória, seletor de vendedor (funcionários GC), busca de tecido, admin com CRUD/excluir usuário. Detalhe do orçamento edita cliente/salva/cancela. Auto-deploy GitHub→Railway OK.
 - **Validação:** teste controlado de escrita da cortina OK (orçamento R$ 790 = produto + serviço, confirmado no GC e apagado).
 - **Pendências:** confirmar fator do Wave (BLOQUEANTE-05, Victor medindo mais larguras); homologação/go-live (Fase 8); conferir fita 2× largura (OS) na homologação.
 
@@ -318,3 +318,10 @@ Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura po
 ### 10.7 ✅ "Código GC" = Nº do GestãoClick + postura pós-envio (17/06/2026)
 - **Coluna "Código GC"** passa a exibir o **`codigo`** que enviamos (= o **Nº** mostrado no GestãoClick), para o usuário localizar fácil. Persistido em `Orcamento.gc_codigo` (migration `20260617190000_add_gc_codigo`). O `gc_orcamento_id` (id interno da API) continua guardado para uso técnico; a exibição usa `gc_codigo` (fallback no id).
 - **Orçamento excluído no GestãoClick (fire-and-forward):** a Pérsia **não detecta** a exclusão — o token não permite ler orçamento por id (403). Depois de enviado, a **fonte da verdade é o GestãoClick**; o registro local é histórico ("foi enviado"), não um espelho em tempo real. Para refazer, cria-se um novo. Sincronizar é inviável pela limitação da API.
+
+### 10.8 ✅ 2ª rodada de feedback (17/06/2026)
+- **Detalhe do orçamento:** largura cheia (não mais `max-w-form`). Em **rascunho/erro**, dá para **escolher o cliente** ali (busca GC), **Salvar** (`PUT /orcamentos/:id`) e **Enviar** (desabilitado sem cliente). **Cancelar** disponível no detalhe (com modal), não só na lista.
+- **Enviar rascunho de CORTINA:** `reenviarOrcamento` delega para `reenviarCortina` quando `tipo='cortina'` — replay do snapshot (1 produto por cortina + linha de serviço de instalação). O snapshot de cortina passou a guardar `nome_produto` e `valor_custo`. `resolverLoja` movido para `lib/` (compartilhado).
+- **Terminologia:** perfil exibido como **"Administrador"** (navbar, lista, cadastro), valor do enum continua `admin`.
+- **Admin → Usuários:** **excluir** usuário (DELETE; bloqueia se houver orçamentos → sugere desativar), **reativar**, coluna **Vendedor GC** por nome, botões `btn-xs` menos achatados, tooltips nas ações.
+- **Operações de dados em produção** (vínculo de loja do Victor = Matriz; exclusão de usuários de teste) são feitas pelo admin na própria tela (não há acesso ao banco de produção fora do Railway).
