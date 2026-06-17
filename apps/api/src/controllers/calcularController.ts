@@ -3,7 +3,13 @@
 
 import type { Request, Response } from 'express';
 import { calcularPersiana, RN01Error } from '../services/calc/persiana';
-import { calcularCortina, NotImplementedError, type EntradaCortina } from '../services/calc/cortina';
+import {
+  calcularCortina,
+  calcularCortinaMultiCamada,
+  NotImplementedError,
+  type EntradaCortina,
+  type CamadaCortina,
+} from '../services/calc/cortina';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
 import {
   tecidosParaTipo,
@@ -11,7 +17,7 @@ import {
   tecidosCortina,
   buscarTecidoCortinaGc,
 } from '../services/gc/tecidos';
-import { listarAcessoriosCortina } from '../services/gc/acessorios';
+import { listarAcessoriosCortina, categoriaDoItem } from '../services/gc/acessorios';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { AppError } from '../middleware/errorHandler';
 
@@ -226,6 +232,73 @@ export async function calcularCortinaController(req: Request, res: Response): Pr
     if (err instanceof Error && /positivas/.test(err.message)) {
       throw new AppError(400, 'MEDIDAS_INVALIDAS', err.message);
     }
+    throw err;
+  }
+}
+
+/**
+ * POST /api/calcular/cortina/completa — cortina com N camadas (modelo "+").
+ * Body: { modelo, fixacao, largura, altura, camadas:[{tecido_id, franzido?}], barra... }
+ * Devolve tecido por camada (com valor) + acessórios agregados (com categoria p/ o seletor).
+ */
+export async function calcularCortinaCompletaController(req: Request, res: Response): Promise<void> {
+  const b = req.body ?? {};
+  const camadasIn = Array.isArray(b.camadas) ? b.camadas : [];
+  if (camadasIn.length < 1 || camadasIn.length > 3) {
+    throw new AppError(400, 'CAMADAS_INVALIDAS', 'A cortina deve ter de 1 a 3 tecidos (camadas).');
+  }
+
+  // Resolve o tecido de cada camada (de uma vez, sem repetir chamadas iguais).
+  const cacheTecido = new Map<string, Awaited<ReturnType<typeof buscarTecidoCortinaGc>>>();
+  const tecidos: NonNullable<Awaited<ReturnType<typeof buscarTecidoCortinaGc>>>[] = [];
+  for (const c of camadasIn) {
+    const id = String(c.tecido_id ?? '');
+    if (!cacheTecido.has(id)) cacheTecido.set(id, await buscarTecidoCortinaGc(id));
+    const t = cacheTecido.get(id);
+    if (!t) throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido em todas as camadas.');
+    tecidos.push(t);
+  }
+
+  const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string }, i: number) => ({
+    largura_tecido: tecidos[i]!.dimensao_m,
+    franzido: c.franzido !== undefined && c.franzido !== '' ? Number(c.franzido) : undefined,
+  }));
+
+  try {
+    const r = calcularCortinaMultiCamada({
+      modelo: b.modelo,
+      fixacao: b.fixacao,
+      largura: Number(b.largura),
+      altura: Number(b.altura),
+      camadas: camadasCalc,
+      tamanho_barra: b.tamanho_barra !== undefined && b.tamanho_barra !== '' ? Number(b.tamanho_barra) : undefined,
+      tipo_barra: b.tipo_barra,
+      aberturas: b.aberturas !== undefined && b.aberturas !== '' ? Number(b.aberturas) : undefined,
+    });
+
+    const camadas = r.camadas.map((cam, i) => {
+      const t = tecidos[i]!;
+      return {
+        tecido: { id: t.id, nome: t.nome, dimensao_m: t.dimensao_m, preco_venda: t.preco_venda },
+        metodo: cam.metodo,
+        metragem: cam.metragem,
+        valor_tecido: roundHalfUp(cam.metragem * t.preco_venda),
+      };
+    });
+    const valorTecidoTotal = roundHalfUp(camadas.reduce((s, c) => s + c.valor_tecido, 0));
+
+    const acessorios = r.acessorios.map((a) => ({
+      item: a.item,
+      categoria: categoriaDoItem(a.item, b.fixacao),
+      quantidade: a.quantidade,
+      unidade: a.unidade,
+      auto: a.auto,
+    }));
+
+    res.json({ modelo: r.modelo, fixacao: r.fixacao, n_camadas: r.n_camadas, camadas, acessorios, valor_tecido_total: valorTecidoTotal });
+  } catch (err) {
+    if (err instanceof NotImplementedError) throw new AppError(400, 'MODELO_NAO_SUPORTADO', err.message);
+    if (err instanceof Error && /(positivas|camadas)/.test(err.message)) throw new AppError(400, 'ENTRADA_INVALIDA', err.message);
     throw err;
   }
 }

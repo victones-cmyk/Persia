@@ -87,3 +87,27 @@ export async function buscarAcessorioGc(categoria: CategoriaAcessorio, id: strin
   const { acessorios } = await listarAcessoriosCortina();
   return acessorios[categoria]?.find((a) => a.id === id) ?? null;
 }
+
+/**
+ * Mapeia o nome do item gerado pelo motor (cortina.ts) para a categoria/grupo do GC,
+ * para a tela montar o seletor de produto certo. `fixacao` decide o grupo do suporte.
+ */
+export function categoriaDoItem(item: string, fixacao: 'varao' | 'trilho' | 'varao_suico'): CategoriaAcessorio | null {
+  switch (item) {
+    case 'Varão': return 'varao';
+    case 'Varão suíço': return 'varao_suico';
+    case 'Trilho': return 'trilho';
+    case 'Suporte':
+    case 'Suporte duplo': return fixacao === 'varao_suico' ? 'suporte_varao_suico' : 'suporte_varao';
+    case 'Ilhoses': return 'ilhos';
+    case 'Argolas': return 'argola';
+    case 'Rodízios/ganchos': return 'rodizio';
+    case 'Ponteira': return 'ponteira';
+    case 'Entretela (KOS)': return 'entretela';
+    case 'Cordão wave':
+    case 'Rodízio wave':
+    case 'Base click': return 'wave';
+    case 'Terminais': return 'terminal';
+    default: return null;
+  }
+}

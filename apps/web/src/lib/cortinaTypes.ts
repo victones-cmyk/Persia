@@ -60,3 +60,44 @@ export const FIXACOES_POR_MODELO: Record<ModeloCortina, FixacaoCortina[]> = {
   franzido: ['varao', 'trilho', 'varao_suico'],
   wave: ['trilho', 'varao_suico'],
 };
+
+// --- Cortina multi-camada (modelo "+" do Victor) ---
+
+export type CategoriaAcessorio =
+  | 'varao' | 'varao_suico' | 'trilho' | 'suporte_varao' | 'suporte_varao_suico'
+  | 'ilhos' | 'argola' | 'rodizio' | 'ponteira' | 'terminal' | 'entretela' | 'wave';
+
+export interface AcessorioOpcao { id: string; nome: string; preco: number; }
+export interface ServicoInstalacao { id: string; nome: string; valor: number; }
+
+/** Resposta de GET /api/calcular/cortina/acessorios. */
+export interface AcessoriosCortinaResp {
+  acessorios: Record<CategoriaAcessorio, AcessorioOpcao[]>;
+  instalacoes: ServicoInstalacao[];
+}
+
+/** Tipo (nº de camadas) — rótulo derivado da quantidade de tecidos. */
+export const TIPO_POR_CAMADAS: Record<number, string> = { 1: 'Simples', 2: 'Dupla', 3: 'Tripla' };
+
+export interface CamadaCalc {
+  tecido: TecidoOpcao;
+  metodo: 'normal' | 'emenda';
+  metragem: number;
+  valor_tecido: number;
+}
+export interface AcessorioCalc {
+  item: string;
+  categoria: CategoriaAcessorio | null;
+  quantidade: number;
+  unidade: 'm' | 'un';
+  auto: boolean;
+}
+/** Resposta de POST /api/calcular/cortina/completa. */
+export interface CalcCortinaCompletaResp {
+  modelo: ModeloCortina;
+  fixacao: FixacaoCortina;
+  n_camadas: number;
+  camadas: CamadaCalc[];
+  acessorios: AcessorioCalc[];
+  valor_tecido_total: number;
+}

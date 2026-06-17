@@ -8,6 +8,7 @@ import {
   listarTecidosCortina,
   listarAcessoriosCortinaController,
   calcularCortinaController,
+  calcularCortinaCompletaController,
 } from '../controllers/calcularController';
 
 const router = Router();
@@ -19,5 +20,6 @@ router.post('/persiana/lote', calcularPersianaLoteController);
 router.get('/cortina/tecidos', listarTecidosCortina);
 router.get('/cortina/acessorios', listarAcessoriosCortinaController);
 router.post('/cortina', calcularCortinaController);
+router.post('/cortina/completa', calcularCortinaCompletaController);
 
 export default router;

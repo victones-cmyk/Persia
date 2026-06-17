@@ -11,11 +11,9 @@ import { useAuth } from '../hooks/useAuth';
 import { useGcHealth } from '../hooks/useGcHealth';
 import { PersianaForm } from '../components/PersianaForm';
 import { ResultadoPanel } from '../components/ResultadoPanel';
-import { CortinaForm } from '../components/CortinaForm';
-import { CortinaResultado } from '../components/CortinaResultado';
+import { CortinaOrcamento } from '../components/CortinaOrcamento';
 import { ClienteSearch } from '../components/ClienteSearch';
 import type { OrcamentoCalculado, ClienteResumo } from '../lib/calcTypes';
-import type { CalcularCortinaResposta } from '../lib/cortinaTypes';
 
 type TipoProduto = 'persiana' | 'cortina' | null;
 
@@ -25,13 +23,11 @@ export function OrcamentoNovo() {
   const navigate = useNavigate();
   const [tipoProduto, setTipoProduto] = useState<TipoProduto>(null);
   const [resultado, setResultado] = useState<OrcamentoCalculado | null>(null);
-  const [cortina, setCortina] = useState<CalcularCortinaResposta | null>(null);
   const [cliente, setCliente] = useState<ClienteResumo | null>(null);
 
   function escolher(tp: 'persiana' | 'cortina') {
     setTipoProduto(tp);
     setResultado(null);
-    setCortina(null);
   }
 
   return (
@@ -78,23 +74,8 @@ export function OrcamentoNovo() {
         </div>
       )}
 
-      {/* Etapa 2 — Cortina (Fase 7: calculadora; modelos Ilhós/Prega/Franzido/Wave) */}
-      {tipoProduto === 'cortina' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <CortinaForm onResult={setCortina} />
-          </div>
-          <div className="lg:col-span-1">
-            {cortina ? (
-              <CortinaResultado dados={cortina} />
-            ) : (
-              <div className="card p-4 text-sm-ui text-neutral-500 max-w-form" style={{ position: 'sticky', top: 'calc(50px + 16px)' }}>
-                Preencha os dados e clique em <strong>Calcular</strong> para ver o resultado.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Etapa 2 — Cortina (modelo "+": vários ambientes + camadas) */}
+      {tipoProduto === 'cortina' && <CortinaOrcamento />}
 
       {/* Etapa 2 — Persiana */}
       {tipoProduto === 'persiana' && (
