@@ -10,6 +10,7 @@ import { faSpinner, faCalculator, faPlus, faTrash } from '@fortawesome/free-soli
 import { api } from '../lib/api';
 import { roundHalfUp } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
+import { MedidaInput } from './MedidaInput';
 import {
   TIPOS_PERSIANA,
   CORES,
@@ -61,6 +62,7 @@ export function PersianaForm({
   const [calculando, setCalculando] = useState(false);
   const [erros, setErros] = useState<Record<number, ItemErro>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
+  const [resultadoAtivo, setResultadoAtivo] = useState(false); // já existe um resultado calculado na tela
 
   // Recarrega tecidos quando o tipo muda; limpa a seleção de tecido de todos os itens.
   useEffect(() => {
@@ -71,6 +73,7 @@ export function PersianaForm({
     setCarregandoTecidos(true);
     setItens((prev) => prev.map((it) => ({ ...it, tecido_id: '' })));
     setErros({});
+    setResultadoAtivo(false);
     onResult(null);
     api
       .get<{ tecidos: TecidoOpcao[] }>(`/calcular/tecidos?tipo=${tipo}`)
@@ -96,14 +99,18 @@ export function PersianaForm({
     setItens((prev) => [...prev, itemVazio()]);
   }
   function removerItem(idx: number) {
-    setItens((prev) => prev.filter((_, i) => i !== idx));
+    const novos = itens.filter((_, i) => i !== idx);
+    setItens(novos);
     setErros({});
-    onResult(null);
+    // Já havia resultado na tela: recalcula sozinho com os itens restantes (anotação 5).
+    if (resultadoAtivo && listaValida(novos)) void calcularCom(novos);
+    else { onResult(null); setResultadoAtivo(false); }
   }
 
   const itemValido = (it: ItemForm) =>
     it.tecido_id !== '' && it.cor !== '' && it.acionamento !== '' && Number(it.largura) > 0 && Number(it.altura) > 0;
-  const formValido = tipo !== '' && itens.length > 0 && itens.every(itemValido);
+  const listaValida = (lista: ItemForm[]) => tipo !== '' && lista.length > 0 && lista.every(itemValido);
+  const formValido = listaValida(itens);
 
   function toInput(it: ItemForm): ItemInput {
     return {
@@ -118,23 +125,26 @@ export function PersianaForm({
     };
   }
 
-  async function calcular() {
+  function calcular() {
     if (!formValido || calculando) return;
+    void calcularCom(itens);
+  }
+
+  async function calcularCom(lista: ItemForm[]) {
     setCalculando(true);
     setErros({});
     setErroGeral(null);
-    onResult(null);
     try {
       const r = await api.post<CalcularLoteResposta>('/calcular/persiana/lote', {
         tipo,
-        itens: itens.map(toInput),
+        itens: lista.map(toInput),
       });
 
       const novosErros: Record<number, ItemErro> = {};
       const calculados: ItemCalculado[] = [];
       for (const res of r.itens) {
         if (res.ok) {
-          calculados[res.index] = { input: toInput(itens[res.index]), resultado: res.resultado, tecido: res.tecido };
+          calculados[res.index] = { input: toInput(lista[res.index]), resultado: res.resultado, tecido: res.tecido };
         } else {
           novosErros[res.index] = { message: res.message, alternativos: res.alternativos };
         }
@@ -142,12 +152,15 @@ export function PersianaForm({
 
       if (Object.keys(novosErros).length > 0) {
         setErros(novosErros);
+        setResultadoAtivo(false);
         onResult(null);
         return;
       }
       onResult({ tipo: tipo as TipoPersiana, itens: calculados.filter(Boolean), total_bruto: r.total_bruto });
+      setResultadoAtivo(true);
     } catch {
       onResult(null);
+      setResultadoAtivo(false);
       setErroGeral('Não foi possível calcular. Tente novamente.');
     } finally {
       setCalculando(false);
@@ -225,13 +238,12 @@ export function PersianaForm({
             <div className="grid grid-cols-5 gap-3">
               <div>
                 <label className="form-label">Largura (m)<span className="label-required">*</span></label>
-                <input type="number" className={erros[idx] ? 'input input-error' : 'input'} min={0} step={0.01}
-                  value={it.largura} onChange={(e) => { atualizar(idx, { largura: e.target.value }); setErros((p) => { const n = { ...p }; delete n[idx]; return n; }); }} />
+                <MedidaInput className={erros[idx] ? 'input input-error' : 'input'}
+                  value={it.largura} onChange={(v) => { atualizar(idx, { largura: v }); setErros((p) => { const n = { ...p }; delete n[idx]; return n; }); }} />
               </div>
               <div>
                 <label className="form-label">Altura (m)<span className="label-required">*</span></label>
-                <input type="number" className="input" min={0} step={0.01}
-                  value={it.altura} onChange={(e) => onAlturaChange(idx, e.target.value)} />
+                <MedidaInput value={it.altura} onChange={(v) => onAlturaChange(idx, v)} />
               </div>
               <div>
                 <label className="form-label" title="75% da altura, editável (RN-04)">TC (m)</label>

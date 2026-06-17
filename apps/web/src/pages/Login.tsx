@@ -9,7 +9,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faScissors, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../hooks/useAuth';
 import { ApiError } from '../lib/api';
-import { usuarioValido, senhaValida } from '../lib/validacao';
 
 export function Login() {
   const { usuario, carregando, login, sessaoExpirada, limparSessaoExpirada } = useAuth();
@@ -23,7 +22,8 @@ export function Login() {
   // Já autenticado → vai direto para a listagem.
   if (!carregando && usuario) return <Navigate to="/orcamentos" replace />;
 
-  const formValido = usuarioValido(email) && senhaValida(senha);
+  // Botão habilita assim que houver ao menos 1 caractere em cada campo.
+  const formValido = email.trim().length > 0 && senha.length > 0;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -34,7 +34,9 @@ export function Login() {
       await login(email, senha);
       navigate('/orcamentos', { replace: true });
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
+      if (err instanceof ApiError && err.code === 'USUARIO_INATIVO') {
+        setErro('Usuário inativo. Procure o administrador.');
+      } else if (err instanceof ApiError && err.status === 401) {
         setErro('Usuário ou senha incorretos');
       } else {
         setErro('Não foi possível entrar. Tente novamente.');

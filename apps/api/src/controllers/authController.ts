@@ -41,8 +41,13 @@ export async function login(req: Request, res: Response): Promise<void> {
   const hash = usuario?.senha_hash ?? '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinv';
   const senhaOk = bcrypt.compareSync(senha, hash);
 
-  if (!usuario || !usuario.ativo || !senhaOk) {
-    res.status(401).json({ error: 'CREDENCIAIS_INVALIDAS', message: 'E-mail ou senha incorretos' });
+  if (!usuario || !senhaOk) {
+    res.status(401).json({ error: 'CREDENCIAIS_INVALIDAS', message: 'Usuário ou senha incorretos' });
+    return;
+  }
+  // Credenciais corretas, mas o usuário foi desativado: mensagem específica.
+  if (!usuario.ativo) {
+    res.status(401).json({ error: 'USUARIO_INATIVO', message: 'Usuário inativo. Procure o administrador.' });
     return;
   }
 

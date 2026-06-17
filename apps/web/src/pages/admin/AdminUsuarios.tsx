@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback, type FormEvent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faPen, faUserSlash, faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faPen, faUserSlash, faUserCheck, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 
@@ -33,6 +33,7 @@ export function AdminUsuarios() {
   const [lojas, setLojas] = useState<Loja[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [editando, setEditando] = useState<Usuario | null | undefined>(undefined); // undefined=fechado, null=novo
+  const [funcMap, setFuncMap] = useState<Record<string, string>>({}); // id do funcionário GC → nome
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -49,11 +50,28 @@ export function AdminUsuarios() {
     carregar();
   }, [carregar]);
 
+  // Mapa id→nome dos funcionários do GC, para a coluna "Vendedor GC" mostrar o nome.
+  useEffect(() => {
+    api.get<{ funcionarios: FuncionarioGc[] }>('/admin/funcionarios-gc')
+      .then((r) => setFuncMap(Object.fromEntries(r.funcionarios.map((f) => [f.id, f.nome]))))
+      .catch(() => {});
+  }, []);
+
   async function desativar(u: Usuario) {
     if (!confirm(`Desativar ${u.nome}?`)) return;
     try {
       await api.post(`/admin/usuarios/${u.id}/desativar`);
       showToast('info', 'Usuário desativado');
+      carregar();
+    } catch (e) {
+      showToast('error', 'Falha', e instanceof ApiError ? e.message : '');
+    }
+  }
+
+  async function reativar(u: Usuario) {
+    try {
+      await api.put(`/admin/usuarios/${u.id}`, { ativo: true });
+      showToast('success', 'Usuário reativado');
       carregar();
     } catch (e) {
       showToast('error', 'Falha', e instanceof ApiError ? e.message : '');
@@ -99,12 +117,14 @@ export function AdminUsuarios() {
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{u.email}</td>
                   <td style={{ padding: 12 }}><span className="badge badge-secondary">{u.perfil === 'admin' ? 'Admin' : 'Vendedor'}</span></td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.loja?.nome ?? '—'}</td>
-                  <td style={{ padding: 12 }} className="font-mono text-sm-ui">{u.gc_usuario_id ?? <span className="text-error">—</span>}</td>
+                  <td style={{ padding: 12 }} className="text-sm-ui">{u.gc_usuario_id ? (funcMap[u.gc_usuario_id] ?? `ID ${u.gc_usuario_id}`) : <span className="text-error">—</span>}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.ativo ? 'Sim' : 'Não'}</td>
                   <td style={{ padding: 12 }}>
                     <div className="flex gap-1">
                       <button className="btn btn-warning btn-xs" onClick={() => setEditando(u)} title="Editar"><FontAwesomeIcon icon={faPen} /></button>
-                      {u.ativo && <button className="btn btn-danger btn-xs" onClick={() => desativar(u)} title="Desativar"><FontAwesomeIcon icon={faUserSlash} /></button>}
+                      {u.ativo
+                        ? <button className="btn btn-danger btn-xs" onClick={() => desativar(u)} title="Desativar"><FontAwesomeIcon icon={faUserSlash} /></button>
+                        : <button className="btn btn-success btn-xs" onClick={() => reativar(u)} title="Reativar"><FontAwesomeIcon icon={faUserCheck} /></button>}
                     </div>
                   </td>
                 </tr>

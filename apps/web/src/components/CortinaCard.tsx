@@ -9,6 +9,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faTrash, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { TecidoSearch } from './TecidoSearch';
+import { MedidaInput } from './MedidaInput';
 import { formatBRL, formatNum } from '../lib/formatacao';
 import type { TecidoOpcao } from '../lib/calcTypes';
 import {
@@ -187,11 +188,11 @@ export function CortinaCard({
         </div>
         <div>
           <label className="form-label">Largura (m)<span className="label-required">*</span></label>
-          <input type="number" className="input" min={0} step={0.01} value={largura} onChange={(e) => setLargura(e.target.value)} />
+          <MedidaInput value={largura} onChange={setLargura} />
         </div>
         <div>
           <label className="form-label">Altura (m)<span className="label-required">*</span></label>
-          <input type="number" className="input" min={0} step={0.01} value={altura} onChange={(e) => setAltura(e.target.value)} />
+          <MedidaInput value={altura} onChange={setAltura} />
         </div>
         <div>
           <label className="form-label">Tamanho da barra (m)</label>
