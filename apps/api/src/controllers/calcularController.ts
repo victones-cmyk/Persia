@@ -11,6 +11,7 @@ import {
   tecidosCortina,
   buscarTecidoCortinaGc,
 } from '../services/gc/tecidos';
+import { listarAcessoriosCortina } from '../services/gc/acessorios';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { AppError } from '../middleware/errorHandler';
 
@@ -171,6 +172,12 @@ export async function calcularPersianaLoteController(req: Request, res: Response
 export async function listarTecidosCortina(_req: Request, res: Response): Promise<void> {
   const tecidos = await tecidosCortina();
   res.json({ tecidos });
+}
+
+/** GET /api/calcular/cortina/acessorios — opções de acessório por grupo + serviços de instalação. */
+export async function listarAcessoriosCortinaController(_req: Request, res: Response): Promise<void> {
+  const dados = await listarAcessoriosCortina();
+  res.json(dados);
 }
 
 /** POST /api/calcular/cortina — calcula uma cortina e devolve metragem + itens. */

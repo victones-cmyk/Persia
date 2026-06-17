@@ -102,3 +102,15 @@ export async function listarSituacoesOrcamentos(): Promise<GcSituacao[]> {
   });
   return env.data ?? [];
 }
+
+export interface GcServico {
+  id: string;
+  codigo: string;
+  nome: string;
+  valor_venda: string;
+}
+
+/** Serviços do GestãoClick (ex.: INSTALAÇÃO) — entram como linha de serviço no orçamento. */
+export function listarServicos(): Promise<GcServico[]> {
+  return buscarTodasPaginas<GcServico>('/api/servicos', {});
+}
