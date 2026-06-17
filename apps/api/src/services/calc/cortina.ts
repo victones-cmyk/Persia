@@ -220,3 +220,88 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
     itens,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Cortina com N CAMADAS (modelo "+" do Victor, 17/06/2026, ver decisions §9.7)
+// ---------------------------------------------------------------------------
+// "tipo" simples/dupla/tripla = nº de camadas (cada camada = tecido próprio em
+// varão próprio). Cada camada é calculada como uma CORTINA SIMPLES (um_tecido) e
+// os ACESSÓRIOS são agregados (varão/ponteira/ferragem somam por camada; suporte
+// fica manual). A ENTRETELA só conta na camada da frente (Victor). O tecido é
+// tratado por camada (cada camada pode ter tecido diferente, com preço próprio).
+
+export interface CamadaCortina {
+  largura_tecido: number; // largura do rolo do tecido desta camada (m)
+  franzido?: number; // default 3 (no wave, ignorado: usa 2,7)
+}
+
+export interface EntradaCortinaCompleta {
+  modelo: ModeloCortina;
+  fixacao: FixacaoCortina;
+  largura: number;
+  altura: number;
+  camadas: CamadaCortina[]; // 1 = simples, 2 = dupla, 3 = tripla
+  tamanho_barra?: number;
+  tipo_barra?: 'simples' | 'dupla';
+  aberturas?: number;
+  espacamento_ilhos?: number;
+  espacamento_ferragem?: number;
+}
+
+export interface CamadaResultado {
+  metodo: 'normal' | 'emenda';
+  consumo: number; // largura franzida (m)
+  metragem: number; // m lineares de tecido (cortado de 5 em 5 cm)
+  tiras: number | null;
+}
+
+export interface ResultadoCortinaCompleta {
+  modelo: ModeloCortina;
+  fixacao: FixacaoCortina;
+  n_camadas: number;
+  camadas: CamadaResultado[]; // tecido por camada (preço aplicado depois, por tecido)
+  acessorios: ItemCortina[]; // quantidades agregadas (sem tecido)
+}
+
+export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): ResultadoCortinaCompleta {
+  if (!e.camadas || e.camadas.length < 1 || e.camadas.length > 3) {
+    throw new Error('A cortina deve ter de 1 a 3 camadas (simples/dupla/tripla).');
+  }
+
+  const camadas: CamadaResultado[] = [];
+  const acc = new Map<string, ItemCortina>(); // acessórios agregados por nome
+
+  e.camadas.forEach((cam, i) => {
+    const r = calcularCortina({
+      modelo: e.modelo,
+      fixacao: e.fixacao,
+      config: 'um_tecido',
+      largura: e.largura,
+      altura: e.altura,
+      largura_tecido: cam.largura_tecido,
+      franzido_frente: cam.franzido,
+      tamanho_barra: e.tamanho_barra,
+      tipo_barra: e.tipo_barra,
+      aberturas: e.aberturas,
+      espacamento_ilhos: e.espacamento_ilhos,
+      espacamento_ferragem: e.espacamento_ferragem,
+    });
+    camadas.push({ metodo: r.metodo, consumo: r.consumo_frente, metragem: r.metragem_frente, tiras: r.tiras_frente });
+
+    for (const it of r.itens) {
+      if (it.tipo === 'tecido') continue; // tecido é por camada
+      if (it.item === 'Entretela (KOS)' && i > 0) continue; // entretela só na frente
+      const cur = acc.get(it.item);
+      if (cur) cur.quantidade = roundHalfUp(cur.quantidade + it.quantidade);
+      else acc.set(it.item, { ...it });
+    }
+  });
+
+  return {
+    modelo: e.modelo,
+    fixacao: e.fixacao,
+    n_camadas: e.camadas.length,
+    camadas,
+    acessorios: [...acc.values()],
+  };
+}

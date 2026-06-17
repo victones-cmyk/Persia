@@ -267,6 +267,16 @@ Victor agrupou todos os acessórios (verificado via `scripts/verificar-acessorio
 
 Grupo **WAVE** (4 produtos): RODIZIO WAVE 62341215 (0,80) · BASE CLICK WAVE 46835072 (0,76) · CORDÃO WAVE 46835020 (5,24) · FITA WAVE AVULSA 46834988 (9,80). **ENTRETELA**: KOS TNT 10CM 414519 (1,50). Preços = tabela VAREJO. Com isso o **BLOQUEANTE-06 (a)** está resolvido; resta só a implementação (modelo "+" + seletor de acessório + envio + teste controlado de escrita).
 
+Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura por grupo com cache 5 min) + `catalogos.listarServicos()` + `GET /api/calcular/cortina/acessorios`.
+
+### 9.7 Estrutura do orçamento de cortina (modelo "+" do Victor) — decisões 17/06/2026
+- **Orçamento = N cortinas (ambientes).** Botão "+ Adicionar cortina" por ambiente/janela.
+- **Cada cortina = ambiente (texto) + modelo + fixação + tipo (simples/dupla/tripla) + medidas (L×A) + 1–3 tecidos (camadas, via "+") + seletores de acessório.** Cada camada é calculada como **cortina simples** (Victor: "o sistema calcula sempre uma cortina simples").
+- **Camadas (tipo):** simples = 1 camada/varão; dupla = 2 camadas em **varões separados** + suporte do tipo duplo; tripla = 3. **Entretela só na camada da frente.** Varão e ponteiras por camada; **suporte** é 1 escolha por cortina (vendedor pega o produto simples/duplo/triplo), qtd pela largura.
+- **Acessórios:** o vendedor **escolhe o produto** de cada grupo (cor/medida); a **quantidade** vem do motor. Preço = VAREJO.
+- **Instalação:** **um valor por orçamento** (uma linha de serviço "INSTALAÇÃO" no GC; valor digitado pelo vendedor).
+- **Envio ao GC:** cada cortina vira **1 linha de produto sintético** nomeado `MODELO • TECIDO • L×A` com o valor total dela (tecidos + acessórios); + **1 linha de serviço** de instalação. Validar o payload (produto + serviço) num **teste controlado de escrita** (1 orçamento real), como na persiana.
+
 ---
 
 ## 10. Orçamento — multi-itens, rascunho e UX (12–15/06/2026)

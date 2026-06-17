@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   calcularCortina,
+  calcularCortinaMultiCamada,
   NotImplementedError,
   type EntradaCortina,
   type ResultadoCortina,
+  type ResultadoCortinaCompleta,
 } from './cortina';
 
 // Preços de exemplo da planilha "CORTINA SOB MEDIDA_v.3".
@@ -143,6 +145,41 @@ describe('Cortina — tecido cortado de 5 em 5 cm (Victor 16/06)', () => {
     expect(r.metodo).toBe('normal');
     expect(r.consumo_frente).toBe(3.81);
     expect(r.metragem_frente).toBe(3.85); // múltiplo de 0,05 m
+  });
+});
+
+describe('Cortina multi-camada (modelo "+" do Victor)', () => {
+  const accQtd = (r: ResultadoCortinaCompleta, item: string) => r.acessorios.find((i) => i.item === item)?.quantidade;
+
+  it('simples (1 camada) → mesma metragem/ferragem da cortina única', () => {
+    const r = calcularCortinaMultiCamada({
+      modelo: 'ilhos', fixacao: 'varao', largura: 3, altura: 2.6,
+      camadas: [{ largura_tecido: 3.0, franzido: 3 }],
+    });
+    expect(r.n_camadas).toBe(1);
+    expect(r.camadas[0].metragem).toBe(9);
+    expect(accQtd(r, 'Ilhoses')).toBe(60);
+    expect(accQtd(r, 'Entretela (KOS)')).toBe(9);
+    expect(accQtd(r, 'Varão')).toBe(3);
+    expect(accQtd(r, 'Ponteira')).toBe(2);
+  });
+
+  it('dupla (2 camadas) → varão/ferragem somam; entretela só na frente', () => {
+    const r = calcularCortinaMultiCamada({
+      modelo: 'ilhos', fixacao: 'varao', largura: 3, altura: 2.6,
+      camadas: [{ largura_tecido: 3.0, franzido: 3 }, { largura_tecido: 3.0, franzido: 3 }],
+    });
+    expect(r.n_camadas).toBe(2);
+    expect(r.camadas).toHaveLength(2);
+    expect(accQtd(r, 'Varão')).toBe(6); // 3 + 3
+    expect(accQtd(r, 'Ilhoses')).toBe(120); // 60 + 60
+    expect(accQtd(r, 'Ponteira')).toBe(4); // 2 + 2
+    expect(accQtd(r, 'Entretela (KOS)')).toBe(9); // só a frente
+  });
+
+  it('rejeita 0 ou mais de 3 camadas', () => {
+    expect(() => calcularCortinaMultiCamada({ modelo: 'ilhos', fixacao: 'varao', largura: 3, altura: 2.6, camadas: [] })).toThrow();
+    expect(() => calcularCortinaMultiCamada({ modelo: 'ilhos', fixacao: 'varao', largura: 3, altura: 2.6, camadas: Array(4).fill({ largura_tecido: 3 }) })).toThrow();
   });
 });
 
