@@ -44,7 +44,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (!res.ok) {
     const err = data as { error?: string; message?: string } | null;
     // Só dispara logout global em 401 de SESSÃO (NAO_AUTENTICADO). 401 de regra de
-    // negócio (ex: SENHA_GERENTE_INVALIDA) NÃO deve deslogar o usuário.
+    // negócio NÃO deve deslogar o usuário.
     if (res.status === 401 && err?.error === 'NAO_AUTENTICADO' && !AUTH_EXPECTED_401.has(path)) {
       onUnauthorized?.();
     }

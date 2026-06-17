@@ -24,7 +24,7 @@ export interface EntradaPersiana {
   dimensao: number; // largura do rolo do tecido (m)
   cor_acessorio: Cor;
   acionamento: Acionamento;
-  /** TC opcional: se ausente, calcula 70% da altura (RN-04). Campo editável. */
+  /** TC opcional: se ausente, calcula 75% da altura (RN-04). Campo editável. */
   tc?: number;
   /** Preço de venda do tecido (R$/m²). Opcional: sem ele, valor_bruto = null. */
   preco_tecido?: number;
@@ -68,7 +68,7 @@ export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
   const baseVenda = meta.baseVenda === 'dimensao' ? e.dimensao : e.largura;
   const qtd_venda = roundHalfUp(baseVenda * fatorAltura * meta.fatorVenda);
 
-  // RN-04 — TC padrão = 70% da altura; campo editável (usa valor informado se houver).
+  // RN-04 — TC padrão = 75% da altura; campo editável (usa valor informado se houver).
   const tc = e.tc !== undefined ? roundHalfUp(e.tc) : roundHalfUp(e.altura * TC_FATOR);
 
   // RN-03 — Valor Bruto = Qtd Venda (m²) × Preço de Venda do Tecido (R$/m²).

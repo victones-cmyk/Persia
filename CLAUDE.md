@@ -102,9 +102,9 @@ npm ci && npx prisma migrate deploy && npm run build && npm start
 - campo `codigo` nos POSTs ao GestãoClick: Math.floor(Date.now() / 1000)
 - campo `codigo_interno` nos produtos GestãoClick: "PERSIA-{timestamp}"
 - Tailwind: NUNCA construir classes via template string (bg-${cor}). Purge remove classes dinâmicas.
-- TC (Tamanho do Comando): pré-calculado como Altura × 0.70 mas campo editável — NÃO usar readOnly
+- TC (Tamanho do Comando): pré-calculado como Altura × 0.75 (TC_FATOR; Victor 17/06/2026, era 0.70) mas campo editável — NÃO usar readOnly
 - Campos calculados (exceto TC): readOnly={true} + tabIndex={-1} + onClick={e=>e.target.select()} + font-mono + bg neutral-200
-- Desconto acima do limite: modal de senha de gerente → registrar em log_acoes antes de confirmar
+- Desconto: campo livre (%); limite/aprovação é controlado no próprio GestãoClick (Victor 17/06/2026). NÃO há mais modal de senha de gerente nem limite por perfil na calculadora.
 
 ## Decisões Registradas
 - Railway: processo Node.js persistente necessário para express-session
@@ -118,13 +118,13 @@ npm ci && npx prisma migrate deploy && npm run build && npm start
 ## BLOQUEANTES ATIVOS
 - ~~BLOQUEANTE-01: Credenciais GestãoClick~~ — RESOLVIDO em 11/06/2026. Preencher GESTAOCLICK_ACCESS_TOKEN e GESTAOCLICK_SECRET_ACCESS_TOKEN no .env.
 - ~~BLOQUEANTE-02: Regras de cálculo de cortina~~ — RESOLVIDO em 16/06/2026 com Victor. 4 modelos no motor (Ilhós/Prega/Franzido/Wave). "Argolas" do DecorSoft = Franzido no varão. Inversão de tecido = método de emenda (altura > largura do tecido). Entretela só na frente. Tecido cortado de 5 em 5 cm. Deslizante: tipo escolhido pelo usuário, qtd automática.
-- BLOQUEANTE-03: Percentuais reais de desconto máximo — confirmar com Victor
+- ~~BLOQUEANTE-03: Percentuais reais de desconto máximo~~ RESOLVIDO em 17/06/2026: não controlar na calculadora; limite/aprovação fica no GestãoClick. Campo de desconto é livre. Removido limite por perfil + modal de senha de gerente.
 - BLOQUEANTE-04: Confirmar se CORTINA WAVE FÁCIL (cód. 24) é 16º tipo ativo ou duplicata de CORTINA WAVE FACIL 2.4
 - BLOQUEANTE-05: Fator de tecido do WAVE = 2,7 (Victor mediu 3,00 m → 8,10 m). TENTATIVO — ele vai medir mais larguras para confirmar se o fator se mantém.
 - BLOQUEANTE-06: Envio de cortina ao GestãoClick — pendente. (a) confirmar se os acessórios (varão/trilho, suportes, ilhós, argolas, rodízios, ponteiras, cordão/rodízio/base click do wave, entretela) já estão cadastrados no GC e seus IDs; (b) Victor mencionou ter uma ideia para simplificar cortinas duplas/triplas — aguardar antes de mapear acessório→produto.
 
 ## PLACEHOLDERS PENDENTES
 - ~~PLACEHOLDER-01~~ RESOLVIDO em 11/06/2026. gc_loja_id Matriz (SP): "8274", FILIAL SBC: "8284"
-- PLACEHOLDER-02: gc_usuario_id de cada vendedor — PENDENTE. GET /api/usuarios retornou apenas Victor (10512), CAIXA (11420), ESTOQUE (652101). Nenhum vendedor cadastrado no GestãoClick ainda. Criar contas no GC antes da Fase 4.
+- ~~PLACEHOLDER-02: gc_usuario_id de cada vendedor~~ ESCLARECIDO em 17/06/2026. O vendedor do orçamento vem do cadastro de FUNCIONÁRIOS (GET /api/funcionarios = 30, inclui todas as vendedoras: Rafaela, Leila, Amanda, Isabella, Priscila, Alessandro Bispo 1125449, etc.), NÃO de /api/usuarios (só 3 logins do ERP: Victor 10512, Caixa 11420, Estoque 652101). O vínculo já está pronto (Admin → Usuários, seletor por nome → grava gc_usuario_id = id do funcionário → orçamento envia vendedor_id). Resta só o passo interno de, ao criar cada login da calculadora, escolher o funcionário correspondente. Nada a cadastrar no GC.
 - PLACEHOLDER-03: Percentuais de desconto por perfil (padrão temporário: 10% vendedor, 30% admin)
 - ~~PLACEHOLDER-04: Fórmulas de cálculo de cortina~~ RESOLVIDO em 16/06/2026 — ver calc/cortina.ts (Ilhós/Prega/Franzido/Wave). Resta só o envio ao GC (BLOQUEANTE-06).

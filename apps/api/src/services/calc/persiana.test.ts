@@ -106,8 +106,8 @@ describe('Validações de entrada', () => {
 });
 
 describe('RN-04 — TC (Tamanho do Comando)', () => {
-  it('padrão = 70% da altura', () => {
-    expect(calcularPersiana(base({ altura: 2.0 })).tc).toBe(roundHalfUp(2.0 * 0.7)); // 1.40
+  it('padrão = 75% da altura', () => {
+    expect(calcularPersiana(base({ altura: 2.0 })).tc).toBe(roundHalfUp(2.0 * 0.75)); // 1.50
   });
   it('usa o TC informado quando editado', () => {
     expect(calcularPersiana(base({ altura: 2.0, tc: 1.55 })).tc).toBe(1.55);

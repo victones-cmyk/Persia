@@ -11,7 +11,6 @@ import type { GcStatus } from '../hooks/useGcHealth';
 import { formatBRL, formatNum, roundHalfUp } from '../lib/formatacao';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { ModalSenhaGerente } from './ModalSenhaGerente';
 
 function selectAll(e: React.MouseEvent<HTMLInputElement>) {
   e.currentTarget.select();
@@ -20,14 +19,12 @@ function selectAll(e: React.MouseEvent<HTMLInputElement>) {
 export function ResultadoPanel({
   dados,
   cliente,
-  descontoMaxPct,
   gcStatus,
   gcUsuarioId,
   onEnviado,
 }: {
   dados: OrcamentoCalculado;
   cliente: ClienteResumo | null;
-  descontoMaxPct: number;
   gcStatus: GcStatus;
   gcUsuarioId: string | null;
   onEnviado: (orc: OrcamentoSalvo) => void;
@@ -36,10 +33,8 @@ export function ResultadoPanel({
   const [descontoStr, setDescontoStr] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [modalAberto, setModalAberto] = useState(false);
 
   const desconto = Math.max(0, Math.min(100, Number(descontoStr) || 0));
-  const acimaLimite = desconto > descontoMaxPct;
 
   // Valor por item e totais (mesma regra do backend: desconto por item, RN-10).
   const linhas = dados.itens.map((it) => {
@@ -56,7 +51,7 @@ export function ResultadoPanel({
   const podeEnviar = !gcOffline && !!cliente && !ocupado;
 
   /** apenasSalvar=true grava rascunho local (cliente opcional, sem enviar ao GC). */
-  async function doSubmit(apenasSalvar: boolean, senhaGerente?: string): Promise<{ ok: boolean; senhaInvalida?: boolean }> {
+  async function doSubmit(apenasSalvar: boolean): Promise<{ ok: boolean }> {
     if (!apenasSalvar && !cliente) return { ok: false };
     if (apenasSalvar) setSalvando(true);
     else setEnviando(true);
@@ -67,7 +62,6 @@ export function ResultadoPanel({
         desconto_pct: desconto,
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
-        ...(senhaGerente ? { senha_gerente: senhaGerente } : {}),
       });
       showToast(
         'success',
@@ -78,11 +72,6 @@ export function ResultadoPanel({
       return { ok: true };
     } catch (e) {
       if (e instanceof ApiError) {
-        if (e.code === 'SENHA_GERENTE_INVALIDA') return { ok: false, senhaInvalida: true };
-        if (e.code === 'APROVACAO_NECESSARIA') {
-          setModalAberto(true);
-          return { ok: false };
-        }
         const erro = (e.data as { erro?: { codigo?: string; message?: string } } | null)?.erro;
         if (erro?.codigo === 'GC_AUTH') {
           showToast('error', 'Credenciais GestãoClick inválidas', 'Contate o administrador.');
@@ -103,8 +92,7 @@ export function ResultadoPanel({
 
   function onClickEnviar() {
     if (!podeEnviar) return;
-    if (acimaLimite) setModalAberto(true);
-    else void doSubmit(false);
+    void doSubmit(false);
   }
 
   return (
@@ -134,14 +122,11 @@ export function ResultadoPanel({
       <label className="form-label" htmlFor="valor-bruto">Valor Bruto ({linhas.length} {linhas.length === 1 ? 'item' : 'itens'})</label>
       <input id="valor-bruto" className="input input-mono mb-3" value={formatBRL(valorBruto)} readOnly tabIndex={-1} onClick={selectAll} />
 
-      {/* Desconto */}
-      <div className={acimaLimite ? 'rounded-sm p-3 mb-3' : 'mb-3'} style={acimaLimite ? { border: '2px dashed var(--action-edit)', background: 'var(--color-warning-subtle)' } : undefined}>
-        <label className="form-label" htmlFor="desconto">
-          Desconto (%) <span className="label-optional">(limite {formatNum(descontoMaxPct, 0)}%)</span>
-        </label>
+      {/* Desconto (limite/aprovação é controlado no GestãoClick) */}
+      <div className="mb-3">
+        <label className="form-label" htmlFor="desconto">Desconto (%)</label>
         <input id="desconto" type="number" className="input" min={0} max={100} step={1} placeholder="0" value={descontoStr}
           onChange={(e) => setDescontoStr(e.target.value)} />
-        {acimaLimite && <div className="helper-error mt-1">Acima do limite. Exigirá senha de gerente.</div>}
       </div>
 
       <label className="form-label" htmlFor="valor-final">Valor Final</label>
@@ -161,17 +146,6 @@ export function ResultadoPanel({
           {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar</>}
         </button>
       </div>
-
-      <ModalSenhaGerente
-        aberto={modalAberto}
-        descontoPct={desconto}
-        onCancelar={() => setModalAberto(false)}
-        onConfirmar={async (senha) => {
-          const r = await doSubmit(false, senha);
-          if (r.ok) setModalAberto(false);
-          return r.ok;
-        }}
-      />
     </div>
   );
 }

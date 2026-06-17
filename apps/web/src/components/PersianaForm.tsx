@@ -1,7 +1,7 @@
 // apps/web/src/components/PersianaForm.tsx
 // Formulário de persiana MULTI-ITENS (SRD §8 Etapa 2A).
 // Produto Sob Medida é único para o orçamento; cada item (janela) tem sua Coleção
-// (Tecido), Cor, Acionamento, Largura, Altura, TC (70% editável, RN-04), Rolamento e Base.
+// (Tecido), Cor, Acionamento, Largura, Altura, TC (75% editável, RN-04), Rolamento e Base.
 // Layout compacto: 2 linhas agrupadas por item. RN-01 por item com chips de alternativos.
 
 import { useEffect, useState } from 'react';
@@ -88,7 +88,7 @@ export function PersianaForm({
     const it = itens[idx];
     const a = Number(v);
     const patch: Partial<ItemForm> = { altura: v };
-    if (!it.tcManual && a > 0) patch.tc = String(roundHalfUp(a * 0.7));
+    if (!it.tcManual && a > 0) patch.tc = String(roundHalfUp(a * 0.75));
     atualizar(idx, patch);
   }
 
@@ -234,7 +234,7 @@ export function PersianaForm({
                   value={it.altura} onChange={(e) => onAlturaChange(idx, e.target.value)} />
               </div>
               <div>
-                <label className="form-label" title="70% da altura, editável (RN-04)">TC (m)</label>
+                <label className="form-label" title="75% da altura, editável (RN-04)">TC (m)</label>
                 <input type="number" className="input" min={0.01} step={0.01}
                   value={it.tc} onChange={(e) => atualizar(idx, { tc: e.target.value, tcManual: true })} />
               </div>

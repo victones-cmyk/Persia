@@ -50,10 +50,9 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 - **Razão:** o SRD §RN-05 simplificava para "1 un", mas a instrução explícita foi usar os valores corretos da planilha `base_3`. Como componentes não afetam o `valor_bruto`, isso impacta só a lista técnica.
 - **Pendência:** validar com o Victor na homologação.
 
-### 2.3 ⚠️ TC (Tamanho do Comando) = 70% da altura
-- **Decisão:** TC padrão = `roundHalfUp(Altura × 0.70)`, campo editável (RN-04).
-- **Razão:** 70% é o valor da extração do DecorSoft (aba 04, "% Padrão TC"). A documentação do projeto citava 75%.
-- **Pendência:** confirmar 70% vs 75% com o Victor.
+### 2.3 ✅ TC (Tamanho do Comando) = 75% da altura
+- **Decisão:** TC padrão = `roundHalfUp(Altura × 0.75)` (TC_FATOR), campo editável (RN-04).
+- **Razão:** Victor confirmou **75%** em 17/06/2026 (era 70% pela extração do DecorSoft; a documentação do projeto já citava 75%).
 
 ### 2.4 ✅ 256 regras condicionais geradas da planilha (não escritas à mão)
 - **Decisão:** `componentes.data.ts` é gerado a partir da aba `07_Persiana_Comp_Custom` (256 regras) via script Python.
@@ -121,9 +120,9 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 - **Decisão:** o cliente HTTP do frontend só dispara logout global em `401` com código `NAO_AUTENTICADO` (sessão). Outros 401 (ex.: `SENHA_GERENTE_INVALIDA`, credenciais de login) são tratados localmente.
 - **Razão:** sem isso, errar a senha do gerente no modal de desconto deslogava o usuário e jogava para a tela de login.
 
-### 4.3 ✅ Aprovação de desconto por senha de gerente (RN-08)
-- **Decisão:** desconto acima do limite do perfil exige a senha de um usuário admin; verificada no backend, registrada em `log_acoes` (`desconto_aprovado`), com `.input-shake` no modal em caso de senha errada.
-- **Razão:** controle de política de desconto conforme RN-08.
+### 4.3 ❌ Aprovação de desconto por senha de gerente (RN-08) — REMOVIDA em 17/06/2026
+- **Decisão:** o campo de desconto é **livre**; o limite/aprovação fica no **próprio GestãoClick** (Victor: "já tem no GestãoClick"). Removidos o limite por perfil, o modal de senha de gerente e o log `desconto_aprovado`.
+- **Histórico:** antes, desconto acima do limite exigia senha de admin (verificada no backend, registrada em `log_acoes`). Mantido o tratamento de 401 de negócio que não desloga (§4.2).
 
 ---
 
@@ -167,7 +166,7 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 - **(Resolvido 16/06)** Cortina — modelos fechados pelo Victor (ver §9.5): 4 modelos cobrem tudo (Argolas = Franzido/varão), inversão = emenda, deslizante qtd automática, entretela só frente, tecido de 5 em 5 cm. **Resta:** confirmar o fator do Wave (3 m → 8,10 m, BLOQUEANTE-05) e o **envio ao GC** (acessórios cadastrados? + ideia do Victor p/ duplas/triplas — BLOQUEANTE-06).
 - **Vincular cada vendedora** ao id de funcionário do GC (via Admin → Usuários).
-- **Confirmar:** % de desconto (10/30), TC (70% ou 75%), fitas em metros.
+- **(Resolvido 17/06)** Desconto: não controlar na calculadora (fica no GC). TC = **75%**. Fita = **2× a largura** (Victor) — o modelo atual já soma ~2× a largura no total; conferir na homologação (fita é só lista técnica/OS, não entra no preço).
 - **Homologação:** ~10 orçamentos plataforma × DecorSoft.
 - **(Resolvido)** Largura dos tecidos: Victor cadastrou no campo customizado "LARGURA" e a calc já lê (§3.3). WAVE FÁCIL ≠ WAVE (BLOQUEANTE-04).
 

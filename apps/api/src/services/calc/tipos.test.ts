@@ -13,8 +13,8 @@ describe('tipos', () => {
     expect(isTipoPersiana('qualquer')).toBe(false);
   });
 
-  it('META cobre todos os códigos GC e TC_FATOR=0.7', () => {
+  it('META cobre todos os códigos GC e TC_FATOR=0.75', () => {
     expect(META.persiana_rolo_blackout.codigoGc).toBe('2591');
-    expect(TC_FATOR).toBe(0.7);
+    expect(TC_FATOR).toBe(0.75);
   });
 });

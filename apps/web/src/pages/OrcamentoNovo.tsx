@@ -107,7 +107,6 @@ export function OrcamentoNovo() {
               <ResultadoPanel
                 dados={resultado}
                 cliente={cliente}
-                descontoMaxPct={usuario?.desconto_max_pct ?? 0}
                 gcStatus={gcStatus}
                 gcUsuarioId={usuario?.gc_usuario_id ?? null}
                 onEnviado={(orc) => {

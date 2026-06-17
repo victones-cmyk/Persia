@@ -5,7 +5,6 @@
 // Soma das linhas = total exato (RN-10). Recalcula tudo no servidor (nunca confia no cliente).
 
 import type { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
@@ -203,15 +202,6 @@ async function executarEnvioGc(args: {
   }
 }
 
-/** Verifica se a senha corresponde a algum usuário admin ativo. Retorna o admin ou null. */
-async function verificarSenhaGerente(senha: string): Promise<{ id: string } | null> {
-  const admins = await prisma.usuario.findMany({ where: { perfil: 'admin', ativo: true } });
-  for (const a of admins) {
-    if (bcrypt.compareSync(senha, a.senha_hash)) return { id: a.id };
-  }
-  return null;
-}
-
 function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[]): ItemSnapshot[] {
   return preparados.map((p, i) => ({
     tecido_codigo_gc: p.tecido.id,
@@ -250,18 +240,8 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
   }
 
+  // Desconto livre: o limite/aprovação é controlado no próprio GestãoClick (Victor 17/06/2026).
   const desconto_pct = Number(b.desconto_pct ?? 0);
-  // RN-08: desconto acima do limite exige aprovação de gerente (só no envio ao GC).
-  let descontoAprovadoPor: string | null = null;
-  if (!apenasSalvar && desconto_pct > Number(sessao.desconto_max_pct)) {
-    const senhaGerente = typeof b.senha_gerente === 'string' ? b.senha_gerente : '';
-    if (!senhaGerente) {
-      throw new AppError(403, 'APROVACAO_NECESSARIA', 'Desconto acima do limite exige aprovação do gerente.');
-    }
-    const admin = await verificarSenhaGerente(senhaGerente);
-    if (!admin) throw new AppError(401, 'SENHA_GERENTE_INVALIDA', 'Senha de gerente incorreta.');
-    descontoAprovadoPor = admin.id;
-  }
 
   // Busca todos os tecidos referenciados (de uma vez).
   const tecidos = new Map<string, TecidoGc>();
@@ -297,7 +277,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     valor_bruto: valorBrutoTotal,
     desconto_pct,
     valor_final: valorFinalTotal,
-    desconto_aprovado_por: descontoAprovadoPor,
+    desconto_aprovado_por: null,
   };
 
   // Apenas salvar: grava rascunho local, sem tocar no GestãoClick.
@@ -344,16 +324,6 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
         detalhe: { orcamento_id: orcamento.id, gc_orcamento_id: envio.gc_orcamento_id, itens: preparados.length, valor_final: valorFinalTotal },
       },
     });
-    if (descontoAprovadoPor) {
-      await prisma.logAcao.create({
-        data: {
-          usuario_id: descontoAprovadoPor,
-          acao: 'desconto_aprovado',
-          detalhe: { orcamento_id: orcamento.id, desconto_pct, aprovado_para: sessao.id },
-        },
-      });
-    }
-
     res.status(201).json({ orcamento });
   } catch (err) {
     const gc = err instanceof GcError ? err : null;

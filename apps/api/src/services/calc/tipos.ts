@@ -91,5 +91,5 @@ export function isTipoPersiana(t: string): t is TipoPersiana {
   return t in META;
 }
 
-/** % padrão do Tamanho do Comando = 70% da altura (RN-04, aba 04 "% Padrão TC"=70). */
-export const TC_FATOR = 0.7;
+/** % padrão do Tamanho do Comando = 75% da altura (Victor 17/06/2026; era 70%). Campo editável. */
+export const TC_FATOR = 0.75;
