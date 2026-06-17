@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner, faCalculator, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faSpinner, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { api } from '../lib/api';
 import { roundHalfUp } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
@@ -62,7 +62,6 @@ export function PersianaForm({
   const [calculando, setCalculando] = useState(false);
   const [erros, setErros] = useState<Record<number, ItemErro>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
-  const [resultadoAtivo, setResultadoAtivo] = useState(false); // já existe um resultado calculado na tela
 
   // Recarrega tecidos quando o tipo muda; limpa a seleção de tecido de todos os itens.
   useEffect(() => {
@@ -73,7 +72,6 @@ export function PersianaForm({
     setCarregandoTecidos(true);
     setItens((prev) => prev.map((it) => ({ ...it, tecido_id: '' })));
     setErros({});
-    setResultadoAtivo(false);
     onResult(null);
     api
       .get<{ tecidos: TecidoOpcao[] }>(`/calcular/tecidos?tipo=${tipo}`)
@@ -99,12 +97,9 @@ export function PersianaForm({
     setItens((prev) => [...prev, itemVazio()]);
   }
   function removerItem(idx: number) {
-    const novos = itens.filter((_, i) => i !== idx);
-    setItens(novos);
+    // O cálculo automático (efeito abaixo) reavalia sozinho após a mudança.
+    setItens((prev) => prev.filter((_, i) => i !== idx));
     setErros({});
-    // Já havia resultado na tela: recalcula sozinho com os itens restantes (anotação 5).
-    if (resultadoAtivo && listaValida(novos)) void calcularCom(novos);
-    else { onResult(null); setResultadoAtivo(false); }
   }
 
   const itemValido = (it: ItemForm) =>
@@ -125,10 +120,18 @@ export function PersianaForm({
     };
   }
 
-  function calcular() {
-    if (!formValido || calculando) return;
-    void calcularCom(itens);
-  }
+  // Cálculo automático (tempo real): recalcula com debounce sempre que algum campo
+  // que influencia o cálculo muda. Sem botão "Calcular".
+  const calcSig = JSON.stringify({
+    tipo,
+    itens: itens.map((it) => ({ t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc })),
+  });
+  useEffect(() => {
+    if (!formValido) { onResult(null); return; }
+    const id = setTimeout(() => { void calcularCom(itens); }, 400);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calcSig]);
 
   async function calcularCom(lista: ItemForm[]) {
     setCalculando(true);
@@ -152,15 +155,12 @@ export function PersianaForm({
 
       if (Object.keys(novosErros).length > 0) {
         setErros(novosErros);
-        setResultadoAtivo(false);
         onResult(null);
         return;
       }
       onResult({ tipo: tipo as TipoPersiana, itens: calculados.filter(Boolean), total_bruto: r.total_bruto });
-      setResultadoAtivo(true);
     } catch {
       onResult(null);
-      setResultadoAtivo(false);
       setErroGeral('Não foi possível calcular. Tente novamente.');
     } finally {
       setCalculando(false);
@@ -298,9 +298,11 @@ export function PersianaForm({
 
         {erroGeral && <div className="helper-error">{erroGeral}</div>}
 
-        <button type="button" className="btn btn-success w-full" disabled={!formValido || calculando} aria-disabled={!formValido || calculando} onClick={calcular}>
-          {calculando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faCalculator} /> Calcular</>}
-        </button>
+        <div className="text-xs-ui text-neutral-500 flex items-center gap-2" aria-live="polite">
+          {calculando
+            ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando…</>
+            : 'O cálculo é feito automaticamente conforme você preenche; veja o resultado ao lado.'}
+        </div>
       </div>
     </div>
   );

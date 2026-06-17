@@ -45,7 +45,7 @@ export function CortinaCard({
 }: {
   indice: number;
   tecidos: TecidoOpcao[];
-  opcoes: AcessoriosCortinaResp;
+  opcoes: AcessoriosCortinaResp | null; // null enquanto carrega em segundo plano
   onChange: (resumo: CortinaResumo) => void;
   onRemover: () => void;
   podeRemover: boolean;
@@ -115,7 +115,7 @@ export function CortinaCard({
   // Preço do produto escolhido numa categoria.
   const precoSelecionado = (categoria: CategoriaAcessorio | null, produtoId: string | undefined) => {
     if (!categoria || !produtoId) return 0;
-    return opcoes.acessorios[categoria]?.find((o) => o.id === produtoId)?.preco ?? 0;
+    return opcoes?.acessorios[categoria]?.find((o) => o.id === produtoId)?.preco ?? 0;
   };
 
   // Total da cortina + se está completo (todos os acessórios com produto escolhido).
@@ -163,8 +163,8 @@ export function CortinaCard({
           {calculando && <FontAwesomeIcon icon={faSpinner} spin className="text-neutral-400" />}
         </div>
         {podeRemover && (
-          <button type="button" className="btn btn-danger btn-xs" onClick={onRemover} title="Remover cortina">
-            <FontAwesomeIcon icon={faTrash} />
+          <button type="button" className="text-error hover:opacity-80 text-xs-ui flex items-center gap-1" onClick={onRemover} title="Remover cortina">
+            <FontAwesomeIcon icon={faTrash} /> Remover
           </button>
         )}
       </div>
@@ -248,7 +248,7 @@ export function CortinaCard({
           <div className="text-xs-ui font-bold text-neutral-600 mb-2">Acessórios</div>
           <div className="space-y-2">
             {calc.acessorios.map((a) => {
-              const opts = a.categoria ? (opcoes.acessorios[a.categoria] ?? []) : [];
+              const opts = a.categoria && opcoes ? (opcoes.acessorios[a.categoria] ?? []) : [];
               const sel = a.categoria ? acessorioSel[a.categoria] ?? '' : '';
               const qtd = qtdDe(a.item, a.auto, a.quantidade);
               const preco = precoSelecionado(a.categoria, sel);
@@ -267,9 +267,9 @@ export function CortinaCard({
                     )}
                   </div>
                   <div className="col-span-4">
-                    <select className="input" style={{ height: 30, fontSize: 12 }} value={sel}
+                    <select className="input" style={{ height: 30, fontSize: 12 }} value={sel} disabled={!opcoes}
                       onChange={(e) => a.categoria && setAcessorioSel((s) => ({ ...s, [a.categoria!]: e.target.value }))}>
-                      <option value="">(escolher)</option>
+                      <option value="">{opcoes ? '(escolher)' : 'carregando opções…'}</option>
                       {opts.map((o) => <option key={o.id} value={o.id}>{o.nome} — {formatBRL(o.preco)}</option>)}
                     </select>
                   </div>

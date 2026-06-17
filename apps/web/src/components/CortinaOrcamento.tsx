@@ -36,13 +36,15 @@ export function CortinaOrcamento({
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      api.get<{ tecidos: TecidoOpcao[] }>('/calcular/cortina/tecidos'),
-      api.get<AcessoriosCortinaResp>('/calcular/cortina/acessorios'),
-    ])
-      .then(([t, o]) => { setTecidos(t.tecidos); setOpcoes(o); })
+    // Tecidos liberam a tela (rápido/cacheado). Acessórios carregam em segundo
+    // plano — os seletores mostram "carregando opções…" só na seção até chegarem.
+    api.get<{ tecidos: TecidoOpcao[] }>('/calcular/cortina/tecidos')
+      .then((t) => setTecidos(t.tecidos))
       .catch(() => setErroCarga(true))
       .finally(() => setCarregando(false));
+    api.get<AcessoriosCortinaResp>('/calcular/cortina/acessorios')
+      .then((o) => setOpcoes(o))
+      .catch(() => {});
   }, []);
 
   const setResumo = (id: string, r: CortinaResumo) => setResumos((m) => ({ ...m, [id]: r }));
@@ -86,9 +88,9 @@ export function CortinaOrcamento({
   }
 
   if (carregando) {
-    return <div className="card p-6 text-neutral-500"><FontAwesomeIcon icon={faSpinner} spin /> Carregando tecidos e acessórios…</div>;
+    return <div className="card p-6 text-neutral-500"><FontAwesomeIcon icon={faSpinner} spin /> Carregando tecidos…</div>;
   }
-  if (erroCarga || !opcoes) {
+  if (erroCarga) {
     return <div className="alert alert-error max-w-form"><span>Não foi possível carregar os dados do GestãoClick. Tente recarregar.</span></div>;
   }
 

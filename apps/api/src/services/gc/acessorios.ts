@@ -56,7 +56,7 @@ interface CacheAcessorios {
   instalacoes: ServicoInstalacao[];
 }
 let cache: { dados: CacheAcessorios; expira: number } | null = null;
-const TTL_MS = 5 * 60 * 1000;
+const TTL_MS = 30 * 60 * 1000; // 30 min — acessórios mudam pouco; reduz recargas
 
 /** Lê todos os grupos de acessório + serviços de instalação (com cache de 5 min). */
 export async function listarAcessoriosCortina(): Promise<CacheAcessorios> {
