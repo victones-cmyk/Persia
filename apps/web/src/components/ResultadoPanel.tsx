@@ -12,6 +12,7 @@ import type { GcStatus } from '../hooks/useGcHealth';
 import { formatBRL, formatNum, roundHalfUp } from '../lib/formatacao';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
+import { ConfirmModal } from './ConfirmModal';
 
 function selectAll(e: React.MouseEvent<HTMLInputElement>) {
   e.currentTarget.select();
@@ -33,17 +34,19 @@ export function ResultadoPanel({
   const { showToast } = useToast();
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [salvarAberto, setSalvarAberto] = useState(false);
 
   // Valor por item e total do orçamento (RN-10). dados null = orçamento ainda vazio.
   const linhas = dados ? dados.itens.map((it) => ({ it, valor: it.resultado.valor_bruto ?? 0 })) : [];
   const valorTotal = roundHalfUp(linhas.reduce((s, l) => s + l.valor, 0));
   const temItens = linhas.length > 0;
+  const incompleto = !!dados?.incompleto; // há item com campos obrigatórios em branco
 
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !gcUsuarioId;
   const ocupado = enviando || salvando;
-  const podeEnviar = !gcOffline && !!cliente && temItens && !ocupado;
-  const podeSalvar = temItens && !ocupado;
+  const podeEnviar = !gcOffline && !!cliente && temItens && !incompleto && !ocupado;
+  const podeSalvar = temItens && !incompleto && !ocupado;
 
   /** apenasSalvar=true grava rascunho local (cliente opcional, sem enviar ao GC). */
   async function doSubmit(apenasSalvar: boolean): Promise<{ ok: boolean }> {
@@ -121,18 +124,29 @@ export function ResultadoPanel({
         style={{ color: 'var(--color-success)', fontSize: 20 }}
         value={formatBRL(valorTotal)} readOnly tabIndex={-1} onClick={selectAll} />
 
-      {temItens && !cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar ao GestãoClick (ou use <strong>Salvar</strong>).</span></div>}
+      {incompleto && <div className="alert alert-warning mb-3 text-xs-ui"><span>Há item com <strong>campos obrigatórios</strong> não preenchidos. Complete ou remova o item para enviar/salvar.</span></div>}
+      {temItens && !incompleto && !cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar ao GestãoClick (ou use <strong>Salvar</strong>).</span></div>}
       {temItens && gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong> o orçamento.</span></div>}
       {temItens && !gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor. Um admin pode vincular em Administração → Usuários.</span></div>}
 
       <div className="flex gap-2">
-        <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={() => void doSubmit(true)} title="Salva o orçamento sem enviar ao GestãoClick">
+        <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={() => setSalvarAberto(true)} title="Salva o orçamento sem enviar ao GestãoClick">
           {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
         </button>
         <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={onClickEnviar}>
           {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar</>}
         </button>
       </div>
+
+      <ConfirmModal
+        aberto={salvarAberto}
+        titulo="Salvar orçamento"
+        mensagem="Deseja salvar este orçamento como rascunho na Pérsia? Ele não será enviado ao GestãoClick agora."
+        confirmarLabel="Salvar"
+        cancelarLabel="Voltar"
+        onConfirmar={() => { setSalvarAberto(false); void doSubmit(true); }}
+        onCancelar={() => setSalvarAberto(false)}
+      />
     </div>
   );
 }

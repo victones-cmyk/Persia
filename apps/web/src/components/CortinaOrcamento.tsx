@@ -9,6 +9,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faSpinner, faPaperPlane, faFloppyDisk } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { CortinaCard, type CortinaResumo } from './CortinaCard';
+import { ConfirmModal } from './ConfirmModal';
 import { formatBRL } from '../lib/formatacao';
 import { useToast } from '../hooks/useToast';
 import type { TecidoOpcao, ClienteResumo, OrcamentoSalvo } from '../lib/calcTypes';
@@ -34,6 +35,8 @@ export function CortinaOrcamento({
   const [instalacao, setInstalacao] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [salvarAberto, setSalvarAberto] = useState(false);
+  const [removerCortinaId, setRemoverCortinaId] = useState<string | null>(null);
 
   useEffect(() => {
     // Tecidos liberam a tela (rápido/cacheado). Acessórios carregam em segundo
@@ -105,7 +108,7 @@ export function CortinaOrcamento({
             tecidos={tecidos}
             opcoes={opcoes}
             onChange={(r) => setResumo(id, r)}
-            onRemover={() => removerCortina(id)}
+            onRemover={() => setRemoverCortinaId(id)}
             podeRemover={ids.length > 1}
           />
         ))}
@@ -145,7 +148,7 @@ export function CortinaOrcamento({
           {!gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor.</span></div>}
 
           <div className="flex gap-2">
-            <button type="button" className="btn btn-default flex-1" disabled={ocupado || !todasCompletas} aria-disabled={ocupado || !todasCompletas} onClick={() => void doSubmit(true)} title="Salva sem enviar ao GestãoClick">
+            <button type="button" className="btn btn-default flex-1" disabled={ocupado || !todasCompletas} aria-disabled={ocupado || !todasCompletas} onClick={() => setSalvarAberto(true)} title="Salva sem enviar ao GestãoClick">
               {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
             </button>
             <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={() => void doSubmit(false)}>
@@ -154,6 +157,26 @@ export function CortinaOrcamento({
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        aberto={removerCortinaId !== null}
+        titulo="Remover cortina"
+        mensagem="Deseja remover esta cortina do orçamento?"
+        confirmarLabel="Remover"
+        cancelarLabel="Voltar"
+        perigo
+        onConfirmar={() => { if (removerCortinaId) removerCortina(removerCortinaId); setRemoverCortinaId(null); }}
+        onCancelar={() => setRemoverCortinaId(null)}
+      />
+      <ConfirmModal
+        aberto={salvarAberto}
+        titulo="Salvar orçamento"
+        mensagem="Deseja salvar este orçamento como rascunho na Pérsia? Ele não será enviado ao GestãoClick agora."
+        confirmarLabel="Salvar"
+        cancelarLabel="Voltar"
+        onConfirmar={() => { setSalvarAberto(false); void doSubmit(true); }}
+        onCancelar={() => setSalvarAberto(false)}
+      />
     </div>
   );
 }

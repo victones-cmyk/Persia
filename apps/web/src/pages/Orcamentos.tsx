@@ -10,6 +10,7 @@ import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL } from '../lib/formatacao';
 import { StatusBadge } from '../components/StatusBadge';
+import { ConfirmModal } from '../components/ConfirmModal';
 import type { OrcamentoListItem, Paginacao, StatusOrcamento } from '../lib/orcamentoTypes';
 
 const FILTROS: { valor: '' | StatusOrcamento; label: string }[] = [
@@ -39,6 +40,7 @@ export function Orcamentos() {
   const [pag, setPag] = useState<Paginacao | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [acaoEmId, setAcaoEmId] = useState<string | null>(null);
+  const [cancelarId, setCancelarId] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const carregar = useCallback(async () => {
@@ -83,8 +85,8 @@ export function Orcamentos() {
     }
   }
 
-  async function cancelar(id: string) {
-    if (!confirm('Cancelar este orçamento? (não afeta o GestãoClick)')) return;
+  async function executarCancelar(id: string) {
+    setCancelarId(null);
     setAcaoEmId(id);
     try {
       await api.post(`/orcamentos/${id}/cancelar`);
@@ -200,7 +202,7 @@ export function Orcamentos() {
                         </button>
                       )}
                       {o.status !== 'cancelado' && (
-                        <button className="btn btn-danger btn-xs" disabled={acaoEmId === o.id} onClick={() => cancelar(o.id)} title="Cancelar">
+                        <button className="btn btn-danger btn-xs" disabled={acaoEmId === o.id} onClick={() => setCancelarId(o.id)} title="Cancelar orçamento">
                           <FontAwesomeIcon icon={faXmark} />
                         </button>
                       )}
@@ -239,6 +241,17 @@ export function Orcamentos() {
           })}
         </div>
       )}
+
+      <ConfirmModal
+        aberto={cancelarId !== null}
+        titulo="Cancelar orçamento"
+        mensagem="Deseja cancelar este orçamento? Isso afeta apenas a Pérsia — não altera nada no GestãoClick."
+        confirmarLabel="Cancelar orçamento"
+        cancelarLabel="Voltar"
+        perigo
+        onConfirmar={() => cancelarId && void executarCancelar(cancelarId)}
+        onCancelar={() => setCancelarId(null)}
+      />
     </div>
   );
 }

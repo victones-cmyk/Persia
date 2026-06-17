@@ -11,10 +11,18 @@ const ESTILO: Record<StatusOrcamento, { bg: string; fg: string; bd: string }> = 
   cancelado: { bg: '#e9ecef', fg: '#6c757d', bd: '#dee2e6' },
 };
 
+// Explica cada status (tooltip) — deixa claro que "Enviado" é ao GestãoClick.
+const TITULO: Record<StatusOrcamento, string> = {
+  enviado: 'Enviado ao GestãoClick',
+  rascunho: 'Salvo na Pérsia (não enviado ao GestãoClick)',
+  erro: 'Falha ao enviar ao GestãoClick',
+  cancelado: 'Cancelado na Pérsia (não afeta o GestãoClick)',
+};
+
 export function StatusBadge({ status }: { status: StatusOrcamento }) {
   const e = ESTILO[status];
   return (
-    <span className="badge" style={{ background: e.bg, color: e.fg, borderColor: e.bd }}>
+    <span className="badge" style={{ background: e.bg, color: e.fg, borderColor: e.bd }} title={TITULO[status]}>
       {STATUS_LABEL[status]}
     </span>
   );

@@ -94,6 +94,8 @@ export interface OrcamentoCalculado {
   tipo: TipoPersiana;
   itens: ItemCalculado[];
   total_bruto: number;
+  /** Há item(ns) com campos obrigatórios não preenchidos → bloqueia enviar/salvar. */
+  incompleto?: boolean;
 }
 
 export interface ClienteResumo {

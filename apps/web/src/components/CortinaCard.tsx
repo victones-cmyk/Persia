@@ -55,7 +55,7 @@ export function CortinaCard({
   const [fixacao, setFixacao] = useState<FixacaoCortina>('varao');
   const [largura, setLargura] = useState('');
   const [altura, setAltura] = useState('');
-  const [tamanhoBarra, setTamanhoBarra] = useState('0.10'); // pré-configurado (padrão 0,10 m)
+  const [tamanhoBarra, setTamanhoBarra] = useState(''); // vazio = padrão 0,10 m no servidor
   const [tipoBarra, setTipoBarra] = useState<'simples' | 'dupla' | ''>('');
   const [camadas, setCamadas] = useState<CamadaState[]>([novaCamada()]);
   const [acessorioSel, setAcessorioSel] = useState<Record<string, string>>({}); // categoria → produto_id
@@ -240,7 +240,7 @@ export function CortinaCard({
                 </div>
               )}
               {camadas.length > 1 && (
-                <button type="button" className="btn btn-danger btn-xs mb-1" onClick={() => setCamadas((cs) => cs.filter((x) => x.id !== c.id))} title="Remover camada">
+                <button type="button" className="btn btn-danger btn-xs mb-1" onClick={() => setCamadas((cs) => cs.filter((x) => x.id !== c.id))} title="Remover tecido">
                   <FontAwesomeIcon icon={faTrash} />
                 </button>
               )}

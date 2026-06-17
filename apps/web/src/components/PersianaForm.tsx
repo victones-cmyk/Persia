@@ -11,6 +11,7 @@ import { api } from '../lib/api';
 import { roundHalfUp } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
 import { MedidaInput } from './MedidaInput';
+import { ConfirmModal } from './ConfirmModal';
 import {
   TIPOS_PERSIANA,
   CORES,
@@ -62,6 +63,7 @@ export function PersianaForm({
   const [calculando, setCalculando] = useState(false);
   const [erros, setErros] = useState<Record<number, ItemErro>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
+  const [removerIdx, setRemoverIdx] = useState<number | null>(null);
 
   // Recarrega tecidos quando o tipo muda; limpa a seleção de tecido de todos os itens.
   useEffect(() => {
@@ -96,16 +98,18 @@ export function PersianaForm({
   function adicionarItem() {
     setItens((prev) => [...prev, itemVazio()]);
   }
-  function removerItem(idx: number) {
+  function executarRemover(idx: number) {
     // O cálculo automático (efeito abaixo) reavalia sozinho após a mudança.
     setItens((prev) => prev.filter((_, i) => i !== idx));
     setErros({});
+    setRemoverIdx(null);
   }
 
   const itemValido = (it: ItemForm) =>
     it.tecido_id !== '' && it.cor !== '' && it.acionamento !== '' && Number(it.largura) > 0 && Number(it.altura) > 0;
-  const listaValida = (lista: ItemForm[]) => tipo !== '' && lista.length > 0 && lista.every(itemValido);
-  const formValido = listaValida(itens);
+  // Só os itens completos entram no cálculo; itens incompletos bloqueiam o envio.
+  const itensComp = itens.map((it, idx) => ({ it, idx })).filter(({ it }) => itemValido(it));
+  const temIncompleto = itens.some((it) => !itemValido(it));
 
   function toInput(it: ItemForm): ItemInput {
     return {
@@ -120,38 +124,39 @@ export function PersianaForm({
     };
   }
 
-  // Cálculo automático (tempo real): recalcula com debounce sempre que algum campo
-  // que influencia o cálculo muda. Sem botão "Calcular".
+  // Cálculo automático (tempo real): recalcula com debounce a cada mudança. Calcula
+  // só os itens completos; itens incompletos não somem o resultado, mas bloqueiam o envio.
   const calcSig = JSON.stringify({
     tipo,
     itens: itens.map((it) => ({ t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc })),
   });
   useEffect(() => {
-    // Incompleto (ex.: acabou de adicionar um item): MANTÉM o resultado atual e só
-    // recalcula quando tudo estiver válido — assim o orçamento não some ao lado.
-    if (!formValido) return;
-    const id = setTimeout(() => { void calcularCom(itens); }, 400);
+    if (tipo === '' || itensComp.length === 0) { onResult(null); return; }
+    const comp = itensComp;
+    const incompleto = temIncompleto;
+    const id = setTimeout(() => { void calcularCom(comp, incompleto); }, 400);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calcSig]);
 
-  async function calcularCom(lista: ItemForm[]) {
+  async function calcularCom(comp: { it: ItemForm; idx: number }[], incompleto: boolean) {
     setCalculando(true);
     setErros({});
     setErroGeral(null);
     try {
       const r = await api.post<CalcularLoteResposta>('/calcular/persiana/lote', {
         tipo,
-        itens: lista.map(toInput),
+        itens: comp.map(({ it }) => toInput(it)),
       });
 
       const novosErros: Record<number, ItemErro> = {};
       const calculados: ItemCalculado[] = [];
       for (const res of r.itens) {
+        const origIdx = comp[res.index]?.idx ?? res.index;
         if (res.ok) {
-          calculados[res.index] = { input: toInput(lista[res.index]), resultado: res.resultado, tecido: res.tecido };
+          calculados.push({ input: toInput(comp[res.index].it), resultado: res.resultado, tecido: res.tecido });
         } else {
-          novosErros[res.index] = { message: res.message, alternativos: res.alternativos };
+          novosErros[origIdx] = { message: res.message, alternativos: res.alternativos };
         }
       }
 
@@ -160,7 +165,7 @@ export function PersianaForm({
         onResult(null);
         return;
       }
-      onResult({ tipo: tipo as TipoPersiana, itens: calculados.filter(Boolean), total_bruto: r.total_bruto });
+      onResult({ tipo: tipo as TipoPersiana, itens: calculados, total_bruto: r.total_bruto, incompleto });
     } catch {
       onResult(null);
       setErroGeral('Não foi possível calcular. Tente novamente.');
@@ -196,7 +201,7 @@ export function PersianaForm({
                 <button
                   type="button"
                   className="text-error hover:opacity-80 text-xs-ui flex items-center gap-1"
-                  onClick={() => removerItem(idx)}
+                  onClick={() => setRemoverIdx(idx)}
                   title="Remover item"
                 >
                   <FontAwesomeIcon icon={faTrash} /> Remover
@@ -303,9 +308,20 @@ export function PersianaForm({
         <div className="text-xs-ui text-neutral-500 flex items-center gap-2" aria-live="polite">
           {calculando
             ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando…</>
-            : 'O cálculo é feito automaticamente conforme você preenche; veja o resultado ao lado.'}
+            : 'O cálculo é feito automaticamente conforme você preenche. Veja o resultado ao lado.'}
         </div>
       </div>
+
+      <ConfirmModal
+        aberto={removerIdx !== null}
+        titulo="Remover item"
+        mensagem={`Deseja remover o Item ${(removerIdx ?? 0) + 1} do orçamento?`}
+        confirmarLabel="Remover"
+        cancelarLabel="Voltar"
+        perigo
+        onConfirmar={() => removerIdx !== null && executarRemover(removerIdx)}
+        onCancelar={() => setRemoverIdx(null)}
+      />
     </div>
   );
 }

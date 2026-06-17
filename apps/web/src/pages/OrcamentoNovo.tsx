@@ -69,7 +69,7 @@ export function OrcamentoNovo() {
       {/* Cliente — no topo (padrão GestãoClick). Obrigatório só para enviar ao GC. */}
       {tipoProduto && (
         <div className="card p-4 mb-4">
-          <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar)</span></label>
+          <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar ao GestãoClick)</span></label>
           <ClienteSearch selecionado={cliente} onSelecionar={setCliente} />
         </div>
       )}
