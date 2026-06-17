@@ -75,7 +75,16 @@ export function OrcamentoNovo() {
       )}
 
       {/* Etapa 2 — Cortina (modelo "+": vários ambientes + camadas) */}
-      {tipoProduto === 'cortina' && <CortinaOrcamento />}
+      {tipoProduto === 'cortina' && (
+        <CortinaOrcamento
+          cliente={cliente}
+          gcStatus={gcStatus}
+          gcUsuarioId={usuario?.gc_usuario_id ?? null}
+          onEnviado={(orc) => {
+            if (orc.status === 'enviado' || orc.status === 'rascunho') navigate('/orcamentos');
+          }}
+        />
+      )}
 
       {/* Etapa 2 — Persiana */}
       {tipoProduto === 'persiana' && (

@@ -15,10 +15,17 @@ export interface LinhaProdutoGc {
   valor_custo: number;
 }
 
+/** Uma linha de serviço do orçamento (ex.: instalação da cortina). */
+export interface LinhaServicoGc {
+  gc_servico_id: string;
+  valor_venda: number;
+}
+
 export interface NovoOrcamentoGc {
   codigo: number; // timestamp unix (int)
   cliente_id: string;
   produtos: LinhaProdutoGc[]; // uma linha por item do orçamento
+  servicos?: LinhaServicoGc[]; // linhas de serviço (ex.: instalação)
   data: string; // YYYY-MM-DD
   usuario_id?: string | null; // usuário de login/integração (omitido → usuário master)
   vendedor_id?: string | null; // vendedor (cadastro de funcionários) atribuído ao orçamento
@@ -36,8 +43,14 @@ export interface ResultadoOrcamento {
 }
 
 export function montarPayload(o: NovoOrcamentoGc): Record<string, unknown> {
+  const temProduto = o.produtos.length > 0;
+  const servicos = o.servicos ?? [];
+  const temServico = servicos.length > 0;
+  // tipo do orçamento no GestãoClick: produto, serviço ou ambos.
+  const tipo = temProduto && temServico ? 'ambos' : temServico ? 'servico' : 'produto';
+
   const payload: Record<string, unknown> = {
-    tipo: 'produto',
+    tipo,
     codigo: o.codigo,
     cliente_id: o.cliente_id,
     situacao_id: SITUACAO_EM_ABERTO,
@@ -49,6 +62,13 @@ export function montarPayload(o: NovoOrcamentoGc): Record<string, unknown> {
       valor_custo: p.valor_custo,
     })),
   };
+  if (temServico) {
+    payload.servicos = servicos.map((s) => ({
+      servico_id: s.gc_servico_id,
+      quantidade: 1,
+      valor_venda: s.valor_venda,
+    }));
+  }
   if (o.usuario_id) payload.usuario_id = o.usuario_id;
   if (o.vendedor_id) payload.vendedor_id = o.vendedor_id;
   if (o.loja_id) payload.loja_id = o.loja_id;

@@ -27,6 +27,8 @@ export interface CortinaResumo {
     fixacao: FixacaoCortina;
     largura: number;
     altura: number;
+    tamanho_barra: number;
+    tipo_barra: 'simples' | 'dupla';
     camadas: { tecido_id: string; franzido?: number }[];
     acessorios: { item: string; categoria: CategoriaAcessorio | null; produto_id: string; quantidade: number; preco: number }[];
     nome_produto: string;
@@ -137,6 +139,7 @@ export function CortinaCard({
       completo,
       payload: {
         ambiente, modelo, fixacao, largura: Number(largura), altura: Number(altura),
+        tamanho_barra: Number(tamanhoBarra), tipo_barra: tipoBarra,
         camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, franzido: isWave ? undefined : Number(c.franzido) })),
         acessorios: acessoriosPayload, nome_produto: nomeProduto,
       },

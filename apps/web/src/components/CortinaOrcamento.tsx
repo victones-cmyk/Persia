@@ -1,18 +1,29 @@
 // apps/web/src/components/CortinaOrcamento.tsx
 // Orçamento de CORTINA (modelo "+" do Victor): N cortinas (ambientes), cada uma com
 // camadas e seletores de acessório (CortinaCard). Soma o total (tecidos + acessórios
-// + instalação). O envio ao GestãoClick é a próxima etapa.
+// + instalação) e envia ao GestãoClick (1 produto sintético por cortina + 1 serviço
+// de instalação). O servidor RECALCULA tudo (não confia no cliente).
 
 import { useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faSpinner, faCircleInfo } from '@fortawesome/free-solid-svg-icons';
-import { api } from '../lib/api';
+import { faPlus, faSpinner, faPaperPlane, faFloppyDisk } from '@fortawesome/free-solid-svg-icons';
+import { api, ApiError } from '../lib/api';
 import { CortinaCard, type CortinaResumo } from './CortinaCard';
 import { formatBRL } from '../lib/formatacao';
-import type { TecidoOpcao } from '../lib/calcTypes';
+import { useToast } from '../hooks/useToast';
+import type { TecidoOpcao, ClienteResumo, OrcamentoSalvo } from '../lib/calcTypes';
+import type { GcStatus } from '../hooks/useGcHealth';
 import type { AcessoriosCortinaResp } from '../lib/cortinaTypes';
 
-export function CortinaOrcamento() {
+export function CortinaOrcamento({
+  cliente, gcStatus, gcUsuarioId, onEnviado,
+}: {
+  cliente: ClienteResumo | null;
+  gcStatus: GcStatus;
+  gcUsuarioId: string | null;
+  onEnviado: (orc: OrcamentoSalvo) => void;
+}) {
+  const { showToast } = useToast();
   const [tecidos, setTecidos] = useState<TecidoOpcao[]>([]);
   const [opcoes, setOpcoes] = useState<AcessoriosCortinaResp | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -21,6 +32,8 @@ export function CortinaOrcamento() {
   const [ids, setIds] = useState<string[]>([crypto.randomUUID()]);
   const [resumos, setResumos] = useState<Record<string, CortinaResumo>>({});
   const [instalacao, setInstalacao] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -41,6 +54,36 @@ export function CortinaOrcamento() {
   const totalCortinas = ids.reduce((s, id) => s + (resumos[id]?.total ?? 0), 0);
   const valorInstalacao = Math.max(0, Number(instalacao) || 0);
   const totalGeral = Math.round((totalCortinas + valorInstalacao) * 100) / 100;
+
+  const todasCompletas = ids.length > 0 && ids.every((id) => resumos[id]?.completo && resumos[id]?.payload);
+  const gcOffline = gcStatus !== 'online';
+  const semVendedor = !gcUsuarioId;
+  const ocupado = enviando || salvando;
+  const podeEnviar = !gcOffline && !!cliente && todasCompletas && !ocupado;
+
+  async function doSubmit(apenasSalvar: boolean) {
+    if (!apenasSalvar && !podeEnviar) return;
+    if (apenasSalvar && (ocupado || !todasCompletas)) return;
+    if (apenasSalvar) setSalvando(true); else setEnviando(true);
+    try {
+      const cortinas = ids.map((id) => resumos[id]?.payload).filter(Boolean);
+      const r = await api.post<{ orcamento: OrcamentoSalvo }>('/orcamentos/cortina', {
+        cortinas,
+        instalacao_valor: valorInstalacao,
+        ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
+        ...(apenasSalvar ? { apenas_salvar: true } : {}),
+      });
+      showToast('success', apenasSalvar ? 'Orçamento salvo (rascunho)' : `Orçamento #${r.orcamento.gc_orcamento_id} criado no GestãoClick`, cliente?.nome);
+      onEnviado(r.orcamento);
+    } catch (e) {
+      const erro = e instanceof ApiError ? (e.data as { erro?: { message?: string } } | null)?.erro : null;
+      showToast('error', apenasSalvar ? 'Erro ao salvar' : 'Erro ao enviar ao GestãoClick', erro?.message ?? (e instanceof ApiError ? e.message : 'Falha inesperada.'));
+      const orc = e instanceof ApiError ? (e.data as { orcamento?: OrcamentoSalvo } | null)?.orcamento : null;
+      if (orc) onEnviado(orc);
+    } finally {
+      if (apenasSalvar) setSalvando(false); else setEnviando(false);
+    }
+  }
 
   if (carregando) {
     return <div className="card p-6 text-neutral-500"><FontAwesomeIcon icon={faSpinner} spin /> Carregando tecidos e acessórios…</div>;
@@ -69,7 +112,7 @@ export function CortinaOrcamento() {
         </button>
       </div>
 
-      {/* Coluna direita: resumo + instalação + total */}
+      {/* Coluna direita: resumo + instalação + total + ações */}
       <div className="lg:col-span-1">
         <div className="card sticky p-4 max-w-form" style={{ top: 'calc(50px + 16px)' }}>
           <h4 className="text-lg-ui font-medium mb-3">Resumo</h4>
@@ -94,9 +137,18 @@ export function CortinaOrcamento() {
           <input id="total-cortina" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}
             value={formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
 
-          <div className="alert alert-info text-xs-ui">
-            <FontAwesomeIcon icon={faCircleInfo} />
-            <span>O envio do orçamento de cortina ao GestãoClick será habilitado na próxima etapa. Por ora, esta é a calculadora completa (com preços).</span>
+          {!cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar (ou use <strong>Salvar</strong>).</span></div>}
+          {!todasCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Escolha o <strong>produto de cada acessório</strong> em todas as cortinas para enviar.</span></div>}
+          {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong>.</span></div>}
+          {!gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor.</span></div>}
+
+          <div className="flex gap-2">
+            <button type="button" className="btn btn-default flex-1" disabled={ocupado || !todasCompletas} aria-disabled={ocupado || !todasCompletas} onClick={() => void doSubmit(true)} title="Salva sem enviar ao GestãoClick">
+              {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
+            </button>
+            <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={() => void doSubmit(false)}>
+              {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar</>}
+            </button>
           </div>
         </div>
       </div>

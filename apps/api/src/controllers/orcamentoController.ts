@@ -136,7 +136,7 @@ function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<st
 }
 
 /** Resolve a loja interna + gc_loja_id para o usuário (admin → loja matriz/SP). */
-async function resolverLoja(lojaIdUsuario: string | null) {
+export async function resolverLoja(lojaIdUsuario: string | null) {
   if (lojaIdUsuario) {
     const loja = await prisma.loja.findUnique({ where: { id: lojaIdUsuario } });
     if (loja) return loja;
