@@ -306,3 +306,15 @@ Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura po
 - **Busca de tecido por filtro** (digita → filtra a lista carregada; cada palavra precisa constar no nome) no campo Coleção/Tecido (persiana e cortina), no lugar do `<select>` com a base inteira.
 - **Login editável + renomeação:** admin pode editar o "Usuário" (login) no cadastro; contas de homologação renomeadas para `victor.pavoni` / `loja.sp` / `loja.sbc`.
 - **Largura/padrões:** resultado, formulário e cards de seleção padronizados na mesma largura (`max-w-form`); campo de **desconto** começa vazio (placeholder "0", sem zero à esquerda).
+
+### 10.6 ✅ Rodada de feedback de testes manuais (17/06/2026)
+- **Cálculo em tempo real** (persiana e cortina): sem botão "Calcular"; recalcula com debounce conforme o preenchimento. Painel "Orçamento" fixo à direita, largura cheia, sempre visível.
+- **Validação de obrigatórios:** persiana calcula só itens completos; item incompleto **bloqueia** enviar/salvar (não envia mais sem acionamento). Cortina já bloqueia (sem modelo/medidas/tecido/acessório não calcula).
+- **Confirmações (ConfirmModal, padrão da app):** cancelar orçamento, remover item/cortina, Salvar. Substituem o `confirm()` nativo.
+- **Medidas com máscara de vírgula** (150 → 1,50). **TC 75%.** Cortina: tipo de barra/franzido/tamanho da barra vêm **em branco** (vazio = padrão no servidor: barra 0,10, franzido 3); modelo inicia em "Selecione…".
+- **Admin:** excluir usuário (bloqueia se tiver orçamentos), reativar, coluna Vendedor GC por nome, botões `btn-xs` menos achatados.
+- **Clareza:** "Cliente (obrigatório para enviar ao GestãoClick)"; tooltips de status ("Enviado ao GestãoClick" etc.).
+
+### 10.7 ✅ "Código GC" = Nº do GestãoClick + postura pós-envio (17/06/2026)
+- **Coluna "Código GC"** passa a exibir o **`codigo`** que enviamos (= o **Nº** mostrado no GestãoClick), para o usuário localizar fácil. Persistido em `Orcamento.gc_codigo` (migration `20260617190000_add_gc_codigo`). O `gc_orcamento_id` (id interno da API) continua guardado para uso técnico; a exibição usa `gc_codigo` (fallback no id).
+- **Orçamento excluído no GestãoClick (fire-and-forward):** a Pérsia **não detecta** a exclusão — o token não permite ler orçamento por id (403). Depois de enviado, a **fonte da verdade é o GestãoClick**; o registro local é histórico ("foi enviado"), não um espelho em tempo real. Para refazer, cria-se um novo. Sincronizar é inviável pela limitação da API.

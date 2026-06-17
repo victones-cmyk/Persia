@@ -74,6 +74,7 @@ model Orcamento {
   loja_id               String          @db.Uuid
   loja                  Loja            @relation(fields: [loja_id], references: [id])
   gc_orcamento_id       String?         @db.VarChar(50)
+  gc_codigo             String?         @db.VarChar(50) // "código" enviado = Nº exibido no GestãoClick
   gc_produto_id         String?         @db.VarChar(50)
   status                StatusOrcamento @default(rascunho)
   nome_cliente          String          @db.VarChar(150)

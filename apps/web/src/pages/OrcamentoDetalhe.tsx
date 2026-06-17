@@ -85,7 +85,7 @@ export function OrcamentoDetalhe() {
           <div>
             <h1 className="text-xl-ui">{orc.nome_cliente}</h1>
             <div className="text-xs-ui text-neutral-500">
-              Código GC: <span className="font-mono">{orc.gc_orcamento_id ?? '—'}</span>
+              Código GC: <span className="font-mono">{orc.gc_codigo ?? orc.gc_orcamento_id ?? '—'}</span>
             </div>
           </div>
           <StatusBadge status={orc.status} />

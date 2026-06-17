@@ -183,8 +183,8 @@ export function Orcamentos() {
             ) : (
               orcamentos.map((o) => (
                 <tr key={o.id} style={{ borderTop: '1px solid #dee2e6' }} className="hover:bg-neutral-100">
-                  <td style={{ padding: 12 }} className="font-mono tabular-nums text-sm-ui">
-                    {o.gc_orcamento_id ?? '—'}
+                  <td style={{ padding: 12 }} className="font-mono tabular-nums text-sm-ui" title="Nº do orçamento no GestãoClick">
+                    {o.gc_codigo ?? o.gc_orcamento_id ?? '—'}
                   </td>
                   <td style={{ padding: 12 }} className="td-strong">{o.nome_cliente}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{tipoLabel(o.tipo_produto)}</td>

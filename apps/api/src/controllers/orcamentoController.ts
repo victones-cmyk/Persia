@@ -156,7 +156,7 @@ async function executarEnvioGc(args: {
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
-}): Promise<{ gc_orcamento_id: string; gc_produto_ids: string[]; payload: object; resposta: unknown }> {
+}): Promise<{ gc_orcamento_id: string; gc_codigo: string; gc_produto_ids: string[]; payload: object; resposta: unknown }> {
   const criados: string[] = [];
   try {
     const linhas: LinhaProdutoGc[] = [];
@@ -170,8 +170,9 @@ async function executarEnvioGc(args: {
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
     }
 
+    const codigo = Math.floor(Date.now() / 1000); // = Nº exibido no GestãoClick
     const orc = await gcCriarOrcamento({
-      codigo: Math.floor(Date.now() / 1000),
+      codigo,
       cliente_id: args.gc_cliente_id,
       produtos: linhas,
       data: new Date().toISOString().slice(0, 10),
@@ -182,6 +183,7 @@ async function executarEnvioGc(args: {
 
     return {
       gc_orcamento_id: orc.gc_orcamento_id,
+      gc_codigo: String(codigo),
       gc_produto_ids: criados,
       payload: orc.payload,
       resposta: orc.resposta,
@@ -304,6 +306,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
         status: 'enviado',
         gc_produto_id: envio.gc_produto_ids[0] ?? null,
         gc_orcamento_id: envio.gc_orcamento_id,
+        gc_codigo: envio.gc_codigo,
         itens_json: snapshots as unknown as Prisma.InputJsonValue,
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
         resposta_gc: envio.resposta as Prisma.InputJsonValue,
@@ -375,6 +378,7 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
         status: 'enviado',
         gc_produto_id: envio.gc_produto_ids[0] ?? null,
         gc_orcamento_id: envio.gc_orcamento_id,
+        gc_codigo: envio.gc_codigo,
         itens_json: novosSnaps as unknown as Prisma.InputJsonValue,
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
         resposta_gc: envio.resposta as Prisma.InputJsonValue,

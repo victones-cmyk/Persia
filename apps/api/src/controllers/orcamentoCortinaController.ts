@@ -191,8 +191,9 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       servicos.push({ gc_servico_id: servicoId, valor_venda: valorInstalacao });
     }
 
+    const codigo = Math.floor(Date.now() / 1000); // = Nº exibido no GestãoClick
     const orc = await gcCriarOrcamento({
-      codigo: Math.floor(Date.now() / 1000),
+      codigo,
       cliente_id: String(b.gc_cliente_id),
       produtos: linhas,
       servicos,
@@ -208,6 +209,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
         status: 'enviado',
         gc_produto_id: criados[0] ?? null,
         gc_orcamento_id: orc.gc_orcamento_id,
+        gc_codigo: String(codigo),
         payload_gc_enviado: orc.payload as Prisma.InputJsonValue,
         resposta_gc: orc.resposta as Prisma.InputJsonValue,
       },

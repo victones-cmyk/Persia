@@ -7,6 +7,7 @@ export interface OrcamentoListItem {
   status: StatusOrcamento;
   nome_cliente: string;
   gc_orcamento_id: string | null;
+  gc_codigo: string | null;
   valor_final: string;
   valor_bruto: string;
   criado_em: string;
