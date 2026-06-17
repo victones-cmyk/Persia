@@ -325,3 +325,9 @@ Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura po
 - **Terminologia:** perfil exibido como **"Administrador"** (navbar, lista, cadastro), valor do enum continua `admin`.
 - **Admin → Usuários:** **excluir** usuário (DELETE; bloqueia se houver orçamentos → sugere desativar), **reativar**, coluna **Vendedor GC** por nome, botões `btn-xs` menos achatados, tooltips nas ações.
 - **Operações de dados em produção** (vínculo de loja do Victor = Matriz; exclusão de usuários de teste) são feitas pelo admin na própria tela (não há acesso ao banco de produção fora do Railway).
+
+### 10.9 ✅ 3ª rodada de feedback (17/06/2026)
+- **Confirmação antes de enviar ao GestãoClick:** todo botão "Enviar/Reenviar" (persiana, cortina e detalhe do orçamento) abre um **modal de confirmação** (`ConfirmModal`) com o valor e o cliente antes de criar o orçamento no GC.
+- **Sem pop-ups nativos do navegador:** os `confirm()` nativos de **desativar** e **excluir** usuário viraram `ConfirmModal` padrão. Varredura feita no `apps/web/src` — nenhum `confirm/alert/prompt` nativo restante. Tooltip "Excluir definitivamente" → **"Excluir"** (o aviso de irreversibilidade fica na mensagem do modal).
+- **Lista de orçamentos:** coluna **"Código GC" → "Nº GestãoClick"** (também no detalhe). Coluna **Tipo** passa a mostrar só **"Persiana"** ou **"Cortina"** (antes "Rolo Blackout" etc.).
+- **Editar orçamento:** botão **Editar** (lápis) na lista, **ativo só para rascunho** (inativo para enviado/erro/cancelado, com tooltip explicando). Editar pela lista abre o orçamento **já em modo edição** (`?editar=1`). **Visualizar** abre um rascunho em **só-leitura** (cliente exibido como texto); só o botão **Editar** dentro do detalhe habilita os campos. `erro` continua abrindo em edição (retentativa).

@@ -6,6 +6,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faPen, faUserSlash, faUserCheck, faTrash, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
+import { ConfirmModal } from '../../components/ConfirmModal';
 
 interface Loja {
   id: string;
@@ -34,6 +35,8 @@ export function AdminUsuarios() {
   const [carregando, setCarregando] = useState(true);
   const [editando, setEditando] = useState<Usuario | null | undefined>(undefined); // undefined=fechado, null=novo
   const [funcMap, setFuncMap] = useState<Record<string, string>>({}); // id do funcionário GC → nome
+  const [desativarAlvo, setDesativarAlvo] = useState<Usuario | null>(null);
+  const [excluirAlvo, setExcluirAlvo] = useState<Usuario | null>(null);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -58,7 +61,7 @@ export function AdminUsuarios() {
   }, []);
 
   async function desativar(u: Usuario) {
-    if (!confirm(`Desativar ${u.nome}?`)) return;
+    setDesativarAlvo(null);
     try {
       await api.post(`/admin/usuarios/${u.id}/desativar`);
       showToast('info', 'Usuário desativado');
@@ -79,7 +82,7 @@ export function AdminUsuarios() {
   }
 
   async function excluir(u: Usuario) {
-    if (!confirm(`Excluir DEFINITIVAMENTE o usuário "${u.nome}"? Esta ação não pode ser desfeita.`)) return;
+    setExcluirAlvo(null);
     try {
       await api.del(`/admin/usuarios/${u.id}`);
       showToast('success', 'Usuário excluído');
@@ -134,9 +137,9 @@ export function AdminUsuarios() {
                     <div className="flex gap-1">
                       <button className="btn btn-warning btn-xs" onClick={() => setEditando(u)} title="Editar"><FontAwesomeIcon icon={faPen} /></button>
                       {u.ativo
-                        ? <button className="btn btn-danger btn-xs" onClick={() => desativar(u)} title="Desativar"><FontAwesomeIcon icon={faUserSlash} /></button>
+                        ? <button className="btn btn-danger btn-xs" onClick={() => setDesativarAlvo(u)} title="Desativar"><FontAwesomeIcon icon={faUserSlash} /></button>
                         : <button className="btn btn-success btn-xs" onClick={() => reativar(u)} title="Reativar"><FontAwesomeIcon icon={faUserCheck} /></button>}
-                      <button className="btn btn-danger btn-xs" onClick={() => excluir(u)} title="Excluir definitivamente"><FontAwesomeIcon icon={faTrash} /></button>
+                      <button className="btn btn-danger btn-xs" onClick={() => setExcluirAlvo(u)} title="Excluir"><FontAwesomeIcon icon={faTrash} /></button>
                     </div>
                   </td>
                 </tr>
@@ -157,6 +160,27 @@ export function AdminUsuarios() {
           }}
         />
       )}
+
+      <ConfirmModal
+        aberto={desativarAlvo !== null}
+        titulo="Desativar usuário"
+        mensagem={<>Deseja desativar o usuário <strong>{desativarAlvo?.nome}</strong>? Ele não conseguirá mais acessar a Pérsia até ser reativado.</>}
+        confirmarLabel="Desativar"
+        cancelarLabel="Voltar"
+        perigo
+        onConfirmar={() => { if (desativarAlvo) void desativar(desativarAlvo); }}
+        onCancelar={() => setDesativarAlvo(null)}
+      />
+      <ConfirmModal
+        aberto={excluirAlvo !== null}
+        titulo="Excluir usuário"
+        mensagem={<>Excluir definitivamente o usuário <strong>{excluirAlvo?.nome}</strong>? Esta ação não pode ser desfeita.</>}
+        confirmarLabel="Excluir"
+        cancelarLabel="Voltar"
+        perigo
+        onConfirmar={() => { if (excluirAlvo) void excluir(excluirAlvo); }}
+        onCancelar={() => setExcluirAlvo(null)}
+      />
     </div>
   );
 }

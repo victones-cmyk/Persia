@@ -36,6 +36,7 @@ export function CortinaOrcamento({
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [salvarAberto, setSalvarAberto] = useState(false);
+  const [enviarAberto, setEnviarAberto] = useState(false);
   const [removerCortinaId, setRemoverCortinaId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -151,7 +152,7 @@ export function CortinaOrcamento({
             <button type="button" className="btn btn-default flex-1" disabled={ocupado || !todasCompletas} aria-disabled={ocupado || !todasCompletas} onClick={() => setSalvarAberto(true)} title="Salva sem enviar ao GestãoClick">
               {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
             </button>
-            <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={() => void doSubmit(false)}>
+            <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={() => { if (podeEnviar) setEnviarAberto(true); }}>
               {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar</>}
             </button>
           </div>
@@ -176,6 +177,15 @@ export function CortinaOrcamento({
         cancelarLabel="Voltar"
         onConfirmar={() => { setSalvarAberto(false); void doSubmit(true); }}
         onCancelar={() => setSalvarAberto(false)}
+      />
+      <ConfirmModal
+        aberto={enviarAberto}
+        titulo="Enviar ao GestãoClick"
+        mensagem={<>Deseja enviar este orçamento de <strong>{formatBRL(totalGeral)}</strong> para o GestãoClick{cliente ? <> (cliente <strong>{cliente.nome}</strong>)</> : null}?</>}
+        confirmarLabel="Enviar"
+        cancelarLabel="Voltar"
+        onConfirmar={() => { setEnviarAberto(false); void doSubmit(false); }}
+        onCancelar={() => setEnviarAberto(false)}
       />
     </div>
   );

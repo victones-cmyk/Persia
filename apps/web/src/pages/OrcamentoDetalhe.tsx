@@ -2,9 +2,9 @@
 // Visualização readonly de um orçamento + status + reenviar (se erro).
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faArrowLeft, faRotateRight, faSpinner, faFloppyDisk, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faRotateRight, faSpinner, faFloppyDisk, faXmark, faPen } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL, formatNum } from '../lib/formatacao';
@@ -29,6 +29,7 @@ function Linha({ label, valor }: { label: string; valor: React.ReactNode }) {
 
 export function OrcamentoDetalhe() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [orc, setOrc] = useState<Orc | null>(null);
@@ -37,6 +38,10 @@ export function OrcamentoDetalhe() {
   const [reenviando, setReenviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [cancelarAberto, setCancelarAberto] = useState(false);
+  const [enviarAberto, setEnviarAberto] = useState(false);
+  // Modo edição: visualizar abre só-leitura; "Editar" habilita os campos.
+  // Aberto direto em edição quando veio do botão Editar (?editar=1) ou em erro (retentativa).
+  const [editando, setEditando] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -44,12 +49,13 @@ export function OrcamentoDetalhe() {
       const r = await api.get<{ orcamento: Orc }>(`/orcamentos/${id}`);
       setOrc(r.orcamento);
       setCliente(r.orcamento.gc_cliente_id ? { id: r.orcamento.gc_cliente_id, nome: r.orcamento.nome_cliente, tipo_pessoa: '', documento: null } : null);
+      setEditando(searchParams.get('editar') === '1' || r.orcamento.status === 'erro');
     } catch {
       setOrc(null);
     } finally {
       setCarregando(false);
     }
-  }, [id]);
+  }, [id, searchParams]);
 
   useEffect(() => {
     carregar();
@@ -57,6 +63,7 @@ export function OrcamentoDetalhe() {
 
   // Editável (rascunho/erro): pode escolher cliente e salvar antes de enviar.
   const editavel = orc?.status === 'rascunho' || orc?.status === 'erro';
+  const emEdicao = editavel && editando;
 
   async function salvar() {
     setSalvando(true);
@@ -124,7 +131,7 @@ export function OrcamentoDetalhe() {
           <div>
             <h1 className="text-xl-ui">{orc.nome_cliente}</h1>
             <div className="text-xs-ui text-neutral-500">
-              Código GC: <span className="font-mono">{orc.gc_codigo ?? orc.gc_orcamento_id ?? '—'}</span>
+              Nº GestãoClick: <span className="font-mono">{orc.gc_codigo ?? orc.gc_orcamento_id ?? '—'}</span>
             </div>
           </div>
           <StatusBadge status={orc.status} />
@@ -181,26 +188,33 @@ export function OrcamentoDetalhe() {
           <span className="font-mono font-bold text-xl-ui">{formatBRL(Number(orc.valor_final))}</span>
         </div>
 
-        {/* Cliente — editável em rascunho/erro (escolher antes de enviar) */}
-        {editavel && (
+        {/* Cliente — em edição: seletor; só-leitura: exibe o cliente atual */}
+        {emEdicao ? (
           <div className="mt-4">
             <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar ao GestãoClick)</span></label>
             <ClienteSearch selecionado={cliente} onSelecionar={setCliente} />
           </div>
-        )}
+        ) : editavel ? (
+          <Linha label="Cliente" valor={orc.nome_cliente || '—'} />
+        ) : null}
 
         {orc.status !== 'cancelado' && (
           <div className="flex gap-2 mt-4">
             <button className="btn btn-danger" disabled={reenviando || salvando} onClick={() => setCancelarAberto(true)}>
               <FontAwesomeIcon icon={faXmark} /> Cancelar
             </button>
-            {editavel && (
+            {editavel && !editando && (
+              <button className="btn btn-warning flex-1" onClick={() => setEditando(true)}>
+                <FontAwesomeIcon icon={faPen} /> Editar
+              </button>
+            )}
+            {emEdicao && (
               <button className="btn btn-default flex-1" disabled={salvando || reenviando} onClick={salvar}>
                 {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
               </button>
             )}
-            {editavel && (
-              <button className="btn btn-success flex-1" disabled={reenviando || salvando || !cliente} aria-disabled={reenviando || salvando || !cliente} onClick={reenviar}>
+            {emEdicao && (
+              <button className="btn btn-success flex-1" disabled={reenviando || salvando || !cliente} aria-disabled={reenviando || salvando || !cliente} onClick={() => { if (cliente) setEnviarAberto(true); }}>
                 {reenviando ? <FontAwesomeIcon icon={faSpinner} spin /> : (
                   <><FontAwesomeIcon icon={faRotateRight} /> {orc.status === 'rascunho' ? 'Enviar ao GestãoClick' : 'Reenviar ao GestãoClick'}</>
                 )}
@@ -208,7 +222,7 @@ export function OrcamentoDetalhe() {
             )}
           </div>
         )}
-        {editavel && !cliente && (
+        {emEdicao && !cliente && (
           <div className="text-xs-ui text-neutral-500 mt-2">Selecione o cliente para habilitar o envio ao GestãoClick.</div>
         )}
       </div>
@@ -222,6 +236,16 @@ export function OrcamentoDetalhe() {
         perigo
         onConfirmar={() => void cancelar()}
         onCancelar={() => setCancelarAberto(false)}
+      />
+
+      <ConfirmModal
+        aberto={enviarAberto}
+        titulo={orc.status === 'rascunho' ? 'Enviar ao GestãoClick' : 'Reenviar ao GestãoClick'}
+        mensagem={<>Deseja enviar este orçamento de <strong>{formatBRL(Number(orc.valor_final))}</strong> para o GestãoClick{cliente ? <> (cliente <strong>{cliente.nome}</strong>)</> : null}?</>}
+        confirmarLabel="Enviar"
+        cancelarLabel="Voltar"
+        onConfirmar={() => { setEnviarAberto(false); void reenviar(); }}
+        onCancelar={() => setEnviarAberto(false)}
       />
     </div>
   );

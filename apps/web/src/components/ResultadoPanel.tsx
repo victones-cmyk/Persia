@@ -35,6 +35,7 @@ export function ResultadoPanel({
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [salvarAberto, setSalvarAberto] = useState(false);
+  const [enviarAberto, setEnviarAberto] = useState(false);
 
   // Valor por item e total do orçamento (RN-10). dados null = orçamento ainda vazio.
   const linhas = dados ? dados.itens.map((it) => ({ it, valor: it.resultado.valor_bruto ?? 0 })) : [];
@@ -90,7 +91,7 @@ export function ResultadoPanel({
 
   function onClickEnviar() {
     if (!podeEnviar) return;
-    void doSubmit(false);
+    setEnviarAberto(true);
   }
 
   return (
@@ -146,6 +147,16 @@ export function ResultadoPanel({
         cancelarLabel="Voltar"
         onConfirmar={() => { setSalvarAberto(false); void doSubmit(true); }}
         onCancelar={() => setSalvarAberto(false)}
+      />
+
+      <ConfirmModal
+        aberto={enviarAberto}
+        titulo="Enviar ao GestãoClick"
+        mensagem={<>Deseja enviar este orçamento de <strong>{formatBRL(valorTotal)}</strong> para o GestãoClick{cliente ? <> (cliente <strong>{cliente.nome}</strong>)</> : null}?</>}
+        confirmarLabel="Enviar"
+        cancelarLabel="Voltar"
+        onConfirmar={() => { setEnviarAberto(false); void doSubmit(false); }}
+        onCancelar={() => setEnviarAberto(false)}
       />
     </div>
   );

@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEye, faRotateRight, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faEye, faPen, faRotateRight, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL } from '../lib/formatacao';
@@ -22,8 +22,7 @@ const FILTROS: { valor: '' | StatusOrcamento; label: string }[] = [
 ];
 
 function tipoLabel(t: string): string {
-  if (t === 'cortina') return 'Cortina';
-  return t.replace('persiana_', '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return t === 'cortina' ? 'Cortina' : 'Persiana';
 }
 
 function dataBR(iso: string): string {
@@ -156,7 +155,7 @@ export function Orcamentos() {
         <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
-              <Th>Código GC</Th>
+              <Th>Nº GestãoClick</Th>
               <Th>Cliente</Th>
               <Th>Tipo</Th>
               <Th>Valor Final</Th>
@@ -195,6 +194,14 @@ export function Orcamentos() {
                     <div className="flex gap-1">
                       <button className="btn btn-info btn-xs" onClick={() => navigate(`/orcamentos/${o.id}`)} title="Visualizar">
                         <FontAwesomeIcon icon={faEye} />
+                      </button>
+                      <button
+                        className="btn btn-warning btn-xs"
+                        disabled={o.status !== 'rascunho'}
+                        onClick={() => navigate(`/orcamentos/${o.id}?editar=1`)}
+                        title={o.status === 'rascunho' ? 'Editar' : 'Só é possível editar orçamentos em rascunho'}
+                      >
+                        <FontAwesomeIcon icon={faPen} />
                       </button>
                       {o.status === 'erro' && (
                         <button className="btn btn-warning btn-xs" disabled={acaoEmId === o.id} onClick={() => reenviar(o.id)} title="Reenviar">
