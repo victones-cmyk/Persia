@@ -24,7 +24,7 @@ export function ResultadoPanel({
   gcUsuarioId,
   onEnviado,
 }: {
-  dados: OrcamentoCalculado;
+  dados: OrcamentoCalculado | null;
   cliente: ClienteResumo | null;
   gcStatus: GcStatus;
   gcUsuarioId: string | null;
@@ -34,17 +34,20 @@ export function ResultadoPanel({
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
-  // Valor por item e total do orçamento (RN-10).
-  const linhas = dados.itens.map((it) => ({ it, valor: it.resultado.valor_bruto ?? 0 }));
+  // Valor por item e total do orçamento (RN-10). dados null = orçamento ainda vazio.
+  const linhas = dados ? dados.itens.map((it) => ({ it, valor: it.resultado.valor_bruto ?? 0 })) : [];
   const valorTotal = roundHalfUp(linhas.reduce((s, l) => s + l.valor, 0));
+  const temItens = linhas.length > 0;
 
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !gcUsuarioId;
   const ocupado = enviando || salvando;
-  const podeEnviar = !gcOffline && !!cliente && !ocupado;
+  const podeEnviar = !gcOffline && !!cliente && temItens && !ocupado;
+  const podeSalvar = temItens && !ocupado;
 
   /** apenasSalvar=true grava rascunho local (cliente opcional, sem enviar ao GC). */
   async function doSubmit(apenasSalvar: boolean): Promise<{ ok: boolean }> {
+    if (!dados || !temItens) return { ok: false };
     if (!apenasSalvar && !cliente) return { ok: false };
     if (apenasSalvar) setSalvando(true);
     else setEnviando(true);
@@ -88,12 +91,12 @@ export function ResultadoPanel({
   }
 
   return (
-    <div className="card sticky p-4 max-w-form" style={{ top: 'calc(50px + 16px)' }}>
-      <h4 className="text-lg-ui font-medium mb-3">Resultado</h4>
+    <div className="card sticky p-4" style={{ top: 'calc(50px + 16px)' }}>
+      <h4 className="text-lg-ui font-medium mb-3">Orçamento</h4>
 
       {/* Itens do orçamento */}
       <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3 mb-3 max-h-72 overflow-y-auto">
-        {linhas.map(({ it, valor }, i) => (
+        {temItens ? linhas.map(({ it, valor }, i) => (
           <div key={i} className="py-2 border-b border-neutral-200 last:border-b-0">
             <div className="flex justify-between items-start gap-2">
               <span className="text-xs-ui font-semibold text-neutral-800 pr-1">
@@ -108,7 +111,9 @@ export function ResultadoPanel({
               <span>TC {formatNum(it.resultado.tc)} m</span>
             </div>
           </div>
-        ))}
+        )) : (
+          <div className="text-xs-ui text-neutral-500 py-2">Preencha os dados ao lado — o orçamento é calculado automaticamente.</div>
+        )}
       </div>
 
       <label className="form-label" htmlFor="valor-total">Valor total ({linhas.length} {linhas.length === 1 ? 'item' : 'itens'})</label>
@@ -116,12 +121,12 @@ export function ResultadoPanel({
         style={{ color: 'var(--color-success)', fontSize: 20 }}
         value={formatBRL(valorTotal)} readOnly tabIndex={-1} onClick={selectAll} />
 
-      {!cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar ao GestãoClick (ou use <strong>Salvar</strong>).</span></div>}
-      {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong> o orçamento.</span></div>}
-      {!gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor. Um admin pode vincular em Administração → Usuários.</span></div>}
+      {temItens && !cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar ao GestãoClick (ou use <strong>Salvar</strong>).</span></div>}
+      {temItens && gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong> o orçamento.</span></div>}
+      {temItens && !gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor. Um admin pode vincular em Administração → Usuários.</span></div>}
 
       <div className="flex gap-2">
-        <button type="button" className="btn btn-default flex-1" disabled={ocupado} aria-disabled={ocupado} onClick={() => void doSubmit(true)} title="Salva o orçamento sem enviar ao GestãoClick">
+        <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={() => void doSubmit(true)} title="Salva o orçamento sem enviar ao GestãoClick">
           {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
         </button>
         <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={onClickEnviar}>

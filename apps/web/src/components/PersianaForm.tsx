@@ -127,7 +127,9 @@ export function PersianaForm({
     itens: itens.map((it) => ({ t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc })),
   });
   useEffect(() => {
-    if (!formValido) { onResult(null); return; }
+    // Incompleto (ex.: acabou de adicionar um item): MANTÉM o resultado atual e só
+    // recalcula quando tudo estiver válido — assim o orçamento não some ao lado.
+    if (!formValido) return;
     const id = setTimeout(() => { void calcularCom(itens); }, 400);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -168,7 +170,7 @@ export function PersianaForm({
   }
 
   return (
-    <div className="card p-4 max-w-form">
+    <div className="card p-4">
       <h4 className="text-lg-ui font-medium mb-4">Dados da Persiana</h4>
 
       <div className="space-y-4">

@@ -117,7 +117,7 @@ export function CortinaOrcamento({
       {/* Coluna direita: resumo + instalação + total + ações */}
       <div className="lg:col-span-1">
         <div className="card sticky p-4 max-w-form" style={{ top: 'calc(50px + 16px)' }}>
-          <h4 className="text-lg-ui font-medium mb-3">Resumo</h4>
+          <h4 className="text-lg-ui font-medium mb-3">Orçamento</h4>
 
           <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3 mb-3">
             {ids.map((id, i) => (

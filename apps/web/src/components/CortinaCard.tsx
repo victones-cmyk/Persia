@@ -28,8 +28,8 @@ export interface CortinaResumo {
     fixacao: FixacaoCortina;
     largura: number;
     altura: number;
-    tamanho_barra: number;
-    tipo_barra: 'simples' | 'dupla';
+    tamanho_barra?: number;
+    tipo_barra?: 'simples' | 'dupla';
     camadas: { tecido_id: string; franzido?: number }[];
     acessorios: { item: string; categoria: CategoriaAcessorio | null; produto_id: string; quantidade: number; preco: number }[];
     nome_produto: string;
@@ -38,7 +38,7 @@ export interface CortinaResumo {
 
 interface CamadaState { id: string; tecidoId: string; franzido: string; }
 
-const novaCamada = (): CamadaState => ({ id: crypto.randomUUID(), tecidoId: '', franzido: '3' });
+const novaCamada = (): CamadaState => ({ id: crypto.randomUUID(), tecidoId: '', franzido: '' });
 
 export function CortinaCard({
   indice, tecidos, opcoes, onChange, onRemover, podeRemover,
@@ -51,12 +51,12 @@ export function CortinaCard({
   podeRemover: boolean;
 }) {
   const [ambiente, setAmbiente] = useState('');
-  const [modelo, setModelo] = useState<ModeloCortina>('ilhos');
+  const [modelo, setModelo] = useState<ModeloCortina | ''>('');
   const [fixacao, setFixacao] = useState<FixacaoCortina>('varao');
   const [largura, setLargura] = useState('');
   const [altura, setAltura] = useState('');
-  const [tamanhoBarra, setTamanhoBarra] = useState('0.10');
-  const [tipoBarra, setTipoBarra] = useState<'simples' | 'dupla'>('dupla');
+  const [tamanhoBarra, setTamanhoBarra] = useState('0.10'); // pré-configurado (padrão 0,10 m)
+  const [tipoBarra, setTipoBarra] = useState<'simples' | 'dupla' | ''>('');
   const [camadas, setCamadas] = useState<CamadaState[]>([novaCamada()]);
   const [acessorioSel, setAcessorioSel] = useState<Record<string, string>>({}); // categoria → produto_id
   const [qtdManual, setQtdManual] = useState<Record<string, number>>({}); // item → qtd (não-auto, ex.: suporte)
@@ -65,14 +65,15 @@ export function CortinaCard({
   const [calculando, setCalculando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  // Ao trocar modelo, ajusta a fixação para uma permitida.
+  // Ao escolher/trocar o modelo, ajusta a fixação para uma permitida.
   useEffect(() => {
+    if (!modelo) return;
     const permitidas = FIXACOES_POR_MODELO[modelo];
     if (!permitidas.includes(fixacao)) setFixacao(permitidas[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modelo]);
 
-  const fixacoesDisponiveis = FIXACOES_CORTINA.filter((f) => FIXACOES_POR_MODELO[modelo].includes(f.value));
+  const fixacoesDisponiveis = modelo ? FIXACOES_CORTINA.filter((f) => FIXACOES_POR_MODELO[modelo].includes(f.value)) : [];
   const isWave = modelo === 'wave';
 
   // Assinatura das entradas que afetam o cálculo (dispara o recálculo, com debounce).
@@ -82,8 +83,13 @@ export function CortinaCard({
     camadas: camadas.map((c) => ({ t: c.tecidoId, f: isWave ? '' : c.franzido })),
   });
 
-  const podeCalcular = Number(largura) > 0 && Number(altura) > 0 && camadasValidas.length > 0
+  const podeCalcular = modelo !== '' && Number(largura) > 0 && Number(altura) > 0 && camadasValidas.length > 0
     && camadas.every((c) => c.tecidoId);
+
+  // Campos de barra/franzido vazios → undefined (servidor usa o padrão).
+  const tamanhoBarraNum = tamanhoBarra === '' ? undefined : Number(tamanhoBarra);
+  const tipoBarraVal = tipoBarra || undefined;
+  const franzidoDe = (c: CamadaState) => (isWave || c.franzido === '' ? undefined : Number(c.franzido));
 
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -94,8 +100,8 @@ export function CortinaCard({
       try {
         const r = await api.post<CalcCortinaCompletaResp>('/calcular/cortina/completa', {
           modelo, fixacao, largura: Number(largura), altura: Number(altura),
-          tamanho_barra: Number(tamanhoBarra), tipo_barra: tipoBarra,
-          camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, franzido: isWave ? undefined : Number(c.franzido) })),
+          tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
+          camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, franzido: franzidoDe(c) })),
         });
         setCalc(r);
       } catch (e) {
@@ -139,9 +145,9 @@ export function CortinaCard({
       total: Math.round(total * 100) / 100,
       completo,
       payload: {
-        ambiente, modelo, fixacao, largura: Number(largura), altura: Number(altura),
-        tamanho_barra: Number(tamanhoBarra), tipo_barra: tipoBarra,
-        camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, franzido: isWave ? undefined : Number(c.franzido) })),
+        ambiente, modelo: modelo as ModeloCortina, fixacao, largura: Number(largura), altura: Number(altura),
+        tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
+        camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, franzido: franzidoDe(c) })),
         acessorios: acessoriosPayload, nome_produto: nomeProduto,
       },
     };
@@ -176,13 +182,15 @@ export function CortinaCard({
         </div>
         <div>
           <label className="form-label">Modelo<span className="label-required">*</span></label>
-          <select className="input" value={modelo} onChange={(e) => setModelo(e.target.value as ModeloCortina)}>
+          <select className="input" value={modelo} onChange={(e) => setModelo(e.target.value as ModeloCortina | '')}>
+            <option value="">Selecione…</option>
             {MODELOS_CORTINA.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </div>
         <div>
           <label className="form-label">Fixação<span className="label-required">*</span></label>
-          <select className="input" value={fixacao} onChange={(e) => setFixacao(e.target.value as FixacaoCortina)}>
+          <select className="input" value={fixacao} disabled={!modelo} onChange={(e) => setFixacao(e.target.value as FixacaoCortina)}>
+            {!modelo && <option value="">—</option>}
             {fixacoesDisponiveis.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
         </div>
@@ -196,11 +204,12 @@ export function CortinaCard({
         </div>
         <div>
           <label className="form-label">Tamanho da barra (m)</label>
-          <input type="number" className="input" min={0} step={0.01} value={tamanhoBarra} onChange={(e) => setTamanhoBarra(e.target.value)} />
+          <input type="number" className="input" min={0} step={0.01} value={tamanhoBarra} onChange={(e) => setTamanhoBarra(e.target.value)} placeholder="0,10" />
         </div>
         <div>
           <label className="form-label">Tipo de barra</label>
-          <select className="input" value={tipoBarra} onChange={(e) => setTipoBarra(e.target.value as 'simples' | 'dupla')}>
+          <select className="input" value={tipoBarra} onChange={(e) => setTipoBarra(e.target.value as 'simples' | 'dupla' | '')}>
+            <option value="">Selecione…</option>
             <option value="simples">Simples</option>
             <option value="dupla">Dupla</option>
           </select>
@@ -227,7 +236,7 @@ export function CortinaCard({
               {!isWave && (
                 <div style={{ width: 90 }}>
                   <span className="text-2xs-ui text-neutral-500">Franzido</span>
-                  <input type="number" className="input" min={1} step={0.1} value={c.franzido} onChange={(e) => setCamada(c.id, { franzido: e.target.value })} />
+                  <input type="number" className="input" min={1} step={0.1} value={c.franzido} placeholder="3" onChange={(e) => setCamada(c.id, { franzido: e.target.value })} />
                 </div>
               )}
               {camadas.length > 1 && (

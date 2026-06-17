@@ -48,8 +48,8 @@ export function OrcamentoNovo() {
         </div>
       )}
 
-      {/* Etapa 1 — Seleção de tipo */}
-      <div className="grid grid-cols-2 gap-4 max-w-form mb-6">
+      {/* Etapa 1 — Seleção de tipo (largura total) */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
         <CardTipo
           icon={faScroll}
           titulo="Persiana"
@@ -68,7 +68,7 @@ export function OrcamentoNovo() {
 
       {/* Cliente — no topo (padrão GestãoClick). Obrigatório só para enviar ao GC. */}
       {tipoProduto && (
-        <div className="card p-4 max-w-form mb-4">
+        <div className="card p-4 mb-4">
           <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar)</span></label>
           <ClienteSearch selecionado={cliente} onSelecionar={setCliente} />
         </div>
@@ -93,21 +93,15 @@ export function OrcamentoNovo() {
             <PersianaForm onResult={setResultado} />
           </div>
           <div className="lg:col-span-1">
-            {resultado ? (
-              <ResultadoPanel
-                dados={resultado}
-                cliente={cliente}
-                gcStatus={gcStatus}
-                gcUsuarioId={usuario?.gc_usuario_id ?? null}
-                onEnviado={(orc) => {
-                  if (orc.status === 'enviado' || orc.status === 'rascunho') navigate('/orcamentos');
-                }}
-              />
-            ) : (
-              <div className="card p-4 text-sm-ui text-neutral-500 max-w-form" style={{ position: 'sticky', top: 'calc(50px + 16px)' }}>
-                Preencha os dados e clique em <strong>Calcular</strong> para ver o resultado.
-              </div>
-            )}
+            <ResultadoPanel
+              dados={resultado}
+              cliente={cliente}
+              gcStatus={gcStatus}
+              gcUsuarioId={usuario?.gc_usuario_id ?? null}
+              onEnviado={(orc) => {
+                if (orc.status === 'enviado' || orc.status === 'rascunho') navigate('/orcamentos');
+              }}
+            />
           </div>
         </div>
       )}
