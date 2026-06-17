@@ -121,7 +121,7 @@ npm ci && npx prisma migrate deploy && npm run build && npm start
 - ~~BLOQUEANTE-03: Percentuais reais de desconto máximo~~ RESOLVIDO em 17/06/2026: não controlar na calculadora; limite/aprovação fica no GestãoClick. Campo de desconto é livre. Removido limite por perfil + modal de senha de gerente.
 - BLOQUEANTE-04: Confirmar se CORTINA WAVE FÁCIL (cód. 24) é 16º tipo ativo ou duplicata de CORTINA WAVE FACIL 2.4
 - BLOQUEANTE-05: Fator de tecido do WAVE = 2,7 (Victor mediu 3,00 m → 8,10 m). TENTATIVO — ele vai medir mais larguras para confirmar se o fator se mantém.
-- BLOQUEANTE-06: Envio de cortina ao GestãoClick. (a) ~~acessórios cadastrados/agrupados no GC~~ RESOLVIDO em 17/06/2026 — todos agrupados (mapa grupo→grupo_id em decisions.md §9.6); (b) cortinas duplas/triplas = modelo "+" do Victor (cada tecido = 1 cortina simples). Resta a IMPLEMENTAÇÃO: modelo "+" na UI + seletor de acessório por grupo + montagem do orçamento (1 linha sintética "MODELO • TECIDO • L×A" + serviço de instalação) + teste controlado de escrita (1 orçamento real, como na persiana).
+- ~~BLOQUEANTE-06: Envio de cortina ao GestãoClick~~ RESOLVIDO em 17/06/2026 (deploy dca818b). Acessórios agrupados (mapa em decisions.md §9.6); modelo "+" (vários ambientes + camadas) na UI; seletor de acessório por grupo; orçamento = 1 produto sintético "MODELO • TECIDO • L×A" por cortina + 1 linha de serviço de instalação (`tipo:'ambos'`). Servidor recalcula tudo. Teste controlado de escrita OK (orçamento R$ 790 = produto+serviço, validado no GC e apagado).
 
 ## PLACEHOLDERS PENDENTES
 - ~~PLACEHOLDER-01~~ RESOLVIDO em 11/06/2026. gc_loja_id Matriz (SP): "8274", FILIAL SBC: "8284"

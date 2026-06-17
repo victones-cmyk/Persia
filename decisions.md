@@ -173,12 +173,14 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 ---
 
-## 7. Estado atual (16/06/2026)
+## 7. Estado atual (17/06/2026)
 
-- **Em produção** (commit `d9ca642`): https://persia-api-production.up.railway.app — persiana **multi-itens**, largura via atributo, login "Usuário" + senha provisória, seletor de vendedor, busca de tecido. Auto-deploy GitHub→Railway OK.
-- **Commitado localmente, ainda não enviado (push) p/ produção:** motor de cortina (4 modelos: Ilhós/Prega/Franzido/Wave) com as **respostas finais do Victor** (Argolas=Franzido/varão, inversão=emenda, tecido de 5 em 5 cm, Wave fator 2,7), **calculadora de cortina na UI**, **Salvar (rascunho)**, **cliente no topo**, padronização de largura e ajuste do desconto. **61/61 testes.**
-- **Próximas:** **envio de cortina ao GestãoClick** (depende do BLOQUEANTE-06: acessórios cadastrados + ideia do Victor p/ duplas/triplas) e confirmar o fator do Wave (BLOQUEANTE-05); Fase 8 (homologação/go-live).
-- **Obs.:** a calculadora de cortina, se for ao ar agora, é **só cálculo** (sem botão Enviar/Salvar) — a aba mostra `CortinaForm` + `CortinaResultado`, sem integração ao GC.
+- **Em produção** (commit `dca818b`): https://persia-api-production.up.railway.app
+  - **Persiana** completa (multi-itens, largura via atributo, TC 75%, **sem desconto**), envio ao GC.
+  - **Cortina** completa: modelo "+" (vários ambientes + 1–3 camadas), seletor de acessório por grupo (preço VAREJO do GC), instalação como serviço, **envio ao GestãoClick** (1 produto sintético por cortina + 1 linha de serviço, `tipo:'ambos'`). Servidor recalcula tudo. **65 testes.**
+  - Login "Usuário" + senha provisória, seletor de vendedor (funcionários GC), busca de tecido. Auto-deploy GitHub→Railway OK.
+- **Validação:** teste controlado de escrita da cortina OK (orçamento R$ 790 = produto + serviço, confirmado no GC e apagado).
+- **Pendências:** confirmar fator do Wave (BLOQUEANTE-05, Victor medindo mais larguras); homologação/go-live (Fase 8); conferir fita 2× largura (OS) na homologação.
 
 ---
 
