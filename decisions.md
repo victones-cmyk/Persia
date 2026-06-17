@@ -245,6 +245,28 @@ Aba "CORTINA WAVE" (serve só trilho/varão suíço). `modelo: 'wave'`:
 - **Tecido fracionado, cortado de 5 em 5 cm** (evita erro de corte): a metragem de tecido agora arredonda p/ cima ao **múltiplo de 0,05 m** (`PASSO_TECIDO`, `arredondaTecido`). Testes: 61/61.
 - **Cortinas duplas/triplas:** Victor disse que talvez tenha uma forma mais simples de implementar — **aguardar** antes de fechar o envio ao GC (BLOQUEANTE-06).
 
+### 9.6 Acessórios de cortina no GestãoClick — grupos confirmados (17/06/2026)
+Victor agrupou todos os acessórios (verificado via `scripts/verificar-acessorios-cortina.mjs`). Mapa para o envio ao GC (cada acessório calculado → grupo do GC; o **vendedor escolhe o produto** dentro do grupo, pois há variações de cor/medida):
+
+| Acessório (motor) | Grupo GC | grupo_id |
+|---|---|---|
+| Varão | VARÃO | 5923372 |
+| Varão suíço | VARÃO SUIÇO | 5923373 |
+| Trilho | TRILHOS | 5923338 |
+| Suporte (varão) | SUPORTES PARA VARÃO | 5893619 |
+| Suporte (varão suíço) | SUPORTE PARA VARÃO SUIÇO | 5923368 |
+| Ilhós | ILHOS | 5894379 |
+| Argola | ARGOLAS | 5894205 |
+| Rodízio/gancho | RODIZIOS | 5923339 |
+| Ponteira | PONTEIRAS | 5900771 |
+| Terminal | TERMINAIS VARÃO SUIÇO E TRILHO | 5923367 |
+| Entretela | ENTRETELA | 5923710 |
+| Wave (cordão/rodízio/base click/fita) | WAVE | 5923711 |
+| Tecido (cortina) | TECIDOS PARA CORTINA | 5913111 |
+| Instalação | serviço `/api/servicos` "INSTALAÇÃO" (valor digitado pelo vendedor) | — |
+
+Grupo **WAVE** (4 produtos): RODIZIO WAVE 62341215 (0,80) · BASE CLICK WAVE 46835072 (0,76) · CORDÃO WAVE 46835020 (5,24) · FITA WAVE AVULSA 46834988 (9,80). **ENTRETELA**: KOS TNT 10CM 414519 (1,50). Preços = tabela VAREJO. Com isso o **BLOQUEANTE-06 (a)** está resolvido; resta só a implementação (modelo "+" + seletor de acessório + envio + teste controlado de escrita).
+
 ---
 
 ## 10. Orçamento — multi-itens, rascunho e UX (12–15/06/2026)
