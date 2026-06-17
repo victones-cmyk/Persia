@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcularPersiana, aplicarDesconto, RN01Error, type EntradaPersiana } from './persiana';
+import { calcularPersiana, RN01Error, type EntradaPersiana } from './persiana';
 import { roundHalfUp } from './arredondamento';
 
 const base = (over: Partial<EntradaPersiana>): EntradaPersiana => ({
@@ -114,7 +114,7 @@ describe('RN-04 — TC (Tamanho do Comando)', () => {
   });
 });
 
-describe('RN-03 — Valor Bruto e desconto', () => {
+describe('RN-03 — Valor Bruto', () => {
   it('valor_bruto = qtd_venda × preço tecido', () => {
     const r = calcularPersiana(base({ preco_tecido: 69 }));
     expect(r.valor_bruto).toBe(roundHalfUp(r.qtd_venda * 69));
@@ -122,11 +122,6 @@ describe('RN-03 — Valor Bruto e desconto', () => {
   it('valor_bruto null sem preço', () => {
     expect(calcularPersiana(base({})).valor_bruto).toBeNull();
     expect(calcularPersiana(base({})).preco_tecido).toBeNull();
-  });
-  it('aplicarDesconto (RN-10)', () => {
-    expect(aplicarDesconto(100, 10)).toBe(90);
-    expect(aplicarDesconto(297, 30)).toBe(roundHalfUp(297 * 0.7));
-    expect(aplicarDesconto(100, 0)).toBe(100);
   });
 });
 

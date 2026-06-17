@@ -13,7 +13,6 @@ function toSessionUser(u: {
   perfil: 'vendedor' | 'admin';
   loja_id: string | null;
   gc_usuario_id: string | null;
-  desconto_max_pct: { toString(): string };
   senha_provisoria: boolean;
 }) {
   return {
@@ -23,7 +22,6 @@ function toSessionUser(u: {
     perfil: u.perfil,
     loja_id: u.loja_id,
     gc_usuario_id: u.gc_usuario_id,
-    desconto_max_pct: Number(u.desconto_max_pct),
     senha_provisoria: u.senha_provisoria,
   };
 }

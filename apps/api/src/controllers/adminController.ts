@@ -17,7 +17,6 @@ const USUARIO_SELECT = {
   perfil: true,
   loja_id: true,
   gc_usuario_id: true,
-  desconto_max_pct: true,
   ativo: true,
   senha_provisoria: true,
   loja: { select: { id: true, nome: true } },
@@ -69,7 +68,6 @@ export async function criarUsuario(req: Request, res: Response): Promise<void> {
       perfil: b.perfil === 'admin' ? 'admin' : 'vendedor',
       loja_id: b.loja_id || null,
       gc_usuario_id: b.gc_usuario_id || null,
-      desconto_max_pct: b.desconto_max_pct !== undefined ? Number(b.desconto_max_pct) : 10,
       // Senha definida pelo admin é provisória — o usuário troca no primeiro acesso.
       senha_provisoria: true,
     },
@@ -99,7 +97,6 @@ export async function editarUsuario(req: Request, res: Response): Promise<void> 
   if (b.perfil !== undefined) data.perfil = b.perfil === 'admin' ? 'admin' : 'vendedor';
   if (b.loja_id !== undefined) data.loja_id = b.loja_id || null;
   if (b.gc_usuario_id !== undefined) data.gc_usuario_id = b.gc_usuario_id || null;
-  if (b.desconto_max_pct !== undefined) data.desconto_max_pct = Number(b.desconto_max_pct);
   if (b.ativo !== undefined) data.ativo = Boolean(b.ativo);
   if (b.senha) {
     if (String(b.senha).length < 6) throw new AppError(400, 'SENHA_CURTA', 'Senha muito curta.');
@@ -120,28 +117,6 @@ export async function desativarUsuario(req: Request, res: Response): Promise<voi
   if (!existe) throw new AppError(404, 'NAO_ENCONTRADO', 'Usuário não encontrado.');
   const usuario = await prisma.usuario.update({ where: { id }, data: { ativo: false }, select: USUARIO_SELECT });
   res.json({ usuario });
-}
-
-// ---------------------------------------------------------------------------
-// Configurações
-// ---------------------------------------------------------------------------
-export async function listarConfiguracoes(_req: Request, res: Response): Promise<void> {
-  const configuracoes = await prisma.configuracao.findMany({ orderBy: { chave: 'asc' } });
-  res.json({ configuracoes });
-}
-
-export async function salvarConfiguracoes(req: Request, res: Response): Promise<void> {
-  const itens = Array.isArray(req.body?.configuracoes) ? req.body.configuracoes : [];
-  for (const c of itens) {
-    if (!c?.chave) continue;
-    await prisma.configuracao.upsert({
-      where: { chave: String(c.chave) },
-      update: { valor: String(c.valor ?? '') },
-      create: { chave: String(c.chave), valor: String(c.valor ?? ''), descricao: c.descricao ?? null },
-    });
-  }
-  const configuracoes = await prisma.configuracao.findMany({ orderBy: { chave: 'asc' } });
-  res.json({ configuracoes });
 }
 
 // ---------------------------------------------------------------------------

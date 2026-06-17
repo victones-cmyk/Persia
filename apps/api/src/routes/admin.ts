@@ -7,8 +7,6 @@ import {
   editarUsuario,
   desativarUsuario,
   listarFuncionariosGc,
-  listarConfiguracoes,
-  salvarConfiguracoes,
   listarLogAcoes,
 } from '../controllers/adminController';
 
@@ -20,9 +18,6 @@ router.post('/usuarios', criarUsuario);
 router.put('/usuarios/:id', editarUsuario);
 router.post('/usuarios/:id/desativar', desativarUsuario);
 router.get('/funcionarios-gc', listarFuncionariosGc);
-
-router.get('/configuracoes', listarConfiguracoes);
-router.put('/configuracoes', salvarConfiguracoes);
 
 router.get('/log-acoes', listarLogAcoes);
 

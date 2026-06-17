@@ -120,9 +120,10 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 - **Decisão:** o cliente HTTP do frontend só dispara logout global em `401` com código `NAO_AUTENTICADO` (sessão). Outros 401 (ex.: `SENHA_GERENTE_INVALIDA`, credenciais de login) são tratados localmente.
 - **Razão:** sem isso, errar a senha do gerente no modal de desconto deslogava o usuário e jogava para a tela de login.
 
-### 4.3 ❌ Aprovação de desconto por senha de gerente (RN-08) — REMOVIDA em 17/06/2026
-- **Decisão:** o campo de desconto é **livre**; o limite/aprovação fica no **próprio GestãoClick** (Victor: "já tem no GestãoClick"). Removidos o limite por perfil, o modal de senha de gerente e o log `desconto_aprovado`.
-- **Histórico:** antes, desconto acima do limite exigia senha de admin (verificada no backend, registrada em `log_acoes`). Mantido o tratamento de 401 de negócio que não desloga (§4.2).
+### 4.3 ❌ Desconto — FEATURE REMOVIDA por completo em 17/06/2026
+- **Decisão:** a calculadora **não tem mais desconto** (Victor: "já tem no GestãoClick; pode remover isso de desconto"). O vendedor envia o **valor cheio** ao GestãoClick e o desconto é decidido lá. Removidos: campo de desconto no resultado, limite por perfil, modal de senha de gerente (RN-08), log `desconto_aprovado`, `aplicarDesconto`, a tela admin **Configurações** (e suas rotas/endpoints), `desconto_max_pct` da sessão/usuário e da UI de Usuários.
+- **Banco:** colunas `Usuario.desconto_max_pct` e tabela `Configuracao` mantidas (sem migração; viram vestígio). `Orcamento.desconto_pct` grava sempre 0 e `valor_final` = `valor_bruto`.
+- **Mantido:** o tratamento de 401 de negócio que não desloga (§4.2).
 
 ---
 
@@ -166,7 +167,7 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 - **(Resolvido 16/06)** Cortina — modelos fechados pelo Victor (ver §9.5): 4 modelos cobrem tudo (Argolas = Franzido/varão), inversão = emenda, deslizante qtd automática, entretela só frente, tecido de 5 em 5 cm. **Resta:** confirmar o fator do Wave (3 m → 8,10 m, BLOQUEANTE-05) e o **envio ao GC** (acessórios cadastrados? + ideia do Victor p/ duplas/triplas — BLOQUEANTE-06).
 - **Vincular cada vendedora** ao id de funcionário do GC (via Admin → Usuários).
-- **(Resolvido 17/06)** Desconto: não controlar na calculadora (fica no GC). TC = **75%**. Fita = **2× a largura** (Victor) — o modelo atual já soma ~2× a largura no total; conferir na homologação (fita é só lista técnica/OS, não entra no preço).
+- **(Resolvido 17/06)** Desconto: **feature removida** da calculadora (fica 100% no GC). TC = **75%**. Fita = **2× a largura** (Victor) — o modelo atual já soma ~2× a largura no total; conferir na homologação (fita é só lista técnica/OS, não entra no preço).
 - **Homologação:** ~10 orçamentos plataforma × DecorSoft.
 - **(Resolvido)** Largura dos tecidos: Victor cadastrou no campo customizado "LARGURA" e a calc já lê (§3.3). WAVE FÁCIL ≠ WAVE (BLOQUEANTE-04).
 

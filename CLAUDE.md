@@ -104,7 +104,7 @@ npm ci && npx prisma migrate deploy && npm run build && npm start
 - Tailwind: NUNCA construir classes via template string (bg-${cor}). Purge remove classes dinâmicas.
 - TC (Tamanho do Comando): pré-calculado como Altura × 0.75 (TC_FATOR; Victor 17/06/2026, era 0.70) mas campo editável — NÃO usar readOnly
 - Campos calculados (exceto TC): readOnly={true} + tabIndex={-1} + onClick={e=>e.target.select()} + font-mono + bg neutral-200
-- Desconto: campo livre (%); limite/aprovação é controlado no próprio GestãoClick (Victor 17/06/2026). NÃO há mais modal de senha de gerente nem limite por perfil na calculadora.
+- Desconto: REMOVIDO da calculadora por completo (Victor 17/06/2026). O vendedor envia o valor cheio; o desconto é decidido no próprio GestãoClick. Sem campo de desconto, sem limite por perfil, sem modal de gerente; a tela admin de "Configurações" também foi removida. Colunas de banco (Usuario.desconto_max_pct, tabela Configuracao) mantidas como vestígio (sem migração).
 
 ## Decisões Registradas
 - Railway: processo Node.js persistente necessário para express-session

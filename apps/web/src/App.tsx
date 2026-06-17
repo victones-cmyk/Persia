@@ -11,7 +11,6 @@ import { OrcamentoNovo } from './pages/OrcamentoNovo';
 import { Orcamentos } from './pages/Orcamentos';
 import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
 import { AdminUsuarios } from './pages/admin/AdminUsuarios';
-import { AdminConfiguracoes } from './pages/admin/AdminConfiguracoes';
 import { AdminLog } from './pages/admin/AdminLog';
 
 function App() {
@@ -33,7 +32,6 @@ function App() {
 
             <Route element={<AdminRoute />}>
               <Route path="/admin/usuarios" element={<AdminUsuarios />} />
-              <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
               <Route path="/admin/log-acoes" element={<AdminLog />} />
             </Route>
           </Route>

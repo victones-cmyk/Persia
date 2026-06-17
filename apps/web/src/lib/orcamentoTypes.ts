@@ -9,7 +9,6 @@ export interface OrcamentoListItem {
   gc_orcamento_id: string | null;
   valor_final: string;
   valor_bruto: string;
-  desconto_pct: string;
   criado_em: string;
   usuario?: { nome: string } | null;
   loja?: { nome: string } | null;

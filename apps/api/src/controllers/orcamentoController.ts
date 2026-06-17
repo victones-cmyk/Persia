@@ -8,7 +8,7 @@ import type { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
-import { calcularPersiana, aplicarDesconto } from '../services/calc/persiana';
+import { calcularPersiana } from '../services/calc/persiana';
 import {
   isTipoPersiana,
   TIPO_LABEL,
@@ -81,15 +81,13 @@ function nomeProdutoGc(tipo: TipoPersiana, it: { tecido_nome: string; largura: n
   return `${TIPO_LABEL[tipo]} - ${it.tecido_nome} - ${it.largura.toFixed(2)}x${it.altura.toFixed(2)} - ${it.cor_acessorio} - ${ACIONAMENTO_LABEL[it.acionamento]}`.slice(0, 120);
 }
 
-/** Recalcula cada item no servidor e aplica o desconto (mesmo % em todos). */
-function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], descontoPct: number, tecidos: Map<string, TecidoGc>): {
+/** Recalcula cada item no servidor. Sem desconto: o valor cheio vai ao GestãoClick. */
+function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<string, TecidoGc>): {
   preparados: ItemPreparado[];
   valorBrutoTotal: number;
-  valorFinalTotal: number;
 } {
   const preparados: ItemPreparado[] = [];
   let valorBrutoTotal = 0;
-  let valorFinalTotal = 0;
 
   for (const it of itens) {
     const tecido = tecidos.get(String(it.tecido_id));
@@ -112,10 +110,8 @@ function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], descontoPct: nu
     });
 
     const valorBruto = calc.valor_bruto!;
-    const valorFinal = aplicarDesconto(valorBruto, descontoPct);
     const valorCusto = roundHalfUp(calc.qtd_venda * tecido.preco_custo);
     valorBrutoTotal = roundHalfUp(valorBrutoTotal + valorBruto);
-    valorFinalTotal = roundHalfUp(valorFinalTotal + valorFinal);
 
     preparados.push({
       tecido,
@@ -129,14 +125,14 @@ function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], descontoPct: nu
       qtd_venda: calc.qtd_venda,
       qtd_producao: calc.qtd_producao,
       valor_bruto: valorBruto,
-      valor_final: valorFinal,
+      valor_final: valorBruto, // sem desconto: valor cheio vai ao GC
       valor_custo: valorCusto,
       componentes: calc.componentes,
       nome_produto: nomeProdutoGc(tipo, { tecido_nome: tecido.nome, largura, altura, cor_acessorio: it.cor_acessorio, acionamento: it.acionamento }),
     });
   }
 
-  return { preparados, valorBrutoTotal, valorFinalTotal };
+  return { preparados, valorBrutoTotal };
 }
 
 /** Resolve a loja interna + gc_loja_id para o usuário (admin → loja matriz/SP). */
@@ -240,9 +236,6 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
   }
 
-  // Desconto livre: o limite/aprovação é controlado no próprio GestãoClick (Victor 17/06/2026).
-  const desconto_pct = Number(b.desconto_pct ?? 0);
-
   // Busca todos os tecidos referenciados (de uma vez).
   const tecidos = new Map<string, TecidoGc>();
   for (const it of itensEntrada) {
@@ -254,7 +247,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     }
   }
 
-  const { preparados, valorBrutoTotal, valorFinalTotal } = prepararItens(tipo, itensEntrada, desconto_pct, tecidos);
+  const { preparados, valorBrutoTotal } = prepararItens(tipo, itensEntrada, tecidos);
   const loja = await resolverLoja(sessao.loja_id);
   const primeiro = preparados[0];
 
@@ -275,8 +268,8 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     cor_acessorio: primeiro.cor_acessorio,
     rolamento: primeiro.rolamento,
     valor_bruto: valorBrutoTotal,
-    desconto_pct,
-    valor_final: valorFinalTotal,
+    desconto_pct: 0, // sem desconto na calculadora (controlado no GestãoClick)
+    valor_final: valorBrutoTotal,
     desconto_aprovado_por: null,
   };
 
@@ -290,7 +283,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       },
     });
     await prisma.logAcao.create({
-      data: { usuario_id: sessao.id, acao: 'orcamento_salvo_rascunho', detalhe: { orcamento_id: orcamento.id, itens: preparados.length, valor_final: valorFinalTotal } },
+      data: { usuario_id: sessao.id, acao: 'orcamento_salvo_rascunho', detalhe: { orcamento_id: orcamento.id, itens: preparados.length, valor_final: valorBrutoTotal } },
     });
     res.status(201).json({ orcamento });
     return;
@@ -321,7 +314,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       data: {
         usuario_id: sessao.id,
         acao: 'orcamento_enviado_gc',
-        detalhe: { orcamento_id: orcamento.id, gc_orcamento_id: envio.gc_orcamento_id, itens: preparados.length, valor_final: valorFinalTotal },
+        detalhe: { orcamento_id: orcamento.id, gc_orcamento_id: envio.gc_orcamento_id, itens: preparados.length, valor_final: valorBrutoTotal },
       },
     });
     res.status(201).json({ orcamento });

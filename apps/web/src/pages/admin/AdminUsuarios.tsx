@@ -6,7 +6,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faPen, faUserSlash, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
-import { formatNum } from '../../lib/formatacao';
 
 interface Loja {
   id: string;
@@ -23,7 +22,6 @@ interface Usuario {
   perfil: 'vendedor' | 'admin';
   loja_id: string | null;
   gc_usuario_id: string | null;
-  desconto_max_pct: string;
   ativo: boolean;
   senha_provisoria: boolean;
   loja?: Loja | null;
@@ -75,14 +73,14 @@ export function AdminUsuarios() {
         <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
-              {['Nome', 'Usuário', 'Perfil', 'Loja', 'Desc. máx', 'Vendedor GC', 'Ativo', 'Ações'].map((h) => (
+              {['Nome', 'Usuário', 'Perfil', 'Loja', 'Vendedor GC', 'Ativo', 'Ações'].map((h) => (
                 <th key={h} style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {carregando ? (
-              <tr><td colSpan={8} style={{ padding: 16 }}><div className="skeleton" style={{ height: 18 }} /></td></tr>
+              <tr><td colSpan={7} style={{ padding: 16 }}><div className="skeleton" style={{ height: 18 }} /></td></tr>
             ) : (
               usuarios.map((u) => (
                 <tr key={u.id} style={{ borderTop: '1px solid #dee2e6', opacity: u.ativo ? 1 : 0.5 }}>
@@ -101,7 +99,6 @@ export function AdminUsuarios() {
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{u.email}</td>
                   <td style={{ padding: 12 }}><span className="badge badge-secondary">{u.perfil === 'admin' ? 'Admin' : 'Vendedor'}</span></td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.loja?.nome ?? '—'}</td>
-                  <td style={{ padding: 12 }} className="font-mono tabular-nums text-sm-ui">{formatNum(Number(u.desconto_max_pct), 0)}%</td>
                   <td style={{ padding: 12 }} className="font-mono text-sm-ui">{u.gc_usuario_id ?? <span className="text-error">—</span>}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.ativo ? 'Sim' : 'Não'}</td>
                   <td style={{ padding: 12 }}>
@@ -151,7 +148,6 @@ function ModalUsuario({
   const [perfil, setPerfil] = useState<'vendedor' | 'admin'>(usuario?.perfil ?? 'vendedor');
   const [lojaId, setLojaId] = useState(usuario?.loja_id ?? '');
   const [gcUsuarioId, setGcUsuarioId] = useState(usuario?.gc_usuario_id ?? '');
-  const [descMax, setDescMax] = useState(usuario ? Number(usuario.desconto_max_pct) : 10);
   const [salvando, setSalvando] = useState(false);
 
   // Seletor de vendedor: lista de funcionários do GestãoClick (carregada da API).
@@ -192,7 +188,6 @@ function ModalUsuario({
         perfil,
         loja_id: lojaId || null,
         gc_usuario_id: gcUsuarioId || null,
-        desconto_max_pct: descMax,
         ...(senha ? { senha } : {}),
       };
       if (novo) await api.post('/admin/usuarios', body);
@@ -240,37 +235,31 @@ function ModalUsuario({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="form-label">Desconto máx (%)</label>
-              <input className="input" type="number" min={0} max={100} value={descMax} onChange={(e) => setDescMax(Number(e.target.value))} />
-            </div>
-            <div>
-              <label className="form-label">Vendedor (GestãoClick)</label>
-              {carregandoFunc ? (
-                <div className="input flex items-center text-neutral-500 text-sm-ui">
-                  <FontAwesomeIcon icon={faSpinner} spin className="mr-2" /> Carregando…
-                </div>
-              ) : gcOffline ? (
-                <>
-                  <input
-                    className="input"
-                    value={gcUsuarioId}
-                    onChange={(e) => setGcUsuarioId(e.target.value)}
-                    placeholder="ID do vendedor no GC"
-                  />
-                  <div className="helper-text mt-1" style={{ color: 'var(--action-edit)' }}>GestãoClick indisponível — informe o ID manualmente.</div>
-                </>
-              ) : (
-                <select className="input" value={gcUsuarioId} onChange={(e) => setGcUsuarioId(e.target.value)}>
-                  <option value="">(sem vendedor)</option>
-                  {vinculoForaDaLista && <option value={gcUsuarioId}>Vínculo atual (ID {gcUsuarioId})</option>}
-                  {funcionarios.map((f) => (
-                    <option key={f.id} value={f.id}>{f.nome}</option>
-                  ))}
-                </select>
-              )}
-            </div>
+          <div>
+            <label className="form-label">Vendedor (GestãoClick)</label>
+            {carregandoFunc ? (
+              <div className="input flex items-center text-neutral-500 text-sm-ui">
+                <FontAwesomeIcon icon={faSpinner} spin className="mr-2" /> Carregando…
+              </div>
+            ) : gcOffline ? (
+              <>
+                <input
+                  className="input"
+                  value={gcUsuarioId}
+                  onChange={(e) => setGcUsuarioId(e.target.value)}
+                  placeholder="ID do vendedor no GC"
+                />
+                <div className="helper-text mt-1" style={{ color: 'var(--action-edit)' }}>GestãoClick indisponível — informe o ID manualmente.</div>
+              </>
+            ) : (
+              <select className="input" value={gcUsuarioId} onChange={(e) => setGcUsuarioId(e.target.value)}>
+                <option value="">(sem vendedor)</option>
+                {vinculoForaDaLista && <option value={gcUsuarioId}>Vínculo atual (ID {gcUsuarioId})</option>}
+                {funcionarios.map((f) => (
+                  <option key={f.id} value={f.id}>{f.nome}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className="btn btn-default" onClick={onFechar}>Cancelar</button>

@@ -137,12 +137,8 @@ export function OrcamentoDetalhe() {
           </>
         )}
 
-        <div className="mt-2">
-          <Linha label="Valor bruto" valor={<span className="font-mono">{formatBRL(Number(orc.valor_bruto))}</span>} />
-          <Linha label="Desconto" valor={`${formatNum(Number(orc.desconto_pct), 0)}%`} />
-        </div>
-        <div className="flex justify-between py-3 mt-1" style={{ borderTop: '2px solid #ced4da' }}>
-          <span className="font-bold">Valor final</span>
+        <div className="flex justify-between py-3 mt-3" style={{ borderTop: '2px solid #ced4da' }}>
+          <span className="font-bold">Valor total</span>
           <span className="font-mono font-bold text-xl-ui">{formatBRL(Number(orc.valor_final))}</span>
         </div>
 

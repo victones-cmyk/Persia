@@ -94,8 +94,3 @@ export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
     componentes,
   };
 }
-
-/** Valor final após desconto (RN-03 / RN-10). */
-export function aplicarDesconto(valorBruto: number, descontoPct: number): number {
-  return roundHalfUp(valorBruto * (1 - descontoPct / 100));
-}

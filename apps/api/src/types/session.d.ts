@@ -13,7 +13,6 @@ declare module 'express-session' {
       perfil: Perfil;
       loja_id: string | null;
       gc_usuario_id: string | null;
-      desconto_max_pct: number;
       senha_provisoria: boolean;
     };
   }

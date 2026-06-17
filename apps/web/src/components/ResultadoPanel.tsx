@@ -1,7 +1,8 @@
 // apps/web/src/components/ResultadoPanel.tsx
 // Painel de resultado sticky (DS §10) — MULTI-ITENS: lista cada item (janela) com
-// seu valor, soma o total do orçamento, aplica desconto + busca de cliente e envia
-// ao GestãoClick (1 orçamento com N itens, Fase 5).
+// seu valor, soma o total do orçamento e envia ao GestãoClick (1 orçamento com N
+// itens, Fase 5). SEM desconto: o vendedor envia o valor cheio e o desconto é
+// decidido no próprio GestãoClick (Victor 17/06/2026).
 
 import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -30,20 +31,12 @@ export function ResultadoPanel({
   onEnviado: (orc: OrcamentoSalvo) => void;
 }) {
   const { showToast } = useToast();
-  const [descontoStr, setDescontoStr] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
-  const desconto = Math.max(0, Math.min(100, Number(descontoStr) || 0));
-
-  // Valor por item e totais (mesma regra do backend: desconto por item, RN-10).
-  const linhas = dados.itens.map((it) => {
-    const bruto = it.resultado.valor_bruto ?? 0;
-    const final = roundHalfUp(bruto * (1 - desconto / 100));
-    return { it, bruto, final };
-  });
-  const valorBruto = roundHalfUp(linhas.reduce((s, l) => s + l.bruto, 0));
-  const valorFinal = roundHalfUp(linhas.reduce((s, l) => s + l.final, 0));
+  // Valor por item e total do orçamento (RN-10).
+  const linhas = dados.itens.map((it) => ({ it, valor: it.resultado.valor_bruto ?? 0 }));
+  const valorTotal = roundHalfUp(linhas.reduce((s, l) => s + l.valor, 0));
 
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !gcUsuarioId;
@@ -59,7 +52,6 @@ export function ResultadoPanel({
       const r = await api.post<{ orcamento: OrcamentoSalvo }>('/orcamentos', {
         tipo: dados.tipo,
         itens: dados.itens.map((it) => it.input),
-        desconto_pct: desconto,
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
       });
@@ -101,14 +93,14 @@ export function ResultadoPanel({
 
       {/* Itens do orçamento */}
       <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3 mb-3 max-h-72 overflow-y-auto">
-        {linhas.map(({ it, bruto, final }, i) => (
+        {linhas.map(({ it, valor }, i) => (
           <div key={i} className="py-2 border-b border-neutral-200 last:border-b-0">
             <div className="flex justify-between items-start gap-2">
               <span className="text-xs-ui font-semibold text-neutral-800 pr-1">
                 {i + 1}. {it.tecido.nome}
               </span>
               <span className="font-mono font-semibold tabular-nums text-sm-ui whitespace-nowrap">
-                {formatBRL(desconto > 0 ? final : bruto)}
+                {formatBRL(valor)}
               </span>
             </div>
             <div className="flex justify-between text-2xs-ui text-neutral-500 mt-0.5">
@@ -119,20 +111,10 @@ export function ResultadoPanel({
         ))}
       </div>
 
-      <label className="form-label" htmlFor="valor-bruto">Valor Bruto ({linhas.length} {linhas.length === 1 ? 'item' : 'itens'})</label>
-      <input id="valor-bruto" className="input input-mono mb-3" value={formatBRL(valorBruto)} readOnly tabIndex={-1} onClick={selectAll} />
-
-      {/* Desconto (limite/aprovação é controlado no GestãoClick) */}
-      <div className="mb-3">
-        <label className="form-label" htmlFor="desconto">Desconto (%)</label>
-        <input id="desconto" type="number" className="input" min={0} max={100} step={1} placeholder="0" value={descontoStr}
-          onChange={(e) => setDescontoStr(e.target.value)} />
-      </div>
-
-      <label className="form-label" htmlFor="valor-final">Valor Final</label>
-      <input id="valor-final" className="input input-mono mb-4"
-        style={{ color: desconto === 0 ? 'var(--color-success)' : 'var(--neutral-800)', fontSize: 20 }}
-        value={formatBRL(valorFinal)} readOnly tabIndex={-1} onClick={selectAll} />
+      <label className="form-label" htmlFor="valor-total">Valor total ({linhas.length} {linhas.length === 1 ? 'item' : 'itens'})</label>
+      <input id="valor-total" className="input input-mono mb-4"
+        style={{ color: 'var(--color-success)', fontSize: 20 }}
+        value={formatBRL(valorTotal)} readOnly tabIndex={-1} onClick={selectAll} />
 
       {!cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar ao GestãoClick (ou use <strong>Salvar</strong>).</span></div>}
       {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong> o orçamento.</span></div>}
