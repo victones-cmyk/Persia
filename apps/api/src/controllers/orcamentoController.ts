@@ -23,6 +23,8 @@ import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../serv
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
+import { resolverLoja } from '../lib/resolverLoja';
+import { reenviarCortina } from './orcamentoCortinaController';
 
 /** Entrada de um item (janela) vinda do frontend. */
 interface ItemEntrada {
@@ -133,17 +135,6 @@ function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<st
   }
 
   return { preparados, valorBrutoTotal };
-}
-
-/** Resolve a loja interna + gc_loja_id para o usuário (admin → loja matriz/SP). */
-export async function resolverLoja(lojaIdUsuario: string | null) {
-  if (lojaIdUsuario) {
-    const loja = await prisma.loja.findUnique({ where: { id: lojaIdUsuario } });
-    if (loja) return loja;
-  }
-  const matriz = await prisma.loja.findFirst({ orderBy: { nome: 'asc' } });
-  if (!matriz) throw new AppError(500, 'SEM_LOJA', 'Nenhuma loja cadastrada.');
-  return matriz;
 }
 
 /**
@@ -357,6 +348,9 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
     throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão para reenviar este orçamento.');
   }
   if (!orc.gc_cliente_id) throw new AppError(400, 'SEM_CLIENTE', 'Orçamento sem cliente vinculado.');
+
+  // Cortina tem montagem própria (produtos + serviço de instalação).
+  if (orc.tipo_produto === 'cortina') { await reenviarCortina(orc, sessao, res); return; }
 
   const snaps = (orc.itens_json as unknown as ItemSnapshot[] | null) ?? [];
   if (snaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento sem itens para reenviar.');

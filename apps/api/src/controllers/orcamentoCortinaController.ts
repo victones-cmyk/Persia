@@ -5,7 +5,7 @@
 // produto sintético "MODELO • TECIDO • L×A"; a instalação vira 1 linha de serviço.
 
 import type { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Orcamento } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { calcularCortinaMultiCamada, type CamadaCortina } from '../services/calc/cortina';
@@ -17,7 +17,7 @@ import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc, type LinhaServ
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
-import { resolverLoja } from './orcamentoController';
+import { resolverLoja } from '../lib/resolverLoja';
 import { MODELOS_CORTINA_LABEL, TIPO_CAMADAS_LABEL } from '../services/calc/cortinaLabels';
 
 interface CamadaEntrada { tecido_id: string; franzido?: number | string }
@@ -115,7 +115,7 @@ async function prepararCortina(c: CortinaEntrada): Promise<CortinaPreparada> {
     largura, altura,
     tecido_id: camadasSnap[0].tecido_id,
     tecido_nome: camadasSnap[0].tecido_nome,
-    snapshot: { ambiente: c.ambiente?.trim() || '', modelo: c.modelo, fixacao: c.fixacao, largura, altura, n_camadas: r.n_camadas, camadas: camadasSnap, acessorios: acessoriosSnap, valor_total: valorTotal },
+    snapshot: { ambiente: c.ambiente?.trim() || '', modelo: c.modelo, fixacao: c.fixacao, largura, altura, n_camadas: r.n_camadas, camadas: camadasSnap, acessorios: acessoriosSnap, valor_total: valorTotal, nome_produto: nomeProduto, valor_custo: valorCusto },
   };
 }
 
@@ -232,5 +232,68 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       },
     });
     res.status(502).json({ erro: { codigo: 'GC_ENVIO', message: gc?.message ?? 'Falha ao enviar ao GestãoClick' }, orcamento });
+  }
+}
+
+interface CortinaSnapshot { nome_produto?: string; valor_total?: number; valor_custo?: number }
+
+/** Reenvia um rascunho/erro de CORTINA ao GestãoClick (replay do snapshot salvo). */
+export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
+  const itens = orc.itens_json as { cortinas?: CortinaSnapshot[]; instalacao?: number } | null;
+  const cortinas = itens?.cortinas ?? [];
+  if (cortinas.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento de cortina sem itens para enviar.');
+  const valorInstalacao = Math.max(0, Number(itens?.instalacao) || 0);
+  const loja = await resolverLoja(orc.loja_id);
+
+  const criados: string[] = [];
+  try {
+    const linhas: LinhaProdutoGc[] = [];
+    for (const c of cortinas) {
+      const valor = Number(c.valor_total) || 0;
+      const custo = Number(c.valor_custo) || 0;
+      const produto = await criarProduto({ nome: String(c.nome_produto ?? 'Cortina'), valor_custo: custo, valor_venda: valor });
+      criados.push(produto.gc_produto_id);
+      linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: valor, valor_custo: custo });
+    }
+    const servicos: LinhaServicoGc[] = [];
+    if (valorInstalacao > 0) {
+      const servicoId = await resolverServicoInstalacao(undefined);
+      if (!servicoId) throw new AppError(400, 'SERVICO_INSTALACAO', 'Nenhum serviço de instalação encontrado no GestãoClick.');
+      servicos.push({ gc_servico_id: servicoId, valor_venda: valorInstalacao });
+    }
+    const codigo = Math.floor(Date.now() / 1000);
+    const gcOrc = await gcCriarOrcamento({
+      codigo,
+      cliente_id: orc.gc_cliente_id!,
+      produtos: linhas,
+      servicos,
+      data: new Date().toISOString().slice(0, 10),
+      usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
+      vendedor_id: sessao.gc_usuario_id,
+      loja_id: loja.gc_loja_id,
+    });
+    const atualizado = await prisma.orcamento.update({
+      where: { id: orc.id },
+      data: {
+        status: 'enviado',
+        gc_produto_id: criados[0] ?? null,
+        gc_orcamento_id: gcOrc.gc_orcamento_id,
+        gc_codigo: String(codigo),
+        payload_gc_enviado: gcOrc.payload as Prisma.InputJsonValue,
+        resposta_gc: gcOrc.resposta as Prisma.InputJsonValue,
+        erro_gc: null,
+      },
+    });
+    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_reenviado', detalhe: { orcamento_id: orc.id, tipo: 'cortina' } } });
+    res.json({ orcamento: atualizado });
+  } catch (err) {
+    for (const id of criados) { try { await deletarProduto(id); } catch { /* ignora */ } }
+    if (err instanceof AppError) throw err;
+    const gc = err instanceof GcError ? err : null;
+    const atualizado = await prisma.orcamento.update({
+      where: { id: orc.id },
+      data: { status: 'erro', erro_gc: gc ? `HTTP ${gc.status}: ${gc.message}` : String((err as Error).message) },
+    });
+    res.status(502).json({ erro: { codigo: 'GC_ENVIO', message: gc?.message ?? 'Falha ao enviar ao GestãoClick' }, orcamento: atualizado });
   }
 }
