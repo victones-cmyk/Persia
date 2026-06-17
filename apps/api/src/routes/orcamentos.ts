@@ -7,6 +7,7 @@ import {
   getOrcamento,
   listarOrcamentos,
   cancelarOrcamento,
+  atualizarOrcamento,
 } from '../controllers/orcamentoController';
 import { criarOrcamentoCortina } from '../controllers/orcamentoCortinaController';
 
@@ -18,6 +19,7 @@ router.post('/', criarOrcamento);
 router.post('/cortina', criarOrcamentoCortina);
 router.post('/:id/reenviar', reenviarOrcamento);
 router.post('/:id/cancelar', cancelarOrcamento);
+router.put('/:id', atualizarOrcamento);
 router.get('/:id', getOrcamento);
 
 export default router;

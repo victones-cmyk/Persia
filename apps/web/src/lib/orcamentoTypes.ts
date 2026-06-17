@@ -47,6 +47,7 @@ export interface ItemSnapshot {
 }
 
 export interface OrcamentoDetalhe extends OrcamentoListItem {
+  gc_cliente_id: string | null;
   tecido_nome: string;
   tecido_codigo_gc: string;
   largura_m: string;

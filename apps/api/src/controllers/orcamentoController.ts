@@ -449,6 +449,23 @@ export async function cancelarOrcamento(req: Request, res: Response): Promise<vo
   res.json({ orcamento: atualizado });
 }
 
+/** PUT /api/orcamentos/:id — edita o cliente de um rascunho/erro (antes de enviar). */
+export async function atualizarOrcamento(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const orc = await prisma.orcamento.findUnique({ where: { id: String(req.params.id) } });
+  if (!orc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+  if (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id) throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão.');
+  if (orc.status !== 'rascunho' && orc.status !== 'erro') {
+    throw new AppError(400, 'NAO_EDITAVEL', 'Só é possível editar orçamentos em rascunho ou com erro.');
+  }
+  const b = req.body ?? {};
+  const data: Prisma.OrcamentoUpdateInput = {};
+  if (b.gc_cliente_id !== undefined) data.gc_cliente_id = b.gc_cliente_id ? String(b.gc_cliente_id) : null;
+  if (b.nome_cliente !== undefined) data.nome_cliente = b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)';
+  const atualizado = await prisma.orcamento.update({ where: { id: orc.id }, data });
+  res.json({ orcamento: atualizado });
+}
+
 export async function getOrcamento(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
   const orc = await prisma.orcamento.findUnique({
