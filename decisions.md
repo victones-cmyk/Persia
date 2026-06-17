@@ -165,7 +165,7 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 ## 6. Pendências que dependem do Victor (não são decisões nossas)
 
-- **(Resolvido 16/06)** Cortina — modelos fechados pelo Victor (ver §9.5): 4 modelos cobrem tudo (Argolas = Franzido/varão), inversão = emenda, deslizante qtd automática, entretela só frente, tecido de 5 em 5 cm. **Resta:** confirmar o fator do Wave (3 m → 8,10 m, BLOQUEANTE-05) e o **envio ao GC** (acessórios cadastrados? + ideia do Victor p/ duplas/triplas — BLOQUEANTE-06).
+- **(Resolvido 16–17/06)** Cortina — modelos fechados (ver §9.5) e **envio ao GC implementado** (BLOQUEANTE-06, ver §9.7). **Resta só** confirmar o fator do Wave (3 m → 8,10 m, BLOQUEANTE-05 — Victor medindo mais larguras).
 - **Vincular cada vendedora** ao id de funcionário do GC (via Admin → Usuários).
 - **(Resolvido 17/06)** Desconto: **feature removida** da calculadora (fica 100% no GC). TC = **75%**. Fita = **2× a largura** (Victor) — o modelo atual já soma ~2× a largura no total; conferir na homologação (fita é só lista técnica/OS, não entra no preço).
 - **Homologação:** ~10 orçamentos plataforma × DecorSoft.
@@ -203,9 +203,11 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 ---
 
-## 9. Cortina — modelo Ilhós/Varão (Fase 7, 1º modelo, 15/06/2026)
+## 9. Cortina (Fase 7) — log de construção (15–17/06/2026)
 
-Fonte: planilhas "CORTINA SOB MEDIDA" v1→v3 do Victor + áudios do Wave + método de emenda da Cortinas Fênix. Motor em `services/calc/cortina.ts` (`calcularCortina`), funções puras + testes. Cobre **4 modelos**: Ilhós, Prega (=Americana/Macho/Fêmea), Franzido e Wave. **A UI/calculadora já existe** (ver §10.2) — é só cálculo; o **envio ao GestãoClick** ainda não está ligado (depende do mapeamento acessório→produto do GC). Modelos restantes (Prega Francesa, Argolas, Alças) e detalhes de trilho/inversão/costura: pendentes do Victor.
+> **STATUS ATUAL (17/06): cortina COMPLETA e em produção** — calculadora (modelo "+") + **envio ao GestãoClick**. Ver §7 (estado atual) e §9.7 (estrutura). As subseções abaixo (9.1–9.6) são o **histórico** de como o módulo foi construído; algumas frases refletem o estado da data do registro.
+
+Fonte: planilhas "CORTINA SOB MEDIDA" v1→v3 do Victor + áudios do Wave + método de emenda da Cortinas Fênix. Motor em `services/calc/cortina.ts` (`calcularCortina` + `calcularCortinaMultiCamada`), funções puras + testes. Cobre **4 modelos**: Ilhós, Prega (=Americana/Macho/Fêmea), Franzido e Wave. "Argolas" = Franzido no varão; Prega Francesa/Alças = variações de prega (sem fórmula distinta).
 
 ### 9.1 Regras confirmadas (modelo Ilhós)
 - **Tecido (método normal)** = `largura × franzido` (m lineares). O tecido roda deitado: a largura do rolo vira a altura da cortina. Tabela **SOB MEDIDA**.
@@ -221,7 +223,7 @@ Fonte: planilhas "CORTINA SOB MEDIDA" v1→v3 do Victor + áudios do Wave + mét
 - **Validação**: os 3 totais da planilha (R$ 672 / 852 / 847) e o exemplo de emenda batem 100% nos testes.
 
 ### 9.2 ✅ Pendências do item 5 — resolvidas pelo Victor (16/06/2026, ver §9.5)
-Modelos, trilho/fixação, inversão de tecido e costura fechados pelas respostas do Victor. Resta só o **envio ao GestãoClick** (BLOQUEANTE-06).
+Modelos, trilho/fixação, inversão de tecido e costura fechados pelas respostas do Victor. **Envio ao GestãoClick ✅ implementado** (ver §9.7).
 
 ### 9.3 Atualização planilha v.3 — Prega/Franzido + entretela (15/06/2026)
 Motor generalizado em `calcularCortina(e)` para 3 modelos: **ilhos**, **prega** (= Americana = Macho = Fêmea) e **franzido**. Regras confirmadas pelo Victor:
@@ -229,7 +231,7 @@ Motor generalizado em `calcularCortina(e)` para 3 modelos: **ilhos**, **prega** 
 - **Folga de topo (altura):** Ilhós 0,10 m · Prega 0,12 m (cabeçote) · Franzido 0,08 m. `barra_consumo = folga_topo + tamanho_barra × (1 simples | 2 dupla)`.
 - **Ferragem:** Ilhós → **ilhoses** `ceil(consumo/0,15)`; Prega/Franzido → **argolas** (varão) ou **rodízios/ganchos** (trilho/varão suíço) `ceil(largura/0,10)`. Tudo arredondado p/ cima até par (0–1 abertura) ou múltiplo de 4 (≥2). Varão duplo: ferragem por face (frente + trás).
 - **Fixação:** Ilhós só **varão**; Prega/Franzido servem **varão, trilho ou varão suíço**. **Trilho não usa ponteira**; varão/varão suíço usam (2/varão).
-- **Validação:** totais batem — Ilhós 1 tecido **685,50** (= 672 + entretela 13,50, confere com a célula F36 da v.3); Prega 1 tecido **676,50**; Franzido 1 tecido **663** (sem entretela). Motor: funções puras + testes (58/58). Ainda sem UI/rota/GC.
+- **Validação:** totais batem — Ilhós 1 tecido **685,50** (= 672 + entretela 13,50, confere com a célula F36 da v.3); Prega 1 tecido **676,50**; Franzido 1 tecido **663** (sem entretela). Motor: funções puras + testes (à época 58/58; hoje 65). [UI/rota/GC vieram depois — ver §9.7/§10.2.]
 
 ### 9.4 WAVE — tecido medido pelo Victor + acessórios deduzidos (16/06/2026)
 Aba "CORTINA WAVE" (serve só trilho/varão suíço). `modelo: 'wave'`:
@@ -267,7 +269,7 @@ Victor agrupou todos os acessórios (verificado via `scripts/verificar-acessorio
 | Tecido (cortina) | TECIDOS PARA CORTINA | 5913111 |
 | Instalação | serviço `/api/servicos` "INSTALAÇÃO" (valor digitado pelo vendedor) | — |
 
-Grupo **WAVE** (4 produtos): RODIZIO WAVE 62341215 (0,80) · BASE CLICK WAVE 46835072 (0,76) · CORDÃO WAVE 46835020 (5,24) · FITA WAVE AVULSA 46834988 (9,80). **ENTRETELA**: KOS TNT 10CM 414519 (1,50). Preços = tabela VAREJO. Com isso o **BLOQUEANTE-06 (a)** está resolvido; resta só a implementação (modelo "+" + seletor de acessório + envio + teste controlado de escrita).
+Grupo **WAVE** (4 produtos): RODIZIO WAVE 62341215 (0,80) · BASE CLICK WAVE 46835072 (0,76) · CORDÃO WAVE 46835020 (5,24) · FITA WAVE AVULSA 46834988 (9,80). **ENTRETELA**: KOS TNT 10CM 414519 (1,50). Preços = tabela VAREJO. ✅ **Implementado** (modelo "+" + seletor de acessório + envio + teste de escrita) — ver §9.7.
 
 Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura por grupo com cache 5 min) + `catalogos.listarServicos()` + `GET /api/calcular/cortina/acessorios`.
 
@@ -277,7 +279,7 @@ Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura po
 - **Camadas (tipo):** simples = 1 camada/varão; dupla = 2 camadas em **varões separados** + suporte do tipo duplo; tripla = 3. **Entretela só na camada da frente.** Varão e ponteiras por camada; **suporte** é 1 escolha por cortina (vendedor pega o produto simples/duplo/triplo), qtd pela largura.
 - **Acessórios:** o vendedor **escolhe o produto** de cada grupo (cor/medida); a **quantidade** vem do motor. Preço = VAREJO.
 - **Instalação:** **um valor por orçamento** (uma linha de serviço "INSTALAÇÃO" no GC; valor digitado pelo vendedor).
-- **Envio ao GC:** cada cortina vira **1 linha de produto sintético** nomeado `MODELO • TECIDO • L×A` com o valor total dela (tecidos + acessórios); + **1 linha de serviço** de instalação. Validar o payload (produto + serviço) num **teste controlado de escrita** (1 orçamento real), como na persiana.
+- **Envio ao GC ✅ (implementado, deploy dca818b):** cada cortina vira **1 linha de produto sintético** `MODELO • TECIDO • L×A` (valor = tecidos + acessórios) + **1 linha de serviço** de instalação, no payload `tipo:'ambos'`. O servidor **recalcula tudo** (`orcamentoCortinaController`, POST /orcamentos/cortina). Payload **validado** em teste controlado (orçamento R$ 790 = produto 650 + serviço 140, confirmado no GC e apagado). Backend: `gc/acessorios.ts`, POST /calcular/cortina/completa. Frontend: `CortinaCard` + `CortinaOrcamento`.
 
 ---
 
@@ -287,9 +289,10 @@ Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura po
 - **Decisão:** o orçamento de persiana aceita **N itens** (janelas). Produto Sob Medida é **único** para o orçamento; cada item tem sua coleção/cor/acionamento/medidas/TC/rolamento/base. Layout compacto (2 linhas por item), com **+ Adicionar item** e **Remover**. `POST /api/calcular/persiana/lote` calcula todos; o envio cria **N produtos + 1 orçamento com N linhas** no GC (desconto por item, soma exata RN-10). Itens persistidos em `Orcamento.itens_json` (snapshot) — migration `20260612060000_orcamento_itens_json`.
 - **Razão:** um orçamento real tem várias janelas; espelha o GestãoClick (orçamento com vários produtos).
 
-### 10.2 ✅ Calculadora de cortina na UI
-- **Decisão:** a aba **Cortina** do Novo Orçamento abre uma calculadora real (`CortinaForm` + `CortinaResultado`): modelo/fixação/config/medidas/franzido/barra/aberturas + busca de tecido (grupo 5913111, SOB MEDIDA). Endpoints `GET /api/calcular/cortina/tecidos` e `POST /api/calcular/cortina`. Mostra método (normal/emenda), metragem, valor do tecido e a **lista de itens (quantidades)**.
-- **Razão:** entregar a calculadora dos 4 modelos prontos sem esperar o módulo completo. **Sem envio ao GC ainda** (acessórios vêm do GC; mapeamento acessório→produto será definido com o Victor).
+### 10.2 ✅ Cortina na UI — orçamento completo (modelo "+") + envio ao GC (17/06/2026)
+- **Decisão:** a aba **Cortina** do Novo Orçamento é um **orçamento com vários ambientes** (`CortinaOrcamento` + `CortinaCard`): cada cortina tem ambiente, modelo, fixação, medidas, **1–3 tecidos (camadas) via "+"** e **seletor de produto por acessório** (grupo do GC, preço VAREJO), com total por cortina + **instalação** + total geral. Endpoints: `GET /api/calcular/cortina/tecidos`, `GET /api/calcular/cortina/acessorios`, `POST /api/calcular/cortina/completa`; envio em `POST /api/orcamentos/cortina`. **Salvar/Enviar** como na persiana.
+- **Substituiu** os antigos `CortinaForm`/`CortinaResultado` (calculadora de 1 cortina, sem envio), removidos. Detalhes da estrutura/envio em §9.7.
+- **Razão:** modelo "+" do Victor (várias janelas, camadas por cortina) + "o que sai da calculadora é o que está no GestãoClick".
 
 ### 10.3 ✅ Salvar (rascunho) além de Enviar
 - **Decisão:** dois botões no resultado da persiana — **Salvar** grava `status='rascunho'` localmente (sem tocar no GC; cliente e aprovação de desconto opcionais), e **Enviar** faz o fluxo ao GestãoClick. Um rascunho pode ser **enviado depois** pela tela de detalhe (`apenas_salvar` no `criarOrcamento`).
