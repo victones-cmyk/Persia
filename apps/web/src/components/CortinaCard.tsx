@@ -223,7 +223,7 @@ export function CortinaCard({
         </div>
         <div>
           <label className="form-label">Tamanho da barra (m)</label>
-          <input type="number" className="input" min={0} step={0.01} value={tamanhoBarra} onChange={(e) => setTamanhoBarra(e.target.value)} placeholder="0,10" />
+          <input type="number" className="input" min={0} step={0.01} value={tamanhoBarra} onChange={(e) => setTamanhoBarra(e.target.value)} placeholder="" />
         </div>
         <div>
           <label className="form-label">Tipo de barra</label>
@@ -255,7 +255,7 @@ export function CortinaCard({
               {!isWave && (
                 <div style={{ width: 90 }}>
                   <span className="text-2xs-ui text-neutral-500">Franzido</span>
-                  <input type="number" className="input" min={1} step={0.1} value={c.franzido} placeholder="3" onChange={(e) => setCamada(c.id, { franzido: e.target.value })} />
+                  <input type="number" className="input" min={1} step={0.1} value={c.franzido} placeholder="" onChange={(e) => setCamada(c.id, { franzido: e.target.value })} />
                 </div>
               )}
               {camadas.length > 1 && (

@@ -14,6 +14,19 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import type { OrcamentoDetalhe as Orc } from '../lib/orcamentoTypes';
 import type { ClienteResumo } from '../lib/calcTypes';
 import { TIPOS_PERSIANA, ACIONAMENTOS } from '../lib/calcTypes';
+import { MODELOS_CORTINA, FIXACOES_CORTINA } from '../lib/cortinaTypes';
+
+// Snapshot de uma cortina salvo em itens_json (estrutura do servidor).
+interface CortinaCamadaSnap { tecido_nome: string; metragem: number; valor_tecido: number }
+interface CortinaAcessorioSnap { item: string; produto_nome?: string; quantidade: number; preco: number; subtotal: number }
+interface CortinaSnap {
+  ambiente?: string; modelo: string; fixacao: string; largura: number; altura: number;
+  n_camadas: number; camadas: CortinaCamadaSnap[]; acessorios: CortinaAcessorioSnap[];
+  valor_total: number; nome_produto?: string;
+}
+
+const modeloLabel = (v: string) => MODELOS_CORTINA.find((m) => m.value === v)?.label ?? v;
+const fixacaoLabel = (v: string) => FIXACOES_CORTINA.find((f) => f.value === v)?.label ?? v;
 
 const tipoLabel = (v: string) => TIPOS_PERSIANA.find((t) => t.value === v)?.label ?? v.replace(/_/g, ' ');
 const acionamentoLabel = (v: string | null) => (v ? ACIONAMENTOS.find((a) => a.value === v)?.label ?? v.replace(/_/g, ' ') : '—');
@@ -23,6 +36,50 @@ function Linha({ label, valor }: { label: string; valor: React.ReactNode }) {
     <div className="flex justify-between py-2 border-b border-neutral-200 text-md-ui">
       <span className="text-neutral-500">{label}</span>
       <span className="text-neutral-800 font-medium text-right">{valor}</span>
+    </div>
+  );
+}
+
+/** Detalhe de UMA cortina: modelo/fixação/medidas + camadas (tecidos) + acessórios. */
+function CortinaItem({ c, indice }: { c: CortinaSnap; indice: number }) {
+  return (
+    <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
+      <div className="flex justify-between items-start gap-2 mb-1">
+        <span className="text-sm-ui font-semibold text-neutral-800">
+          {indice + 1}. {c.ambiente?.trim() || c.nome_produto || `Cortina ${indice + 1}`}
+        </span>
+        <span className="font-mono font-semibold tabular-nums whitespace-nowrap">{formatBRL(Number(c.valor_total))}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs-ui text-neutral-600 mb-2">
+        <span>Modelo: {modeloLabel(c.modelo)}</span>
+        <span>Fixação: {fixacaoLabel(c.fixacao)}</span>
+        <span>Medidas: {formatNum(Number(c.largura))} × {formatNum(Number(c.altura))} m</span>
+        <span>Camadas: {c.n_camadas}</span>
+      </div>
+
+      {c.camadas?.length > 0 && (
+        <div className="mb-2">
+          <div className="text-2xs-ui font-bold uppercase text-neutral-500 mb-0.5">Tecidos</div>
+          {c.camadas.map((cam, j) => (
+            <div key={j} className="flex justify-between text-xs-ui text-neutral-700">
+              <span>{j === 0 ? 'Frente' : `Camada ${j + 1}`}: {cam.tecido_nome} — {formatNum(Number(cam.metragem))} m</span>
+              <span className="font-mono tabular-nums">{formatBRL(Number(cam.valor_tecido))}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {c.acessorios?.length > 0 && (
+        <div>
+          <div className="text-2xs-ui font-bold uppercase text-neutral-500 mb-0.5">Acessórios</div>
+          {c.acessorios.map((a, j) => (
+            <div key={j} className="flex justify-between text-xs-ui text-neutral-700">
+              <span>{a.produto_nome || a.item} · {formatNum(Number(a.quantidade), Number.isInteger(Number(a.quantidade)) ? 0 : 2)} un</span>
+              <span className="font-mono tabular-nums">{formatBRL(Number(a.subtotal))}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -116,6 +173,13 @@ export function OrcamentoDetalhe() {
     );
   }
 
+  // Cortina guarda { cortinas:[...], instalacao } em itens_json (não é array de itens).
+  const ehCortina = orc.tipo_produto === 'cortina';
+  const cortinaJson = ehCortina ? (orc.itens_json as unknown as { cortinas?: CortinaSnap[]; instalacao?: number } | null) : null;
+  const cortinaSnaps = cortinaJson?.cortinas ?? [];
+  const instalacaoVal = Number(cortinaJson?.instalacao ?? 0);
+  const persianaItens = !ehCortina && Array.isArray(orc.itens_json) ? orc.itens_json : [];
+
   return (
     <div>
       <Link to="/orcamentos" className="text-sm-ui text-neutral-600 inline-flex items-center gap-2 mb-3">
@@ -144,14 +208,29 @@ export function OrcamentoDetalhe() {
 
         <Linha label="Produto" valor={tipoLabel(orc.tipo_produto)} />
 
-        {/* Itens (janelas) do orçamento */}
-        {orc.itens_json && orc.itens_json.length > 0 ? (
+        {/* Itens do orçamento */}
+        {ehCortina && cortinaSnaps.length > 0 ? (
           <div className="mt-3 mb-1">
             <div className="text-xs-ui font-bold text-neutral-600 mb-2">
-              {orc.itens_json.length} {orc.itens_json.length === 1 ? 'item' : 'itens'}
+              {cortinaSnaps.length} {cortinaSnaps.length === 1 ? 'cortina' : 'cortinas'}
             </div>
             <div className="space-y-2">
-              {orc.itens_json.map((it, i) => (
+              {cortinaSnaps.map((c, i) => <CortinaItem key={i} c={c} indice={i} />)}
+              {instalacaoVal > 0 && (
+                <div className="flex justify-between items-center bg-neutral-50 border border-neutral-300 rounded-sm p-3">
+                  <span className="text-sm-ui font-semibold text-neutral-800">Instalação</span>
+                  <span className="font-mono font-semibold tabular-nums">{formatBRL(instalacaoVal)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : persianaItens.length > 0 ? (
+          <div className="mt-3 mb-1">
+            <div className="text-xs-ui font-bold text-neutral-600 mb-2">
+              {persianaItens.length} {persianaItens.length === 1 ? 'item' : 'itens'}
+            </div>
+            <div className="space-y-2">
+              {persianaItens.map((it, i) => (
                 <div key={i} className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
                   <div className="flex justify-between items-start gap-2 mb-1">
                     <span className="text-sm-ui font-semibold text-neutral-800">{i + 1}. {it.tecido_nome}</span>
