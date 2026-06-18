@@ -11,6 +11,7 @@ export function ConfirmModal({
   confirmarLabel = 'Confirmar',
   cancelarLabel = 'Cancelar',
   perigo = false,
+  ocultarCancelar = false,
   onConfirmar,
   onCancelar,
 }: {
@@ -20,6 +21,7 @@ export function ConfirmModal({
   confirmarLabel?: string;
   cancelarLabel?: string;
   perigo?: boolean;
+  ocultarCancelar?: boolean; // mostra só o botão de confirmar (aviso de 1 botão)
   onConfirmar: () => void;
   onCancelar: () => void;
 }) {
@@ -44,7 +46,7 @@ export function ConfirmModal({
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <button type="button" className="btn btn-default" onClick={onCancelar}>{cancelarLabel}</button>
+          {!ocultarCancelar && <button type="button" className="btn btn-default" onClick={onCancelar}>{cancelarLabel}</button>}
           <button type="button" className={perigo ? 'btn btn-danger' : 'btn btn-success'} onClick={onConfirmar} autoFocus>{confirmarLabel}</button>
         </div>
       </div>

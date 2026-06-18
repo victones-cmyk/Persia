@@ -40,7 +40,7 @@ export function AdminLog() {
 
   return (
     <div>
-      <h1 className="text-2xl-ui mb-4">Log de Ações</h1>
+      <h1 className="text-2xl-ui font-bold text-neutral-800 mb-4">Log de Ações</h1>
       <div className="card p-0 overflow-hidden">
         <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>

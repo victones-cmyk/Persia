@@ -95,7 +95,7 @@ export function AdminUsuarios() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl-ui">Usuários</h1>
+        <h1 className="text-2xl-ui font-bold text-neutral-800">Usuários</h1>
         <button className="btn btn-success" onClick={() => setEditando(null)}>
           <FontAwesomeIcon icon={faPlus} /> Adicionar Usuário
         </button>

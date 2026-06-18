@@ -113,7 +113,7 @@ npm ci && npx prisma migrate deploy && npm run build && npm start
 - PDF descartado: GestãoClick gera OS, etiqueta e PDF após receber orçamento via API
 - Catálogo de tecidos: não replicado localmente; lido do GestãoClick por sessão de formulário
 - p-queue singleton: concurrency:1, intervalCap:3, interval:1000ms
-- Estado calculadora: React state (in-memory); sem rascunho persistido; orçamento vai ao GC imediatamente
+- Estado calculadora: React state + **autosave LOCAL no navegador** (localStorage, `lib/rascunhoLocal.ts`) que recupera o orçamento em preenchimento se fechar/recarregar sem querer (18/06/2026 — substitui o "in-memory puro"). Rascunho persistido no banco continua via "Salvar como rascunho". Orçamento só vai ao GC ao Enviar.
 
 ## BLOQUEANTES ATIVOS
 - ~~BLOQUEANTE-01: Credenciais GestãoClick~~ — RESOLVIDO em 11/06/2026. Preencher GESTAOCLICK_ACCESS_TOKEN e GESTAOCLICK_SECRET_ACCESS_TOKEN no .env.

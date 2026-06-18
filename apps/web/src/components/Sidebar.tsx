@@ -1,6 +1,7 @@
 // apps/web/src/components/Sidebar.tsx
 // Navegação lateral persistente de 220px (DS §7). Seção admin só para perfil admin.
 
+import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
@@ -12,6 +13,7 @@ import {
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { useAuth } from '../hooks/useAuth';
 import { useNavGuard } from '../hooks/useNavGuard';
+import { ConfirmModal } from './ConfirmModal';
 
 interface Item {
   to: string;
@@ -30,7 +32,7 @@ const ITENS_ADMIN: Item[] = [
   { to: '/admin/log-acoes', label: 'Log de Ações', icon: faClockRotateLeft },
 ];
 
-function Link({ item }: { item: Item }) {
+function Link({ item, onAvisoNaoSalvo }: { item: Item; onAvisoNaoSalvo: () => void }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { guard, isDirty } = useNavGuard();
@@ -41,11 +43,9 @@ function Link({ item }: { item: Item }) {
       className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')}
       onClick={(e) => {
         e.preventDefault();
-        // Clicou no item da própria rota atual (ex.: "Novo Orçamento" estando nele):
-        // se houver dados não salvos, confirma e volta para a tela inicial (Orçamentos);
-        // sem dados, não faz nada (já está na tela).
+        // Já está na tela de Novo Orçamento com dados não salvos: avisa (não recria nem sai).
         if (item.to === pathname) {
-          if (isDirty()) guard(() => navigate('/orcamentos'));
+          if (item.to === '/orcamentos/novo' && isDirty()) onAvisoNaoSalvo();
           return;
         }
         // Demais itens: passa pela guarda (pede confirmação se houver dados não salvos).
@@ -61,6 +61,7 @@ function Link({ item }: { item: Item }) {
 export function Sidebar() {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin';
+  const [avisoAberto, setAvisoAberto] = useState(false);
 
   return (
     <nav
@@ -69,7 +70,7 @@ export function Sidebar() {
     >
       <div className="flex flex-col">
         {ITENS_GERAIS.map((item) => (
-          <Link key={item.to} item={item} />
+          <Link key={item.to} item={item} onAvisoNaoSalvo={() => setAvisoAberto(true)} />
         ))}
       </div>
 
@@ -80,11 +81,21 @@ export function Sidebar() {
           </div>
           <div className="flex flex-col">
             {ITENS_ADMIN.map((item) => (
-              <Link key={item.to} item={item} />
+              <Link key={item.to} item={item} onAvisoNaoSalvo={() => setAvisoAberto(true)} />
             ))}
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        aberto={avisoAberto}
+        titulo="Orçamento não salvo"
+        mensagem="O orçamento atual ainda não foi salvo. Continue de onde parou e use Salvar ou Enviar quando terminar."
+        confirmarLabel="Continuar"
+        ocultarCancelar
+        onConfirmar={() => setAvisoAberto(false)}
+        onCancelar={() => setAvisoAberto(false)}
+      />
     </nav>
   );
 }

@@ -26,6 +26,7 @@ import {
   type CalcularLoteResposta,
   type OrcamentoCalculado,
 } from '../lib/calcTypes';
+import type { PersianaSnapshot, PersianaItemSnap } from '../lib/rascunhoLocal';
 
 interface ItemForm {
   id: string;
@@ -65,20 +66,54 @@ function inputParaForm(it: ItemInput): ItemForm {
   };
 }
 
+/** Converte um item bruto salvo (autosave local) no estado do formulário. */
+function snapParaForm(s: PersianaItemSnap): ItemForm {
+  return {
+    id: crypto.randomUUID(),
+    tecido_id: s.tecido_id,
+    cor: s.cor as ItemForm['cor'],
+    acionamento: s.acionamento as ItemForm['acionamento'],
+    largura: s.largura,
+    altura: s.altura,
+    tc: s.tc,
+    tcManual: s.tcManual,
+    rolamento: s.rolamento,
+    base: s.base,
+  };
+}
+
+function formParaSnap(it: ItemForm): PersianaItemSnap {
+  return {
+    tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
+    largura: it.largura, altura: it.altura, tc: it.tc, tcManual: it.tcManual,
+    rolamento: it.rolamento, base: it.base,
+  };
+}
+
 export function PersianaForm({
   onResult,
   inicial,
+  restauro,
   onDirtyChange,
+  onSnapshot,
 }: {
   onResult: (dados: OrcamentoCalculado | null) => void;
   inicial?: { tipo: TipoPersiana; itens: ItemInput[] };
+  restauro?: PersianaSnapshot; // autosave local (estado bruto)
   onDirtyChange?: (sujo: boolean) => void;
+  onSnapshot?: (snap: PersianaSnapshot) => void;
 }) {
-  const [tipo, setTipo] = useState<TipoPersiana | ''>(inicial?.tipo ?? '');
-  const [itens, setItens] = useState<ItemForm[]>(inicial && inicial.itens.length > 0 ? inicial.itens.map(inputParaForm) : [itemVazio()]);
+  const [tipo, setTipo] = useState<TipoPersiana | ''>((restauro?.tipo as TipoPersiana | '') ?? inicial?.tipo ?? '');
+  const [itens, setItens] = useState<ItemForm[]>(
+    restauro && restauro.itens.length > 0
+      ? restauro.itens.map(snapParaForm)
+      : inicial && inicial.itens.length > 0
+        ? inicial.itens.map(inputParaForm)
+        : [itemVazio()],
+  );
   const [mesmoAmbiente, setMesmoAmbiente] = useState(false);
-  // Na 1ª carga de um rascunho em edição, o tipo já vem preenchido — não limpar o tecido.
-  const pularResetTecido = useRef(!!inicial);
+  // Na 1ª carga (edição ou recuperação) o tipo já vem preenchido — não limpar o tecido.
+  const pularResetTecido = useRef(!!(restauro || inicial));
 
   const [tecidos, setTecidos] = useState<TecidoOpcao[]>([]);
   const [carregandoTecidos, setCarregandoTecidos] = useState(false);
@@ -142,6 +177,8 @@ export function PersianaForm({
   const sujo = tipo !== '' || itens.some((it) =>
     it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base);
   useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
+  // Autosave local: emite o estado bruto sempre que muda.
+  useEffect(() => { onSnapshot?.({ tipo, itens: itens.map(formParaSnap) }); }, [tipo, itens, onSnapshot]);
 
   function toInput(it: ItemForm): ItemInput {
     return {

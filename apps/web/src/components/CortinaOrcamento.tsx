@@ -15,16 +15,19 @@ import { useToast } from '../hooks/useToast';
 import type { TecidoOpcao, ClienteResumo, OrcamentoSalvo } from '../lib/calcTypes';
 import type { GcStatus } from '../hooks/useGcHealth';
 import type { AcessoriosCortinaResp } from '../lib/cortinaTypes';
+import type { CortinaSnapshot, CortinaCardSnap } from '../lib/rascunhoLocal';
 
 export function CortinaOrcamento({
-  cliente, gcStatus, gcUsuarioId, inicial, editarId, onDirtyChange, onEnviado,
+  cliente, gcStatus, gcUsuarioId, inicial, restauro, editarId, onDirtyChange, onSnapshot, onEnviado,
 }: {
   cliente: ClienteResumo | null;
   gcStatus: GcStatus;
   gcUsuarioId: string | null;
   inicial?: { cortinas: CortinaInicial[]; instalacao_valor: number };
+  restauro?: CortinaSnapshot; // autosave local
   editarId?: string | null;
   onDirtyChange?: (sujo: boolean) => void; // guarda de navegação
+  onSnapshot?: (snap: CortinaSnapshot) => void; // autosave local
   onEnviado: (orc: OrcamentoSalvo) => void;
 }) {
   const { showToast } = useToast();
@@ -33,17 +36,22 @@ export function CortinaOrcamento({
   const [carregando, setCarregando] = useState(true);
   const [erroCarga, setErroCarga] = useState(false);
 
-  // Estado inicial das cortinas (uma vazia, ou as do rascunho em edição).
+  // Estado inicial das cortinas: recuperação local (restauro) > edição (inicial) > uma vazia.
   const [estadoInicial] = useState(() => {
+    if (restauro && restauro.cortinas.length > 0) {
+      return restauro.cortinas.map((c) => ({ id: crypto.randomUUID(), inicial: null as CortinaInicial | null, restauro: c as CortinaCardSnap | undefined }));
+    }
     const cs = inicial?.cortinas ?? [];
-    return (cs.length > 0 ? cs : [null]).map((c) => ({ id: crypto.randomUUID(), inicial: c }));
+    return (cs.length > 0 ? cs : [null]).map((c) => ({ id: crypto.randomUUID(), inicial: c, restauro: undefined as CortinaCardSnap | undefined }));
   });
   const iniciais = useRef<Record<string, CortinaInicial | null>>(Object.fromEntries(estadoInicial.map((e) => [e.id, e.inicial])));
+  const restauros = useRef<Record<string, CortinaCardSnap | undefined>>(Object.fromEntries(estadoInicial.map((e) => [e.id, e.restauro])));
 
   const [ids, setIds] = useState<string[]>(estadoInicial.map((e) => e.id));
   const [resumos, setResumos] = useState<Record<string, CortinaResumo>>({});
   const [preenchidos, setPreenchidos] = useState<Record<string, boolean>>({});
-  const [instalacao, setInstalacao] = useState(inicial?.instalacao_valor ? String(inicial.instalacao_valor) : '');
+  const [snaps, setSnaps] = useState<Record<string, CortinaCardSnap>>({});
+  const [instalacao, setInstalacao] = useState(restauro?.instalacao_valor ?? (inicial?.instalacao_valor ? String(inicial.instalacao_valor) : ''));
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [salvarAberto, setSalvarAberto] = useState(false);
@@ -64,15 +72,24 @@ export function CortinaOrcamento({
 
   const setResumo = (id: string, r: CortinaResumo) => setResumos((m) => ({ ...m, [id]: r }));
   const setPreenchido = (id: string, v: boolean) => setPreenchidos((m) => (m[id] === v ? m : { ...m, [id]: v }));
+  const setSnap = (id: string, s: CortinaCardSnap) => setSnaps((m) => ({ ...m, [id]: s }));
   const removerCortina = (id: string) => {
     setIds((xs) => xs.filter((x) => x !== id));
     setResumos((m) => { const n = { ...m }; delete n[id]; return n; });
     setPreenchidos((m) => { const n = { ...m }; delete n[id]; return n; });
+    setSnaps((m) => { const n = { ...m }; delete n[id]; return n; });
   };
 
   // "Sujo" = instalação preenchida ou alguma cortina tocada (guarda de navegação).
   const sujo = instalacao.trim() !== '' || ids.some((id) => preenchidos[id]);
   useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
+
+  // Autosave local: agrega os estados brutos das cortinas + instalação.
+  useEffect(() => {
+    if (!onSnapshot) return;
+    const cortinas = ids.map((id) => snaps[id]).filter(Boolean) as CortinaCardSnap[];
+    onSnapshot({ cortinas, instalacao_valor: instalacao });
+  }, [ids, snaps, instalacao, onSnapshot]);
 
   const totalCortinas = ids.reduce((s, id) => s + (resumos[id]?.total ?? 0), 0);
   const valorInstalacao = Math.max(0, Number(instalacao) || 0);
@@ -127,8 +144,10 @@ export function CortinaOrcamento({
             tecidos={tecidos}
             opcoes={opcoes}
             inicial={iniciais.current[id] ?? undefined}
+            restauro={restauros.current[id]}
             onChange={(r) => setResumo(id, r)}
             onPreenchidoChange={(v) => setPreenchido(id, v)}
+            onSnapshot={(s) => setSnap(id, s)}
             onRemover={() => setRemoverCortinaId(id)}
             podeRemover={ids.length > 1}
           />

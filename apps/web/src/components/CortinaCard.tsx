@@ -12,6 +12,7 @@ import { TecidoSearch } from './TecidoSearch';
 import { MedidaInput } from './MedidaInput';
 import { formatBRL, formatNum } from '../lib/formatacao';
 import type { TecidoOpcao } from '../lib/calcTypes';
+import type { CortinaCardSnap } from '../lib/rascunhoLocal';
 import {
   MODELOS_CORTINA, FIXACOES_CORTINA, FIXACOES_POR_MODELO, TIPO_POR_CAMADAS,
   type ModeloCortina, type FixacaoCortina, type AcessoriosCortinaResp,
@@ -44,34 +45,38 @@ const novaCamada = (): CamadaState => ({ id: crypto.randomUUID(), tecidoId: '', 
 export type CortinaInicial = NonNullable<CortinaResumo['payload']>;
 
 export function CortinaCard({
-  indice, tecidos, opcoes, inicial, onChange, onRemover, podeRemover, onPreenchidoChange,
+  indice, tecidos, opcoes, inicial, restauro, onChange, onRemover, podeRemover, onPreenchidoChange, onSnapshot,
 }: {
   indice: number;
   tecidos: TecidoOpcao[];
   opcoes: AcessoriosCortinaResp | null; // null enquanto carrega em segundo plano
-  inicial?: CortinaInicial; // pré-preenchido ao editar um rascunho
+  inicial?: CortinaInicial; // pré-preenchido ao editar um rascunho (do banco)
+  restauro?: CortinaCardSnap; // estado bruto recuperado do autosave local
   onChange: (resumo: CortinaResumo) => void;
   onRemover: () => void;
   podeRemover: boolean;
   onPreenchidoChange?: (preenchido: boolean) => void; // guarda de navegação
+  onSnapshot?: (snap: CortinaCardSnap) => void; // autosave local
 }) {
-  const [ambiente, setAmbiente] = useState(inicial?.ambiente ?? '');
-  const [modelo, setModelo] = useState<ModeloCortina | ''>(inicial?.modelo ?? '');
-  const [fixacao, setFixacao] = useState<FixacaoCortina>(inicial?.fixacao ?? 'varao');
-  const [largura, setLargura] = useState(inicial ? String(inicial.largura) : '');
-  const [altura, setAltura] = useState(inicial ? String(inicial.altura) : '');
-  const [tamanhoBarra, setTamanhoBarra] = useState(inicial?.tamanho_barra != null ? String(inicial.tamanho_barra) : ''); // vazio = padrão 0,10 m no servidor
-  const [tipoBarra, setTipoBarra] = useState<'simples' | 'dupla' | ''>(inicial?.tipo_barra ?? '');
+  const [ambiente, setAmbiente] = useState(restauro?.ambiente ?? inicial?.ambiente ?? '');
+  const [modelo, setModelo] = useState<ModeloCortina | ''>((restauro?.modelo as ModeloCortina | '') ?? inicial?.modelo ?? '');
+  const [fixacao, setFixacao] = useState<FixacaoCortina>((restauro?.fixacao as FixacaoCortina) ?? inicial?.fixacao ?? 'varao');
+  const [largura, setLargura] = useState(restauro?.largura ?? (inicial ? String(inicial.largura) : ''));
+  const [altura, setAltura] = useState(restauro?.altura ?? (inicial ? String(inicial.altura) : ''));
+  const [tamanhoBarra, setTamanhoBarra] = useState(restauro?.tamanhoBarra ?? (inicial?.tamanho_barra != null ? String(inicial.tamanho_barra) : '')); // vazio = padrão 0,10 m no servidor
+  const [tipoBarra, setTipoBarra] = useState<'simples' | 'dupla' | ''>((restauro?.tipoBarra as 'simples' | 'dupla' | '') ?? inicial?.tipo_barra ?? '');
   const [camadas, setCamadas] = useState<CamadaState[]>(
-    inicial && inicial.camadas.length > 0
-      ? inicial.camadas.map((c) => ({ id: crypto.randomUUID(), tecidoId: c.tecido_id, franzido: c.franzido != null ? String(c.franzido) : '' }))
-      : [novaCamada()],
+    restauro && restauro.camadas.length > 0
+      ? restauro.camadas.map((c) => ({ id: crypto.randomUUID(), tecidoId: c.tecidoId, franzido: c.franzido }))
+      : inicial && inicial.camadas.length > 0
+        ? inicial.camadas.map((c) => ({ id: crypto.randomUUID(), tecidoId: c.tecido_id, franzido: c.franzido != null ? String(c.franzido) : '' }))
+        : [novaCamada()],
   );
   const [acessorioSel, setAcessorioSel] = useState<Record<string, string>>(
-    inicial ? Object.fromEntries(inicial.acessorios.filter((a) => a.categoria).map((a) => [a.categoria as string, a.produto_id])) : {},
+    restauro?.acessorioSel ?? (inicial ? Object.fromEntries(inicial.acessorios.filter((a) => a.categoria).map((a) => [a.categoria as string, a.produto_id])) : {}),
   ); // categoria → produto_id
   const [qtdManual, setQtdManual] = useState<Record<string, string>>(
-    inicial ? Object.fromEntries(inicial.acessorios.map((a) => [a.item, String(a.quantidade)])) : {},
+    restauro?.qtdManual ?? (inicial ? Object.fromEntries(inicial.acessorios.map((a) => [a.item, String(a.quantidade)])) : {}),
   ); // item → qtd digitada (não-auto, ex.: suporte). String p/ permitir campo vazio.
 
   const [calc, setCalc] = useState<CalcCortinaCompletaResp | null>(null);
@@ -175,6 +180,18 @@ export function CortinaCard({
     tamanhoBarra !== '' || tipoBarra !== '' || camadas.some((c) => c.tecidoId || c.franzido) ||
     Object.keys(acessorioSel).length > 0 || Object.values(qtdManual).some((v) => v !== '');
   useEffect(() => { onPreenchidoChange?.(preenchido); }, [preenchido, onPreenchidoChange]);
+
+  // Autosave local: emite o estado bruto da cortina sempre que muda.
+  // onSnapshot via ref (não nas deps) para não disparar a cada render do pai.
+  const onSnapshotRef = useRef(onSnapshot);
+  onSnapshotRef.current = onSnapshot;
+  useEffect(() => {
+    onSnapshotRef.current?.({
+      ambiente, modelo, fixacao, largura, altura, tamanhoBarra, tipoBarra,
+      camadas: camadas.map((c) => ({ tecidoId: c.tecidoId, franzido: c.franzido })),
+      acessorioSel, qtdManual,
+    });
+  }, [ambiente, modelo, fixacao, largura, altura, tamanhoBarra, tipoBarra, camadas, acessorioSel, qtdManual]);
 
   const setCamada = (id: string, patch: Partial<CamadaState>) =>
     setCamadas((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));

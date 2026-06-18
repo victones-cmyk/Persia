@@ -173,14 +173,15 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
 
 ---
 
-## 7. Estado atual (17/06/2026)
+## 7. Estado atual (18/06/2026 — entrada em homologação)
 
-- **Em produção** (commit `4a0998c`): https://persia-api-production.up.railway.app
+- **Em produção** (Railway, auto-deploy do `main`; commit atual via `/api/health`): https://persia-api-production.up.railway.app
   - **Persiana** completa (multi-itens, **cálculo em tempo real**, largura via atributo, TC 75%, **sem desconto**, validação de obrigatórios), envio ao GC.
-  - **Cortina** completa: modelo "+" (vários ambientes + 1–3 camadas), seletor de acessório por grupo (preço VAREJO do GC), instalação como serviço, **envio ao GestãoClick** (1 produto sintético por cortina + 1 linha de serviço, `tipo:'ambos'`), inclusive **salvar como rascunho e enviar depois**. Servidor recalcula tudo. **65 testes.**
-  - Login "Usuário" + senha provisória, seletor de vendedor (funcionários GC), busca de tecido, admin com CRUD/excluir usuário. Detalhe do orçamento edita cliente/salva/cancela. Auto-deploy GitHub→Railway OK.
-- **Validação:** teste controlado de escrita da cortina OK (orçamento R$ 790 = produto + serviço, confirmado no GC e apagado).
-- **Pendências:** confirmar fator do Wave (BLOQUEANTE-05, Victor medindo mais larguras); homologação/go-live (Fase 8); conferir fita 2× largura (OS) na homologação.
+  - **Cortina** completa: modelo "+" (vários ambientes + 1–3 camadas), seletor de acessório por grupo (preço VAREJO do GC), instalação como serviço, **envio ao GestãoClick** (1 produto sintético por cortina + 1 linha de serviço, `tipo:'ambos'`), **salvar como rascunho**, **editar rascunho reabrindo a calculadora inteira** (`entrada_json` + `editar_id`) e **detalhe do orçamento com camadas + acessórios**. Servidor recalcula tudo. **65 testes.**
+  - Login "Usuário" + senha provisória, seletor de vendedor (funcionários **ativos** do GC), busca de tecido, admin com CRUD/excluir usuário. Auto-deploy GitHub→Railway OK.
+  - **UX:** confirmação antes de enviar ao GC; modais 100% in-app (sem pop-up do navegador); **guarda de navegação** + **autosave local** (recupera orçamento não salvo ao reabrir o navegador); títulos das telas em negrito; marca da navbar clicável → Orçamentos; cache do GC reduzido a 1 min.
+- **Validação (18/06):** teste controlado de escrita da cortina OK (R$ 790, confirmado e apagado). **Replicação de 2 orçamentos reais do GC** (ver §10.15): ILHÓS bate ~0,7%; WAVE e varão a revisar.
+- **Pendências:** fator do Wave (BLOQUEANTE-05); achados da validação §10.15 (varão por barra, qtd ilhós, acessórios wave); **homologação pelo Victor** (Fase 8); conferir fita 2× largura (OS).
 
 ---
 
@@ -358,3 +359,18 @@ Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura po
 - **Detalhe do orçamento de CORTINA:** agora exibe o detalhamento completo — por cortina: modelo, fixação, medidas, **camadas (tecidos com metragem e valor)** e **acessórios (produto, qtd e subtotal)** + linha de **instalação**. (Cortina guarda `{cortinas, instalacao}` em `itens_json` — antes caía no fallback e mostrava só tecido/medidas.)
 - **Novo Orçamento:** removidas as descrições "7 tipos (rolo e romana)" / "15 tipos sob medida"; ícone (2x) e título (text-xl) maiores nos cards Persiana/Cortina.
 - **Limpeza de base:** exclusão de todos os orçamentos feita via SQL no painel do Railway (`DELETE FROM itens_orcamento; DELETE FROM orcamentos;`) — não afeta o GestãoClick.
+
+### 10.14 ✅ 6ª rodada de feedback (18/06/2026)
+- **Títulos das telas** (Orçamentos, Usuários, Novo Orçamento, Log) em **negrito** + cor mais forte (`font-bold text-neutral-800`).
+- **Marca "Pérsia · Rainha das Cortinas"** na navbar virou **clicável** → leva a Orçamentos (passa pela guarda de navegação).
+- **Status "Erro":** ocorre quando o envio ao GestãoClick falha (GC fora do ar, token inválido, payload recusado). Para validar o filtro em teste, inserir/remover um registro `status='erro'` via SQL no Railway (documentado para o Victor).
+- **AUTOSAVE LOCAL (recuperação de orçamento não salvo)** — `lib/rascunhoLocal.ts` (localStorage). Muda a decisão anterior de "estado só em memória".
+  - Ao preencher ≥1 campo, o orçamento (persiana/cortina) é salvo no navegador (debounce 500ms). Se fechar/recarregar sem querer, ao voltar a tela **restaura** o orçamento (cliente + tipo + campos) e mostra banner "Recuperamos um orçamento não salvo" com **Descartar**.
+  - `PersianaForm`/`CortinaOrcamento`/`CortinaCard` ganharam `restauro` (estado bruto) + `onSnapshot`. `OrcamentoNovo` orquestra (refs + debounce); reusa a mesma infra do modo edição. **Não** roda em modo edição (que usa `entrada_json` do banco). Limpa ao Enviar/Salvar com sucesso.
+  - Ao clicar **Novo Orçamento** estando nele com dados não salvos: modal informativo "Orçamento não salvo" com **um único botão "Continuar"** (`ConfirmModal` ganhou `ocultarCancelar`). É local ao navegador (não sincroniza entre máquinas).
+
+### 10.15 ✅ Validação de cálculos contra o GestãoClick (18/06/2026)
+- O token de integração **passou a ler orçamentos** do GC (`GET /api/orcamentos` = 200; antes 403). Permitiu replicar orçamentos reais no motor da Pérsia (somente leitura — nada escrito).
+- **Nº 9822 — Cortina ILHÓS (2,65×2,32, blackout):** GC R$ 1.308,32 × calculadora **R$ 1.298,64 (~0,7%)**. Metragem 7,95 vs 8,00; entretela e ponteira batem. **Motor de ILHÓS validado.**
+- **Nº 9807 — Cortina WAVE (2,90×2,55, gaze):** divergências — tecido 7,85 vs 8,35 (fator 2,7 baixo vs ~2,88 da prática); acessórios wave da calc (cordão+rodízio+base) ≠ prática (fita wave por metro); entretela incluída pela calc; terminais 4 vs 2.
+- **Achados a revisar com o Victor (não corrigidos — decisão dele):** (1) fator do **Wave** (BLOQUEANTE-05); (2) **varão** sai por metro na calc, mas no GC é por **barra** (o **trilho** por metro bate); (3) **qtd de ilhós** (54 vs 58, espaçamento); (4) **estrutura de acessórios do Wave**; (5) entretela no Wave. Orçamentos do GC usados são **manuais** (refletem a prática e variam por vendedor); a calc segue as regras definidas com o Victor.

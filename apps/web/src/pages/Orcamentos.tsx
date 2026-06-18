@@ -101,7 +101,7 @@ export function Orcamentos() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl-ui">Orçamentos</h1>
+        <h1 className="text-2xl-ui font-bold text-neutral-800">Orçamentos</h1>
         <Link to="/orcamentos/novo" className="btn btn-success">
           <FontAwesomeIcon icon={faPlus} /> Criar Orçamento
         </Link>
