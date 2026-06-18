@@ -23,12 +23,14 @@ export function ResultadoPanel({
   cliente,
   gcStatus,
   gcUsuarioId,
+  editarId,
   onEnviado,
 }: {
   dados: OrcamentoCalculado | null;
   cliente: ClienteResumo | null;
   gcStatus: GcStatus;
   gcUsuarioId: string | null;
+  editarId?: string | null;
   onEnviado: (orc: OrcamentoSalvo) => void;
 }) {
   const { showToast } = useToast();
@@ -61,6 +63,7 @@ export function ResultadoPanel({
         itens: dados.itens.map((it) => it.input),
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
+        ...(editarId ? { editar_id: editarId } : {}),
       });
       showToast(
         'success',

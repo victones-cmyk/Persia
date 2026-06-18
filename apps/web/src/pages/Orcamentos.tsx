@@ -152,7 +152,16 @@ export function Orcamentos() {
 
       {/* Tabela */}
       <div className="card p-0 overflow-hidden">
-        <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14 }}>
+        <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14, tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: 150 }} />
+            <col />
+            <col style={{ width: 110 }} />
+            <col style={{ width: 130 }} />
+            <col style={{ width: 120 }} />
+            <col style={{ width: 100 }} />
+            <col style={{ width: 150 }} />
+          </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
               <Th>Nº GestãoClick</Th>
@@ -198,7 +207,7 @@ export function Orcamentos() {
                       <button
                         className="btn btn-warning btn-xs"
                         disabled={o.status !== 'rascunho'}
-                        onClick={() => navigate(`/orcamentos/${o.id}?editar=1`)}
+                        onClick={() => navigate(`/orcamentos/novo?editar=${o.id}`)}
                         title={o.status === 'rascunho' ? 'Editar' : 'Só é possível editar orçamentos em rascunho'}
                       >
                         <FontAwesomeIcon icon={faPen} />

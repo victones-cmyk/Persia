@@ -4,7 +4,7 @@
 // (Tecido), Cor, Acionamento, Largura, Altura, TC (75% editável, RN-04), Rolamento e Base.
 // Layout compacto: 2 linhas agrupadas por item. RN-01 por item com chips de alternativos.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { api } from '../lib/api';
@@ -49,14 +49,36 @@ function itemVazio(): ItemForm {
   return { id: crypto.randomUUID(), tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '' };
 }
 
+/** Converte um item salvo (ItemInput) no estado do formulário (para edição de rascunho). */
+function inputParaForm(it: ItemInput): ItemForm {
+  return {
+    id: crypto.randomUUID(),
+    tecido_id: it.tecido_id,
+    cor: it.cor_acessorio,
+    acionamento: it.acionamento,
+    largura: it.largura != null ? String(it.largura) : '',
+    altura: it.altura != null ? String(it.altura) : '',
+    tc: it.tc != null ? String(it.tc) : '',
+    tcManual: it.tc != null,
+    rolamento: it.rolamento ?? '',
+    base: it.base ?? '',
+  };
+}
+
 export function PersianaForm({
   onResult,
+  inicial,
+  onDirtyChange,
 }: {
   onResult: (dados: OrcamentoCalculado | null) => void;
+  inicial?: { tipo: TipoPersiana; itens: ItemInput[] };
+  onDirtyChange?: (sujo: boolean) => void;
 }) {
-  const [tipo, setTipo] = useState<TipoPersiana | ''>('');
-  const [itens, setItens] = useState<ItemForm[]>([itemVazio()]);
+  const [tipo, setTipo] = useState<TipoPersiana | ''>(inicial?.tipo ?? '');
+  const [itens, setItens] = useState<ItemForm[]>(inicial && inicial.itens.length > 0 ? inicial.itens.map(inputParaForm) : [itemVazio()]);
   const [mesmoAmbiente, setMesmoAmbiente] = useState(false);
+  // Na 1ª carga de um rascunho em edição, o tipo já vem preenchido — não limpar o tecido.
+  const pularResetTecido = useRef(!!inicial);
 
   const [tecidos, setTecidos] = useState<TecidoOpcao[]>([]);
   const [carregandoTecidos, setCarregandoTecidos] = useState(false);
@@ -72,9 +94,14 @@ export function PersianaForm({
       return;
     }
     setCarregandoTecidos(true);
-    setItens((prev) => prev.map((it) => ({ ...it, tecido_id: '' })));
-    setErros({});
-    onResult(null);
+    // Troca de tipo invalida os tecidos escolhidos — exceto na 1ª carga de um rascunho em edição.
+    if (pularResetTecido.current) {
+      pularResetTecido.current = false;
+    } else {
+      setItens((prev) => prev.map((it) => ({ ...it, tecido_id: '' })));
+      setErros({});
+      onResult(null);
+    }
     api
       .get<{ tecidos: TecidoOpcao[] }>(`/calcular/tecidos?tipo=${tipo}`)
       .then((r) => setTecidos(r.tecidos))
@@ -110,6 +137,11 @@ export function PersianaForm({
   // Só os itens completos entram no cálculo; itens incompletos bloqueiam o envio.
   const itensComp = itens.map((it, idx) => ({ it, idx })).filter(({ it }) => itemValido(it));
   const temIncompleto = itens.some((it) => !itemValido(it));
+
+  // "Sujo" = começou a preencher algo (guarda de navegação contra perda de dados).
+  const sujo = tipo !== '' || itens.some((it) =>
+    it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base);
+  useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
 
   function toInput(it: ItemForm): ItemInput {
     return {

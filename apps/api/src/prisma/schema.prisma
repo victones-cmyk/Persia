@@ -94,6 +94,9 @@ model Orcamento {
   // Snapshot dos itens (janelas) do orçamento — orçamento pode ter vários.
   // As colunas single acima guardam o 1º item (compat); a verdade dos N itens vive aqui.
   itens_json            Json?
+  // Entrada bruta do formulário (inputs do vendedor) — permite reabrir um rascunho
+  // na calculadora para edição. Persiana: { tipo, itens:[ItemInput] }. Cortina: { cortinas:[...], instalacao_valor }.
+  entrada_json          Json?
   desconto_aprovado_por String?         @db.Uuid
   aprovador             Usuario?        @relation("OrcamentosAprovados", fields: [desconto_aprovado_por], references: [id])
   payload_gc_enviado    Json?

@@ -4,11 +4,11 @@
 // + instalação) e envia ao GestãoClick (1 produto sintético por cortina + 1 serviço
 // de instalação). O servidor RECALCULA tudo (não confia no cliente).
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faSpinner, faPaperPlane, faFloppyDisk } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
-import { CortinaCard, type CortinaResumo } from './CortinaCard';
+import { CortinaCard, type CortinaResumo, type CortinaInicial } from './CortinaCard';
 import { ConfirmModal } from './ConfirmModal';
 import { formatBRL } from '../lib/formatacao';
 import { useToast } from '../hooks/useToast';
@@ -17,11 +17,14 @@ import type { GcStatus } from '../hooks/useGcHealth';
 import type { AcessoriosCortinaResp } from '../lib/cortinaTypes';
 
 export function CortinaOrcamento({
-  cliente, gcStatus, gcUsuarioId, onEnviado,
+  cliente, gcStatus, gcUsuarioId, inicial, editarId, onDirtyChange, onEnviado,
 }: {
   cliente: ClienteResumo | null;
   gcStatus: GcStatus;
   gcUsuarioId: string | null;
+  inicial?: { cortinas: CortinaInicial[]; instalacao_valor: number };
+  editarId?: string | null;
+  onDirtyChange?: (sujo: boolean) => void; // guarda de navegação
   onEnviado: (orc: OrcamentoSalvo) => void;
 }) {
   const { showToast } = useToast();
@@ -30,9 +33,17 @@ export function CortinaOrcamento({
   const [carregando, setCarregando] = useState(true);
   const [erroCarga, setErroCarga] = useState(false);
 
-  const [ids, setIds] = useState<string[]>([crypto.randomUUID()]);
+  // Estado inicial das cortinas (uma vazia, ou as do rascunho em edição).
+  const [estadoInicial] = useState(() => {
+    const cs = inicial?.cortinas ?? [];
+    return (cs.length > 0 ? cs : [null]).map((c) => ({ id: crypto.randomUUID(), inicial: c }));
+  });
+  const iniciais = useRef<Record<string, CortinaInicial | null>>(Object.fromEntries(estadoInicial.map((e) => [e.id, e.inicial])));
+
+  const [ids, setIds] = useState<string[]>(estadoInicial.map((e) => e.id));
   const [resumos, setResumos] = useState<Record<string, CortinaResumo>>({});
-  const [instalacao, setInstalacao] = useState('');
+  const [preenchidos, setPreenchidos] = useState<Record<string, boolean>>({});
+  const [instalacao, setInstalacao] = useState(inicial?.instalacao_valor ? String(inicial.instalacao_valor) : '');
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [salvarAberto, setSalvarAberto] = useState(false);
@@ -52,10 +63,16 @@ export function CortinaOrcamento({
   }, []);
 
   const setResumo = (id: string, r: CortinaResumo) => setResumos((m) => ({ ...m, [id]: r }));
+  const setPreenchido = (id: string, v: boolean) => setPreenchidos((m) => (m[id] === v ? m : { ...m, [id]: v }));
   const removerCortina = (id: string) => {
     setIds((xs) => xs.filter((x) => x !== id));
     setResumos((m) => { const n = { ...m }; delete n[id]; return n; });
+    setPreenchidos((m) => { const n = { ...m }; delete n[id]; return n; });
   };
+
+  // "Sujo" = instalação preenchida ou alguma cortina tocada (guarda de navegação).
+  const sujo = instalacao.trim() !== '' || ids.some((id) => preenchidos[id]);
+  useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
 
   const totalCortinas = ids.reduce((s, id) => s + (resumos[id]?.total ?? 0), 0);
   const valorInstalacao = Math.max(0, Number(instalacao) || 0);
@@ -78,6 +95,7 @@ export function CortinaOrcamento({
         instalacao_valor: valorInstalacao,
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
+        ...(editarId ? { editar_id: editarId } : {}),
       });
       showToast('success', apenasSalvar ? 'Orçamento salvo (rascunho)' : `Orçamento #${r.orcamento.gc_orcamento_id} criado no GestãoClick`, cliente?.nome);
       onEnviado(r.orcamento);
@@ -108,7 +126,9 @@ export function CortinaOrcamento({
             indice={i}
             tecidos={tecidos}
             opcoes={opcoes}
+            inicial={iniciais.current[id] ?? undefined}
             onChange={(r) => setResumo(id, r)}
+            onPreenchidoChange={(v) => setPreenchido(id, v)}
             onRemover={() => setRemoverCortinaId(id)}
             podeRemover={ids.length > 1}
           />

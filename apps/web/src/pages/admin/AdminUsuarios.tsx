@@ -102,10 +102,19 @@ export function AdminUsuarios() {
       </div>
 
       <div className="card p-0 overflow-hidden">
-        <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14 }}>
+        <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14, tableLayout: 'fixed' }}>
+          <colgroup>
+            <col />
+            <col style={{ width: 180 }} />
+            <col style={{ width: 140 }} />
+            <col style={{ width: 140 }} />
+            <col style={{ width: 200 }} />
+            <col style={{ width: 80 }} />
+            <col style={{ width: 150 }} />
+          </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
-              {['Nome', 'Usuário', 'Perfil', 'Loja', 'Vendedor GC', 'Ativo', 'Ações'].map((h) => (
+              {['Nome', 'Usuário', 'Perfil', 'Loja', 'Vendedor GestãoClick', 'Ativo', 'Ações'].map((h) => (
                 <th key={h} style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
@@ -201,7 +210,7 @@ function ModalUsuario({
   const [nome, setNome] = useState(usuario?.nome ?? '');
   const [email, setEmail] = useState(usuario?.email ?? '');
   const [senha, setSenha] = useState('');
-  const [perfil, setPerfil] = useState<'vendedor' | 'admin'>(usuario?.perfil ?? 'vendedor');
+  const [perfil, setPerfil] = useState<'' | 'vendedor' | 'admin'>(usuario?.perfil ?? '');
   const [lojaId, setLojaId] = useState(usuario?.loja_id ?? '');
   const [gcUsuarioId, setGcUsuarioId] = useState(usuario?.gc_usuario_id ?? '');
   const [salvando, setSalvando] = useState(false);
@@ -277,8 +286,9 @@ function ModalUsuario({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="form-label">Perfil</label>
-              <select className="input" value={perfil} onChange={(e) => setPerfil(e.target.value as 'vendedor' | 'admin')}>
+              <label className="form-label">Perfil<span className="label-required">*</span></label>
+              <select className="input" value={perfil} required onChange={(e) => setPerfil(e.target.value as '' | 'vendedor' | 'admin')}>
+                <option value="">Selecione</option>
                 <option value="vendedor">Vendedor</option>
                 <option value="admin">Administrador</option>
               </select>
@@ -286,7 +296,7 @@ function ModalUsuario({
             <div>
               <label className="form-label">Loja</label>
               <select className="input" value={lojaId} onChange={(e) => setLojaId(e.target.value)}>
-                <option value="">(nenhuma)</option>
+                <option value="">Selecione</option>
                 {lojas.map((l) => <option key={l.id} value={l.id}>{l.nome}</option>)}
               </select>
             </div>
@@ -309,7 +319,7 @@ function ModalUsuario({
               </>
             ) : (
               <select className="input" value={gcUsuarioId} onChange={(e) => setGcUsuarioId(e.target.value)}>
-                <option value="">(sem vendedor)</option>
+                <option value="">Selecione</option>
                 {vinculoForaDaLista && <option value={gcUsuarioId}>Vínculo atual (ID {gcUsuarioId})</option>}
                 {funcionarios.map((f) => (
                   <option key={f.id} value={f.id}>{f.nome}</option>

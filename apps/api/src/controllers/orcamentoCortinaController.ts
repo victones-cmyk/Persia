@@ -139,6 +139,16 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
   }
 
+  // editar_id = reabrir um rascunho de cortina na calculadora e regravar no MESMO registro.
+  const editarId = typeof b.editar_id === 'string' && b.editar_id ? b.editar_id : null;
+  let editarOrc = null as Awaited<ReturnType<typeof prisma.orcamento.findUnique>>;
+  if (editarId) {
+    editarOrc = await prisma.orcamento.findUnique({ where: { id: editarId } });
+    if (!editarOrc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+    if (sessao.perfil !== 'admin' && editarOrc.usuario_id !== sessao.id) throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão para editar este orçamento.');
+    if (editarOrc.status !== 'rascunho') throw new AppError(400, 'NAO_EDITAVEL', 'Só é possível editar orçamentos em rascunho.');
+  }
+
   // Recalcula cada cortina no servidor.
   const preparadas: CortinaPreparada[] = [];
   for (const c of cortinasEntrada) preparadas.push(await prepararCortina(c));
@@ -146,13 +156,20 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   const valorCortinas = roundHalfUp(preparadas.reduce((s, p) => s + p.valor_total, 0));
   const valorInstalacao = Math.max(0, Number(b.instalacao_valor) || 0);
   const valorTotal = roundHalfUp(valorCortinas + valorInstalacao);
-  const loja = await resolverLoja(sessao.loja_id);
+  const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeira = preparadas[0];
+
+  // Grava: cria novo ou atualiza o rascunho em edição (mesmo registro).
+  const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>
+    editarId
+      ? prisma.orcamento.update({ where: { id: editarId }, data: data as Prisma.OrcamentoUncheckedUpdateInput })
+      : prisma.orcamento.create({ data });
 
   const baseDados = {
     tipo_produto: 'cortina' as const,
-    usuario_id: sessao.id,
-    loja_id: loja.id,
+    usuario_id: editarOrc?.usuario_id ?? sessao.id,
+    loja_id: editarOrc?.loja_id ?? loja.id,
+    entrada_json: { cortinas: cortinasEntrada, instalacao_valor: valorInstalacao } as unknown as Prisma.InputJsonValue,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
     tecido_codigo_gc: primeira.tecido_id,
@@ -168,7 +185,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
 
   // Apenas salvar: rascunho local, sem tocar no GestãoClick.
   if (apenasSalvar) {
-    const orcamento = await prisma.orcamento.create({ data: { ...baseDados, status: 'rascunho' } });
+    const orcamento = await persistir({ ...baseDados, status: 'rascunho' });
     await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_salvo_rascunho', detalhe: { orcamento_id: orcamento.id, tipo: 'cortina', cortinas: preparadas.length, valor_final: valorTotal } } });
     res.status(201).json({ orcamento });
     return;
@@ -203,16 +220,14 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       loja_id: loja.gc_loja_id,
     });
 
-    const orcamento = await prisma.orcamento.create({
-      data: {
-        ...baseDados,
-        status: 'enviado',
-        gc_produto_id: criados[0] ?? null,
-        gc_orcamento_id: orc.gc_orcamento_id,
-        gc_codigo: String(codigo),
-        payload_gc_enviado: orc.payload as Prisma.InputJsonValue,
-        resposta_gc: orc.resposta as Prisma.InputJsonValue,
-      },
+    const orcamento = await persistir({
+      ...baseDados,
+      status: 'enviado',
+      gc_produto_id: criados[0] ?? null,
+      gc_orcamento_id: orc.gc_orcamento_id,
+      gc_codigo: String(codigo),
+      payload_gc_enviado: orc.payload as Prisma.InputJsonValue,
+      resposta_gc: orc.resposta as Prisma.InputJsonValue,
     });
     await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_enviado_gc', detalhe: { orcamento_id: orcamento.id, tipo: 'cortina', gc_orcamento_id: orc.gc_orcamento_id, cortinas: preparadas.length, valor_final: valorTotal } } });
     res.status(201).json({ orcamento });
@@ -223,13 +238,11 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     }
     const gc = err instanceof GcError ? err : null;
     if (err instanceof AppError) throw err;
-    const orcamento = await prisma.orcamento.create({
-      data: {
-        ...baseDados,
-        status: 'erro',
-        erro_gc: gc ? `HTTP ${gc.status}: ${gc.message}` : String((err as Error).message),
-        payload_gc_enviado: (gc?.payload as object) ?? undefined,
-      },
+    const orcamento = await persistir({
+      ...baseDados,
+      status: 'erro',
+      erro_gc: gc ? `HTTP ${gc.status}: ${gc.message}` : String((err as Error).message),
+      payload_gc_enviado: (gc?.payload as object as Prisma.InputJsonValue) ?? undefined,
     });
     res.status(502).json({ erro: { codigo: 'GC_ENVIO', message: gc?.message ?? 'Falha ao enviar ao GestãoClick' }, orcamento });
   }

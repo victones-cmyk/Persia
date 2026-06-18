@@ -48,6 +48,8 @@ export interface ItemSnapshot {
 
 export interface OrcamentoDetalhe extends OrcamentoListItem {
   gc_cliente_id: string | null;
+  /** Entrada bruta do formulário (para reabrir o rascunho na calculadora). */
+  entrada_json?: Record<string, unknown> | null;
   tecido_nome: string;
   tecido_codigo_gc: string;
   largura_m: string;

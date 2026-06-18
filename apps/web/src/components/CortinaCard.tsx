@@ -40,26 +40,39 @@ interface CamadaState { id: string; tecidoId: string; franzido: string; }
 
 const novaCamada = (): CamadaState => ({ id: crypto.randomUUID(), tecidoId: '', franzido: '' });
 
+/** Entrada inicial de uma cortina (para reabrir um rascunho em edição) = payload salvo. */
+export type CortinaInicial = NonNullable<CortinaResumo['payload']>;
+
 export function CortinaCard({
-  indice, tecidos, opcoes, onChange, onRemover, podeRemover,
+  indice, tecidos, opcoes, inicial, onChange, onRemover, podeRemover, onPreenchidoChange,
 }: {
   indice: number;
   tecidos: TecidoOpcao[];
   opcoes: AcessoriosCortinaResp | null; // null enquanto carrega em segundo plano
+  inicial?: CortinaInicial; // pré-preenchido ao editar um rascunho
   onChange: (resumo: CortinaResumo) => void;
   onRemover: () => void;
   podeRemover: boolean;
+  onPreenchidoChange?: (preenchido: boolean) => void; // guarda de navegação
 }) {
-  const [ambiente, setAmbiente] = useState('');
-  const [modelo, setModelo] = useState<ModeloCortina | ''>('');
-  const [fixacao, setFixacao] = useState<FixacaoCortina>('varao');
-  const [largura, setLargura] = useState('');
-  const [altura, setAltura] = useState('');
-  const [tamanhoBarra, setTamanhoBarra] = useState(''); // vazio = padrão 0,10 m no servidor
-  const [tipoBarra, setTipoBarra] = useState<'simples' | 'dupla' | ''>('');
-  const [camadas, setCamadas] = useState<CamadaState[]>([novaCamada()]);
-  const [acessorioSel, setAcessorioSel] = useState<Record<string, string>>({}); // categoria → produto_id
-  const [qtdManual, setQtdManual] = useState<Record<string, number>>({}); // item → qtd (não-auto, ex.: suporte)
+  const [ambiente, setAmbiente] = useState(inicial?.ambiente ?? '');
+  const [modelo, setModelo] = useState<ModeloCortina | ''>(inicial?.modelo ?? '');
+  const [fixacao, setFixacao] = useState<FixacaoCortina>(inicial?.fixacao ?? 'varao');
+  const [largura, setLargura] = useState(inicial ? String(inicial.largura) : '');
+  const [altura, setAltura] = useState(inicial ? String(inicial.altura) : '');
+  const [tamanhoBarra, setTamanhoBarra] = useState(inicial?.tamanho_barra != null ? String(inicial.tamanho_barra) : ''); // vazio = padrão 0,10 m no servidor
+  const [tipoBarra, setTipoBarra] = useState<'simples' | 'dupla' | ''>(inicial?.tipo_barra ?? '');
+  const [camadas, setCamadas] = useState<CamadaState[]>(
+    inicial && inicial.camadas.length > 0
+      ? inicial.camadas.map((c) => ({ id: crypto.randomUUID(), tecidoId: c.tecido_id, franzido: c.franzido != null ? String(c.franzido) : '' }))
+      : [novaCamada()],
+  );
+  const [acessorioSel, setAcessorioSel] = useState<Record<string, string>>(
+    inicial ? Object.fromEntries(inicial.acessorios.filter((a) => a.categoria).map((a) => [a.categoria as string, a.produto_id])) : {},
+  ); // categoria → produto_id
+  const [qtdManual, setQtdManual] = useState<Record<string, string>>(
+    inicial ? Object.fromEntries(inicial.acessorios.map((a) => [a.item, String(a.quantidade)])) : {},
+  ); // item → qtd digitada (não-auto, ex.: suporte). String p/ permitir campo vazio.
 
   const [calc, setCalc] = useState<CalcCortinaCompletaResp | null>(null);
   const [calculando, setCalculando] = useState(false);
@@ -116,7 +129,7 @@ export function CortinaCard({
   }, [assinatura, podeCalcular]);
 
   // Quantidade efetiva de um item (auto = do motor; manual = digitada pelo vendedor).
-  const qtdDe = (item: string, auto: boolean, qtdCalc: number) => (auto ? qtdCalc : (qtdManual[item] ?? 0));
+  const qtdDe = (item: string, auto: boolean, qtdCalc: number) => (auto ? qtdCalc : (Number(qtdManual[item]) || 0));
 
   // Preço do produto escolhido numa categoria.
   const precoSelecionado = (categoria: CategoriaAcessorio | null, produtoId: string | undefined) => {
@@ -156,6 +169,12 @@ export function CortinaCard({
 
   // Reporta o resumo ao container sempre que mudar.
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
+
+  // "Preenchido" = qualquer campo tocado (guarda de navegação contra perda de dados).
+  const preenchido = ambiente !== '' || modelo !== '' || largura !== '' || altura !== '' ||
+    tamanhoBarra !== '' || tipoBarra !== '' || camadas.some((c) => c.tecidoId || c.franzido) ||
+    Object.keys(acessorioSel).length > 0 || Object.values(qtdManual).some((v) => v !== '');
+  useEffect(() => { onPreenchidoChange?.(preenchido); }, [preenchido, onPreenchidoChange]);
 
   const setCamada = (id: string, patch: Partial<CamadaState>) =>
     setCamadas((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -254,7 +273,7 @@ export function CortinaCard({
       {/* Acessórios (vendedor escolhe o produto de cada grupo) */}
       {calc && (
         <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
-          <div className="text-xs-ui font-bold text-neutral-600 mb-2">Acessórios</div>
+          <div className="text-xs-ui font-bold text-neutral-600 mb-2">Acessórios<span className="label-required">*</span> <span className="font-normal text-neutral-400">(escolha o produto de cada item)</span></div>
           <div className="space-y-2">
             {calc.acessorios.map((a) => {
               const opts = a.categoria && opcoes ? (opcoes.acessorios[a.categoria] ?? []) : [];
@@ -272,7 +291,7 @@ export function CortinaCard({
                     ) : (
                       <input type="number" className="input" style={{ height: 30, fontSize: 12 }} min={0} step={1}
                         value={qtdManual[a.item] ?? ''} placeholder="qtd"
-                        onChange={(e) => setQtdManual((m) => ({ ...m, [a.item]: Number(e.target.value) }))} />
+                        onChange={(e) => setQtdManual((m) => ({ ...m, [a.item]: e.target.value }))} />
                     )}
                   </div>
                   <div className="col-span-4">

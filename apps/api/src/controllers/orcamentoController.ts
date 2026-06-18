@@ -229,6 +229,16 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
   }
 
+  // editar_id = reabrir um rascunho na calculadora e regravar no MESMO registro.
+  const editarId = typeof b.editar_id === 'string' && b.editar_id ? b.editar_id : null;
+  let editarOrc = null as Awaited<ReturnType<typeof prisma.orcamento.findUnique>>;
+  if (editarId) {
+    editarOrc = await prisma.orcamento.findUnique({ where: { id: editarId } });
+    if (!editarOrc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+    if (sessao.perfil !== 'admin' && editarOrc.usuario_id !== sessao.id) throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão para editar este orçamento.');
+    if (editarOrc.status !== 'rascunho') throw new AppError(400, 'NAO_EDITAVEL', 'Só é possível editar orçamentos em rascunho.');
+  }
+
   // Busca todos os tecidos referenciados (de uma vez).
   const tecidos = new Map<string, TecidoGc>();
   for (const it of itensEntrada) {
@@ -241,14 +251,24 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   }
 
   const { preparados, valorBrutoTotal } = prepararItens(tipo, itensEntrada, tecidos);
-  const loja = await resolverLoja(sessao.loja_id);
+  const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeiro = preparados[0];
+
+  // Entrada bruta — permite reabrir o rascunho na calculadora para edição.
+  const entradaJson = { tipo, itens: itensEntrada } as unknown as Prisma.InputJsonValue;
+
+  // Grava: cria novo ou atualiza o rascunho em edição (mesmo registro).
+  const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>
+    editarId
+      ? prisma.orcamento.update({ where: { id: editarId }, data: data as Prisma.OrcamentoUncheckedUpdateInput })
+      : prisma.orcamento.create({ data });
 
   // Campos comuns ao salvar (sucesso ou erro). Colunas single = 1º item (compat).
   const baseDados = {
     tipo_produto: tipo,
-    usuario_id: sessao.id,
-    loja_id: loja.id,
+    usuario_id: editarOrc?.usuario_id ?? sessao.id,
+    loja_id: editarOrc?.loja_id ?? loja.id,
+    entrada_json: entradaJson,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
     tecido_codigo_gc: primeiro.tecido.id,
@@ -268,12 +288,10 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
 
   // Apenas salvar: grava rascunho local, sem tocar no GestãoClick.
   if (apenasSalvar) {
-    const orcamento = await prisma.orcamento.create({
-      data: {
-        ...baseDados,
-        status: 'rascunho',
-        itens_json: snapshotsDe(preparados, []) as unknown as Prisma.InputJsonValue,
-      },
+    const orcamento = await persistir({
+      ...baseDados,
+      status: 'rascunho',
+      itens_json: snapshotsDe(preparados, []) as unknown as Prisma.InputJsonValue,
     });
     await prisma.logAcao.create({
       data: { usuario_id: sessao.id, acao: 'orcamento_salvo_rascunho', detalhe: { orcamento_id: orcamento.id, itens: preparados.length, valor_final: valorBrutoTotal } },
@@ -291,17 +309,15 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     });
 
     const snapshots = snapshotsDe(preparados, envio.gc_produto_ids);
-    const orcamento = await prisma.orcamento.create({
-      data: {
-        ...baseDados,
-        status: 'enviado',
-        gc_produto_id: envio.gc_produto_ids[0] ?? null,
-        gc_orcamento_id: envio.gc_orcamento_id,
-        gc_codigo: envio.gc_codigo,
-        itens_json: snapshots as unknown as Prisma.InputJsonValue,
-        payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
-        resposta_gc: envio.resposta as Prisma.InputJsonValue,
-      },
+    const orcamento = await persistir({
+      ...baseDados,
+      status: 'enviado',
+      gc_produto_id: envio.gc_produto_ids[0] ?? null,
+      gc_orcamento_id: envio.gc_orcamento_id,
+      gc_codigo: envio.gc_codigo,
+      itens_json: snapshots as unknown as Prisma.InputJsonValue,
+      payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
+      resposta_gc: envio.resposta as Prisma.InputJsonValue,
     });
 
     await prisma.logAcao.create({
@@ -315,14 +331,12 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   } catch (err) {
     const gc = err instanceof GcError ? err : null;
     const snapshots = snapshotsDe(preparados, []);
-    const orcamento = await prisma.orcamento.create({
-      data: {
-        ...baseDados,
-        status: 'erro',
-        itens_json: snapshots as unknown as Prisma.InputJsonValue,
-        erro_gc: gc ? `HTTP ${gc.status}: ${gc.message}` : String((err as Error).message),
-        payload_gc_enviado: (gc?.payload as object) ?? undefined,
-      },
+    const orcamento = await persistir({
+      ...baseDados,
+      status: 'erro',
+      itens_json: snapshots as unknown as Prisma.InputJsonValue,
+      erro_gc: gc ? `HTTP ${gc.status}: ${gc.message}` : String((err as Error).message),
+      payload_gc_enviado: (gc?.payload as object as Prisma.InputJsonValue) ?? undefined,
     });
     res.status(502).json({
       orcamento,

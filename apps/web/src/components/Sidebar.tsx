@@ -1,7 +1,7 @@
 // apps/web/src/components/Sidebar.tsx
 // Navegação lateral persistente de 220px (DS §7). Seção admin só para perfil admin.
 
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faFileLines,
@@ -11,6 +11,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { useAuth } from '../hooks/useAuth';
+import { useNavGuard } from '../hooks/useNavGuard';
 
 interface Item {
   to: string;
@@ -30,11 +31,26 @@ const ITENS_ADMIN: Item[] = [
 ];
 
 function Link({ item }: { item: Item }) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const { guard, isDirty } = useNavGuard();
   return (
     <NavLink
       to={item.to}
       end={item.end}
       className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')}
+      onClick={(e) => {
+        e.preventDefault();
+        // Clicou no item da própria rota atual (ex.: "Novo Orçamento" estando nele):
+        // se houver dados não salvos, confirma e volta para a tela inicial (Orçamentos);
+        // sem dados, não faz nada (já está na tela).
+        if (item.to === pathname) {
+          if (isDirty()) guard(() => navigate('/orcamentos'));
+          return;
+        }
+        // Demais itens: passa pela guarda (pede confirmação se houver dados não salvos).
+        guard(() => navigate(item.to));
+      }}
     >
       <FontAwesomeIcon icon={item.icon} fixedWidth />
       <span>{item.label}</span>
