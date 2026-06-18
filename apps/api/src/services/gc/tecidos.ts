@@ -85,8 +85,8 @@ export function precoByTier(p: GcProduto, tier: PriceTier): { venda: number; cus
   };
 }
 
-// Cache server-side dos tecidos de persiana (a base muda pouco; evita refetch das páginas).
-const CACHE_TTL_MS = 5 * 60 * 1000;
+// Cache server-side dos tecidos de persiana (curto: novos tecidos do GC aparecem em até 1 min).
+const CACHE_TTL_MS = 60 * 1000;
 let cache: { tecidos: TecidoGc[]; expiresAt: number } | null = null;
 
 /** Todos os tecidos de PERSIANA (grupo 235486), preço VAREJO. */

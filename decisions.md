@@ -348,3 +348,7 @@ Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura po
 - **Onde intercepta:** todos os itens do **menu lateral** (Orçamentos, Novo Orçamento, Usuários, Log de Ações) e da **navbar** (**Alterar senha**, **Sair**). Navegações programáticas após salvar/enviar não passam pela guarda (são intencionais); ao desmontar a tela o flag é limpo.
 - **Detecção do "sujo":** `PersianaForm` e `CortinaOrcamento`/`CortinaCard` reportam via `onDirtyChange`/`onPreenchidoChange` quando há **pelo menos um campo preenchido** (inclui o caso de edição de rascunho, que já abre preenchido). `OrcamentoNovo` liga isso à guarda.
 - **Clicar "Novo Orçamento" estando nele:** se houver dados não salvos, confirma e **volta para Orçamentos** (tela inicial); sem dados, não faz nada. (Sidebar usa `useLocation` + `isDirty()`.)
+
+### 10.12 ✅ Cache do GestãoClick reduzido (18/06/2026)
+- **Tecidos** (persiana e cortina) e **acessórios da cortina**: TTL reduzido para **1 minuto** (antes 5 min / 30 min). Novos cadastros no GC aparecem na calculadora em até ~1 min, sem refetch a cada formulário. (Reiniciar o app zera o cache na hora.)
+- **Sem cache (tempo real):** clientes (busca ao digitar), vendedores/funcionários (ao reabrir a tela de usuários), serviço de instalação. **Health:** 5 s.
