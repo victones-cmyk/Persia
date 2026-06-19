@@ -22,7 +22,8 @@ export interface LinhaServicoGc {
 }
 
 export interface NovoOrcamentoGc {
-  codigo: number; // timestamp unix (int)
+  // NÃO enviamos "codigo": o GestãoClick gera o número SEQUENCIAL dele (Victor 18/06).
+  // Enviar um número (ex.: timestamp) fura a sequência. O nº gerado volta na resposta.
   cliente_id: string;
   produtos: LinhaProdutoGc[]; // uma linha por item do orçamento
   servicos?: LinhaServicoGc[]; // linhas de serviço (ex.: instalação)
@@ -34,10 +35,12 @@ export interface NovoOrcamentoGc {
 
 interface OrcamentoCriado {
   id: string;
+  codigo?: string; // nº sequencial gerado pelo GestãoClick
 }
 
 export interface ResultadoOrcamento {
   gc_orcamento_id: string;
+  gc_codigo: string | null; // nº sequencial devolvido pelo GestãoClick
   payload: Record<string, unknown>;
   resposta: unknown;
 }
@@ -51,7 +54,6 @@ export function montarPayload(o: NovoOrcamentoGc): Record<string, unknown> {
 
   const payload: Record<string, unknown> = {
     tipo,
-    codigo: o.codigo,
     cliente_id: o.cliente_id,
     situacao_id: SITUACAO_EM_ABERTO,
     data: o.data,
@@ -86,7 +88,7 @@ export async function criarOrcamento(o: NovoOrcamentoGc): Promise<ResultadoOrcam
   if (!gc_orcamento_id) {
     throw new Error('GestãoClick não retornou o id do orçamento.');
   }
-  return { gc_orcamento_id, payload, resposta: env };
+  return { gc_orcamento_id, gc_codigo: env.data?.codigo ?? null, payload, resposta: env };
 }
 
 export async function deletarOrcamento(id: string): Promise<void> {

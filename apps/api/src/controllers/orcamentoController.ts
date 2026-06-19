@@ -154,7 +154,7 @@ async function executarEnvioGc(args: {
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
-}): Promise<{ gc_orcamento_id: string; gc_codigo: string; gc_produto_ids: string[]; payload: object; resposta: unknown }> {
+}): Promise<{ gc_orcamento_id: string; gc_codigo: string | null; gc_produto_ids: string[]; payload: object; resposta: unknown }> {
   const criados: string[] = [];
   try {
     const linhas: LinhaProdutoGc[] = [];
@@ -177,9 +177,8 @@ async function executarEnvioGc(args: {
       servicos.push({ gc_servico_id: servicoId, valor_venda: valorInstalacao });
     }
 
-    const codigo = Math.floor(Date.now() / 1000); // = Nº exibido no GestãoClick
+    // Não enviamos número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
     const orc = await gcCriarOrcamento({
-      codigo,
       cliente_id: args.gc_cliente_id,
       produtos: linhas,
       servicos,
@@ -191,7 +190,7 @@ async function executarEnvioGc(args: {
 
     return {
       gc_orcamento_id: orc.gc_orcamento_id,
-      gc_codigo: String(codigo),
+      gc_codigo: orc.gc_codigo,
       gc_produto_ids: criados,
       payload: orc.payload,
       resposta: orc.resposta,

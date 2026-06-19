@@ -181,7 +181,7 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
   - Login "Usuário" + senha provisória, seletor de vendedor (funcionários **ativos** do GC), busca de tecido, admin com CRUD/excluir usuário. Auto-deploy GitHub→Railway OK.
   - **UX:** confirmação antes de enviar ao GC; modais 100% in-app (sem pop-up do navegador); **guarda de navegação** + **autosave local** (recupera orçamento não salvo ao reabrir o navegador); títulos das telas em negrito; marca da navbar clicável → Orçamentos; cache do GC reduzido a 1 min.
 - **Validação (18/06):** teste controlado de escrita da cortina OK (R$ 790, confirmado e apagado). **Replicação de 2 orçamentos reais do GC** (ver §10.15): ILHÓS bate ~0,7%; WAVE e varão a revisar.
-- **EM DESENVOLVIMENTO LOCAL — NÃO DEPLOYADO (a partir de 18/06):** o **Módulo de Regras de Cálculo** (§11) e as **correções da 1ª onda de homologação** (§10.16) estão prontos **só no ambiente local** (typecheck + 65 testes OK). **Nada disso está em produção** — o último commit em produção é o `72f6245` (rodadas até §10.14). Subir tudo junto quando o PH autorizar (e fazer 1 teste online do nº sequencial).
+- **DEPLOYADO em produção em 19/06/2026 (commit `8075579`):** subiu tudo o que estava local — Módulo de Regras de Cálculo (§11), correções da 1ª onda (§10.16), auditoria de segurança (§12), upgrade de deps (§12.1) e 2ª onda de homologação (§13, tecidos por tipo + varão por camada + trilho 1×). Anterior em produção era `72f6245`. As seções abaixo marcadas como "LOCAL, não deployado" referem-se ao estado ANTES deste deploy — a partir de 19/06 estão em produção. **Pendências pós-deploy:** teste do nº sequencial (PH faz 1 envio controlado no GC) e calibração fina dos valores (aguardando exemplos do Victor).
 - **Pendências:** fator do Wave (BLOQUEANTE-05); achados da validação §10.15 (varão por barra, qtd ilhós, acessórios wave); **homologação pelo Victor** (Fase 8); conferir fita 2× largura (OS).
 
 ---
@@ -391,7 +391,7 @@ Doc do Victor: `Persia_Casos_de_Teste_Homologacao_Victor_v.2.docx` (raiz). Maior
 
 **⏸ Pendente do Victor:** trilho duplo (qual acessório conta 1× vs por camada); **tecidos por grupo** (PH aprovou filtrar; falta saber como os tecidos estão agrupados no GC); calibração fina dos valores (aguardando 2–3 casos concretos com valor do DecorSoft); **cliente "Cliente final"** (precisa existir no GC); **fixação por busca** (só 3 opções → confirmar).
 
-**⏸ Pendente de teste online (não feito — "nada online"):** **Nº do orçamento sequencial** — hoje envia `codigo = Math.floor(Date.now()/1000)` (timestamp). Victor (img3) alerta que o GC é **sequencial** e número "aleatório" pode dar erro. Plano: **não enviar `codigo`** (GC gera) e ler o nº gerado via `GET /api/orcamentos/:id`. Exige 1 envio de teste controlado antes do deploy.
+**✅ Nº do orçamento sequencial — RESOLVIDO em 19/06/2026.** Confirmado por leitura no GC: orçamentos do app saíam com o timestamp no `codigo` (ex.: `1781806913`), furando a sequência real (~9830). Teste controlado (POST sem `codigo`, R$1, apagado em seguida): o GC gerou **9831** (sequencial certo) e devolveu o `codigo` na resposta do POST. Correção: `gc/orcamentos.ts` **não envia mais `codigo`** e lê `gc_codigo` da resposta; controllers (`orcamentoController`/`orcamentoCortinaController`) usam esse valor em vez do `Date.now()`. Deployado no commit pós-`8075579`.
 
 **🟣 Estrutural (à parte):** orçamento **misto** cortina + persiana no mesmo orçamento (Tab. 9, 6.1) — mudança grande, planejar separado.
 

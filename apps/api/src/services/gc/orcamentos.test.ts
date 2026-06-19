@@ -5,7 +5,6 @@ import { montarPayload, SITUACAO_EM_ABERTO } from './orcamentos';
 describe('montarPayload (orçamento GC multi-itens)', () => {
   it('gera uma linha de produto por item, qtd 1, com valores do item', () => {
     const payload = montarPayload({
-      codigo: 1700000000,
       cliente_id: 'C1',
       data: '2026-06-12',
       vendedor_id: 'V1',
@@ -18,6 +17,8 @@ describe('montarPayload (orçamento GC multi-itens)', () => {
 
     expect(payload.tipo).toBe('produto');
     expect(payload.situacao_id).toBe(SITUACAO_EM_ABERTO);
+    // NÃO enviar "codigo": o GestãoClick gera o nº sequencial (Victor 18/06).
+    expect('codigo' in payload).toBe(false);
     expect(payload.vendedor_id).toBe('V1');
     expect(payload.loja_id).toBe('L1');
 
@@ -33,7 +34,6 @@ describe('montarPayload (orçamento GC multi-itens)', () => {
 
   it('com serviço de instalação → tipo "ambos" + linha de serviço', () => {
     const payload = montarPayload({
-      codigo: 1,
       cliente_id: 'C',
       data: '2026-06-12',
       produtos: [{ gc_produto_id: 'P', valor_venda: 500, valor_custo: 50 }],
@@ -45,15 +45,14 @@ describe('montarPayload (orçamento GC multi-itens)', () => {
   });
 
   it('só serviço → tipo "servico"; sem serviço → sem a chave servicos', () => {
-    const soServico = montarPayload({ codigo: 1, cliente_id: 'C', data: '2026-06-12', produtos: [], servicos: [{ gc_servico_id: 'S', valor_venda: 80 }] });
+    const soServico = montarPayload({ cliente_id: 'C', data: '2026-06-12', produtos: [], servicos: [{ gc_servico_id: 'S', valor_venda: 80 }] });
     expect(soServico.tipo).toBe('servico');
-    const semServico = montarPayload({ codigo: 1, cliente_id: 'C', data: '2026-06-12', produtos: [{ gc_produto_id: 'P', valor_venda: 10, valor_custo: 1 }] });
+    const semServico = montarPayload({ cliente_id: 'C', data: '2026-06-12', produtos: [{ gc_produto_id: 'P', valor_venda: 10, valor_custo: 1 }] });
     expect('servicos' in semServico).toBe(false);
   });
 
   it('omite usuario_id/vendedor_id/loja_id quando ausentes', () => {
     const payload = montarPayload({
-      codigo: 1,
       cliente_id: 'C',
       data: '2026-06-12',
       produtos: [{ gc_produto_id: 'P', valor_venda: 10, valor_custo: 1 }],

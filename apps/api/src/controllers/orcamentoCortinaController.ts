@@ -215,9 +215,8 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       servicos.push({ gc_servico_id: servicoId, valor_venda: valorInstalacao });
     }
 
-    const codigo = Math.floor(Date.now() / 1000); // = Nº exibido no GestãoClick
+    // Sem número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
     const orc = await gcCriarOrcamento({
-      codigo,
       cliente_id: String(b.gc_cliente_id),
       produtos: linhas,
       servicos,
@@ -232,7 +231,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       status: 'enviado',
       gc_produto_id: criados[0] ?? null,
       gc_orcamento_id: orc.gc_orcamento_id,
-      gc_codigo: String(codigo),
+      gc_codigo: orc.gc_codigo,
       payload_gc_enviado: orc.payload as Prisma.InputJsonValue,
       resposta_gc: orc.resposta as Prisma.InputJsonValue,
     });
@@ -281,9 +280,7 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
       if (!servicoId) throw new AppError(400, 'SERVICO_INSTALACAO', 'Nenhum serviço de instalação encontrado no GestãoClick.');
       servicos.push({ gc_servico_id: servicoId, valor_venda: valorInstalacao });
     }
-    const codigo = Math.floor(Date.now() / 1000);
     const gcOrc = await gcCriarOrcamento({
-      codigo,
       cliente_id: orc.gc_cliente_id!,
       produtos: linhas,
       servicos,
@@ -298,7 +295,7 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
         status: 'enviado',
         gc_produto_id: criados[0] ?? null,
         gc_orcamento_id: gcOrc.gc_orcamento_id,
-        gc_codigo: String(codigo),
+        gc_codigo: gcOrc.gc_codigo,
         payload_gc_enviado: gcOrc.payload as Prisma.InputJsonValue,
         resposta_gc: gcOrc.resposta as Prisma.InputJsonValue,
         erro_gc: null,
