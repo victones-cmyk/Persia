@@ -19,15 +19,16 @@ import {
 } from '../services/calc/tipos';
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
-import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
+import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc, type LinhaServicoGc } from '../services/gc/orcamentos';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
-import { reenviarCortina } from './orcamentoCortinaController';
+import { reenviarCortina, resolverServicoInstalacao } from './orcamentoCortinaController';
 
 /** Entrada de um item (janela) vinda do frontend. */
 interface ItemEntrada {
+  ambiente?: string;
   tecido_id: string;
   cor_acessorio: Cor;
   acionamento: Acionamento;
@@ -40,6 +41,7 @@ interface ItemEntrada {
 
 /** Item já recalculado no servidor, pronto para enviar/salvar. */
 interface ItemPreparado {
+  ambiente: string;
   tecido: TecidoGc;
   cor_acessorio: Cor;
   acionamento: Acionamento;
@@ -59,6 +61,7 @@ interface ItemPreparado {
 
 /** Snapshot persistido em itens_json (independe do GC para reenvio/exibição). */
 interface ItemSnapshot {
+  ambiente: string;
   tecido_codigo_gc: string;
   tecido_nome: string;
   dimensao_m: number;
@@ -79,8 +82,9 @@ interface ItemSnapshot {
   componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
 }
 
-function nomeProdutoGc(tipo: TipoPersiana, it: { tecido_nome: string; largura: number; altura: number; cor_acessorio: string; acionamento: Acionamento }): string {
-  return `${TIPO_LABEL[tipo]} - ${it.tecido_nome} - ${it.largura.toFixed(2)}x${it.altura.toFixed(2)} - ${it.cor_acessorio} - ${ACIONAMENTO_LABEL[it.acionamento]}`.slice(0, 120);
+function nomeProdutoGc(tipo: TipoPersiana, it: { ambiente?: string; tecido_nome: string; largura: number; altura: number; cor_acessorio: string; acionamento: Acionamento }): string {
+  const amb = it.ambiente?.trim() ? ` - ${it.ambiente.trim()}` : '';
+  return `${TIPO_LABEL[tipo]}${amb} - ${it.tecido_nome} - ${it.largura.toFixed(2)}x${it.altura.toFixed(2)} - ${it.cor_acessorio} - ${ACIONAMENTO_LABEL[it.acionamento]}`.slice(0, 120);
 }
 
 /** Recalcula cada item no servidor. Sem desconto: o valor cheio vai ao GestãoClick. */
@@ -115,7 +119,9 @@ function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<st
     const valorCusto = roundHalfUp(calc.qtd_venda * tecido.preco_custo);
     valorBrutoTotal = roundHalfUp(valorBrutoTotal + valorBruto);
 
+    const ambiente = it.ambiente?.trim() || '';
     preparados.push({
+      ambiente,
       tecido,
       cor_acessorio: it.cor_acessorio,
       acionamento: it.acionamento,
@@ -130,7 +136,7 @@ function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<st
       valor_final: valorBruto, // sem desconto: valor cheio vai ao GC
       valor_custo: valorCusto,
       componentes: calc.componentes,
-      nome_produto: nomeProdutoGc(tipo, { tecido_nome: tecido.nome, largura, altura, cor_acessorio: it.cor_acessorio, acionamento: it.acionamento }),
+      nome_produto: nomeProdutoGc(tipo, { ambiente, tecido_nome: tecido.nome, largura, altura, cor_acessorio: it.cor_acessorio, acionamento: it.acionamento }),
     });
   }
 
@@ -144,6 +150,7 @@ function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<st
  */
 async function executarEnvioGc(args: {
   itens: { nome_produto: string; valor_final: number; valor_custo: number }[];
+  instalacao_valor?: number;
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
@@ -161,11 +168,21 @@ async function executarEnvioGc(args: {
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
     }
 
+    // Instalação (opcional) entra como linha de serviço, igual à cortina.
+    const servicos: LinhaServicoGc[] = [];
+    const valorInstalacao = Math.max(0, Number(args.instalacao_valor) || 0);
+    if (valorInstalacao > 0) {
+      const servicoId = await resolverServicoInstalacao(undefined);
+      if (!servicoId) throw new AppError(400, 'SERVICO_INSTALACAO', 'Nenhum serviço de instalação encontrado no GestãoClick.');
+      servicos.push({ gc_servico_id: servicoId, valor_venda: valorInstalacao });
+    }
+
     const codigo = Math.floor(Date.now() / 1000); // = Nº exibido no GestãoClick
     const orc = await gcCriarOrcamento({
       codigo,
       cliente_id: args.gc_cliente_id,
       produtos: linhas,
+      servicos,
       data: new Date().toISOString().slice(0, 10),
       usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
       vendedor_id: args.gcVendedorId,
@@ -193,6 +210,7 @@ async function executarEnvioGc(args: {
 
 function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[]): ItemSnapshot[] {
   return preparados.map((p, i) => ({
+    ambiente: p.ambiente,
     tecido_codigo_gc: p.tecido.id,
     tecido_nome: p.tecido.nome,
     dimensao_m: p.tecido.dimensao_m,
@@ -254,8 +272,12 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeiro = preparados[0];
 
+  // Instalação (opcional) — entra como serviço; soma ao valor final.
+  const valorInstalacao = Math.max(0, Number(b.instalacao_valor) || 0);
+  const valorTotal = roundHalfUp(valorBrutoTotal + valorInstalacao);
+
   // Entrada bruta — permite reabrir o rascunho na calculadora para edição.
-  const entradaJson = { tipo, itens: itensEntrada } as unknown as Prisma.InputJsonValue;
+  const entradaJson = { tipo, itens: itensEntrada, instalacao_valor: valorInstalacao } as unknown as Prisma.InputJsonValue;
 
   // Grava: cria novo ou atualiza o rascunho em edição (mesmo registro).
   const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>
@@ -282,7 +304,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     rolamento: primeiro.rolamento,
     valor_bruto: valorBrutoTotal,
     desconto_pct: 0, // sem desconto na calculadora (controlado no GestãoClick)
-    valor_final: valorBrutoTotal,
+    valor_final: valorTotal, // itens + instalação
     desconto_aprovado_por: null,
   };
 
@@ -303,6 +325,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   try {
     const envio = await executarEnvioGc({
       itens: preparados.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+      instalacao_valor: valorInstalacao,
       gc_cliente_id: String(b.gc_cliente_id),
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
@@ -370,10 +393,12 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
   if (snaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento sem itens para reenviar.');
 
   const loja = await resolverLoja(orc.loja_id);
+  const instalacaoReenvio = Math.max(0, Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0);
 
   try {
     const envio = await executarEnvioGc({
       itens: preparadosDoSnapshot(snaps),
+      instalacao_valor: instalacaoReenvio,
       gc_cliente_id: orc.gc_cliente_id,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,

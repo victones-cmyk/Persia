@@ -164,17 +164,39 @@ describe('Cortina multi-camada (modelo "+" do Victor)', () => {
     expect(accQtd(r, 'Ponteira')).toBe(2);
   });
 
-  it('dupla (2 camadas) → varão/ferragem somam; entretela só na frente', () => {
+  it('dupla (2 camadas) → varão POR CAMADA; ferragem soma; entretela só na frente', () => {
     const r = calcularCortinaMultiCamada({
       modelo: 'ilhos', fixacao: 'varao', largura: 3, altura: 2.6,
       camadas: [{ largura_tecido: 3.0, franzido: 3 }, { largura_tecido: 3.0, franzido: 3 }],
     });
     expect(r.n_camadas).toBe(2);
     expect(r.camadas).toHaveLength(2);
-    expect(accQtd(r, 'Varão')).toBe(6); // 3 + 3
-    expect(accQtd(r, 'Ilhoses')).toBe(120); // 60 + 60
-    expect(accQtd(r, 'Ponteira')).toBe(4); // 2 + 2
+    // Varão NÃO é agregado (Victor 19/06): 1 linha por camada, escolhido individualmente.
+    expect(accQtd(r, 'Varão')).toBeUndefined();
+    expect(accQtd(r, 'Varão (camada 1)')).toBe(3);
+    expect(accQtd(r, 'Varão (camada 2)')).toBe(3);
+    expect(accQtd(r, 'Ilhoses')).toBe(120); // 60 + 60 (por tecido)
+    expect(accQtd(r, 'Ponteira')).toBe(4); // 2 + 2 (por tecido)
     expect(accQtd(r, 'Entretela (KOS)')).toBe(9); // só a frente
+  });
+
+  it('varão suíço → por camada; trilho conta 1 vez (duplo/triplo, Victor 19/06)', () => {
+    const suico = calcularCortinaMultiCamada({
+      modelo: 'prega', fixacao: 'varao_suico', largura: 3, altura: 2.6,
+      camadas: [{ largura_tecido: 3.0, franzido: 2 }, { largura_tecido: 3.0, franzido: 2 }],
+    });
+    expect(accQtd(suico, 'Varão suíço (camada 1)')).toBe(3);
+    expect(accQtd(suico, 'Varão suíço (camada 2)')).toBe(3);
+
+    const trilho = calcularCortinaMultiCamada({
+      modelo: 'prega', fixacao: 'trilho', largura: 3, altura: 2.6,
+      camadas: [{ largura_tecido: 3.0, franzido: 2 }, { largura_tecido: 3.0, franzido: 2 }],
+    });
+    // Trilho = 1 trilho duplo/triplo: conta UMA vez (largura), não soma por camada.
+    expect(accQtd(trilho, 'Trilho')).toBe(3);
+    expect(trilho.acessorios.filter((a) => a.item === 'Trilho')).toHaveLength(1);
+    // Rodízios/ganchos continuam por tecido.
+    expect(accQtd(trilho, 'Rodízios/ganchos')).toBe(60); // 30 + 30
   });
 
   it('rejeita 0 ou mais de 3 camadas', () => {

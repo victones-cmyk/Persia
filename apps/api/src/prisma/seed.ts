@@ -12,6 +12,22 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+/**
+ * Lê a senha inicial de uma variável de ambiente OBRIGATÓRIA. Nunca usar senha
+ * literal no código (regra de segurança): credenciais não podem ir ao git.
+ * Em dev, defina as variáveis antes de rodar o seed (ver .env.example).
+ */
+function senhaInicial(nomeVar: string): string {
+  const valor = process.env[nomeVar];
+  if (!valor || valor.trim().length < 8) {
+    throw new Error(
+      `[seed] Variável obrigatória ausente ou curta: ${nomeVar}. ` +
+        `Defina uma senha inicial com ao menos 8 caracteres antes de rodar o seed.`,
+    );
+  }
+  return valor;
+}
+
 async function upsertLoja(nome: string, gc_loja_id: string) {
   const existente = await prisma.loja.findFirst({ where: { nome } });
   if (existente) {
@@ -38,11 +54,13 @@ async function main() {
     create: {
       nome: 'Victor Nogueira Pavoni',
       email: 'victor.pavoni',
-      senha_hash: bcrypt.hashSync('Admin@2026', 10),
+      senha_hash: bcrypt.hashSync(senhaInicial('SEED_ADMIN_SENHA'), 10),
       perfil: 'admin',
       loja_id: null,
       gc_usuario_id: '10512',
       desconto_max_pct: 30.0,
+      // Senha inicial é provisória — o admin é obrigado a trocá-la no 1º acesso.
+      senha_provisoria: true,
     },
   });
 
@@ -58,11 +76,12 @@ async function main() {
     create: {
       nome: 'Vendedor SP Teste',
       email: 'loja.sp',
-      senha_hash: bcrypt.hashSync('Vendedor@2026', 10),
+      senha_hash: bcrypt.hashSync(senhaInicial('SEED_VENDEDOR_SP_SENHA'), 10),
       perfil: 'vendedor',
       loja_id: lojaSP.id,
       gc_usuario_id: null, // PLACEHOLDER-02
       desconto_max_pct: 10.0,
+      senha_provisoria: true,
     },
   });
 
@@ -78,11 +97,12 @@ async function main() {
     create: {
       nome: 'Vendedor SBC Teste',
       email: 'loja.sbc',
-      senha_hash: bcrypt.hashSync('Vendedor@2026', 10),
+      senha_hash: bcrypt.hashSync(senhaInicial('SEED_VENDEDOR_SBC_SENHA'), 10),
       perfil: 'vendedor',
       loja_id: lojaSBC.id,
       gc_usuario_id: null, // PLACEHOLDER-02
       desconto_max_pct: 10.0,
+      senha_provisoria: true,
     },
   });
 

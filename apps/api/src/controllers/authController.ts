@@ -4,6 +4,7 @@
 import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
+import { validarSenha } from '../lib/senha';
 
 /** Forma pública do usuário exposta ao frontend (sem senha_hash). */
 function toSessionUser(u: {
@@ -88,8 +89,9 @@ export async function alterarSenha(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'CAMPOS_OBRIGATORIOS', message: 'Informe a senha atual e a nova senha.' });
     return;
   }
-  if (senha_nova.length < 6) {
-    res.status(400).json({ error: 'SENHA_CURTA', message: 'A nova senha deve ter ao menos 6 caracteres.' });
+  const erroSenha = validarSenha(senha_nova);
+  if (erroSenha) {
+    res.status(400).json({ error: 'SENHA_FRACA', message: erroSenha });
     return;
   }
   if (senha_nova === senha_atual) {

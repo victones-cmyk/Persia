@@ -26,6 +26,7 @@ export interface ItemOrcamento {
 
 /** Snapshot de um item (janela) salvo em itens_json. */
 export interface ItemSnapshot {
+  ambiente?: string;
   tecido_codigo_gc: string;
   tecido_nome: string;
   dimensao_m: number;

@@ -5,6 +5,7 @@
 
 /** Snapshot bruto de um item (janela) de persiana — strings (estado parcial do form). */
 export interface PersianaItemSnap {
+  ambiente: string;
   tecido_id: string;
   cor: string;
   acionamento: string;
@@ -29,6 +30,7 @@ export interface CortinaCardSnap {
   altura: string;
   tamanhoBarra: string;
   tipoBarra: string;
+  jaPossuiVarao?: boolean;
   camadas: { tecidoId: string; franzido: string }[];
   acessorioSel: Record<string, string>;
   qtdManual: Record<string, string>;
@@ -48,12 +50,21 @@ export interface RascunhoLocal {
 
 const CHAVE = 'persia:orcamento-rascunho-local';
 
+// Validade do rascunho local (12h). Evita que dados de cliente fiquem
+// indefinidamente legíveis em estações compartilhadas entre vendedores.
+const VALIDADE_MS = 12 * 60 * 60 * 1000;
+
 export function lerRascunhoLocal(): RascunhoLocal | null {
   try {
     const bruto = localStorage.getItem(CHAVE);
     if (!bruto) return null;
     const r = JSON.parse(bruto) as RascunhoLocal;
     if (!r || (r.tipo !== 'persiana' && r.tipo !== 'cortina')) return null;
+    // Descarta rascunhos antigos (e os de versões sem carimbo de tempo).
+    if (typeof r.ts !== 'number' || Date.now() - r.ts > VALIDADE_MS) {
+      limparRascunhoLocal();
+      return null;
+    }
     return r;
   } catch {
     return null;

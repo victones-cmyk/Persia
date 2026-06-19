@@ -2,7 +2,8 @@
 // Motor de cálculo de persiana — 7 tipos (RN-01, RN-02, RN-03, RN-04, RN-07).
 
 import { roundHalfUp } from './arredondamento';
-import { META, TC_FATOR, type TipoPersiana, type Cor, type Acionamento, type Familia } from './tipos';
+import { META, type TipoPersiana, type Cor, type Acionamento, type Familia } from './tipos';
+import { getRegras } from './regras';
 import { todosComponentes } from './componentes';
 import type { ComponenteCalculado } from './componentes.types';
 
@@ -50,6 +51,9 @@ export interface ResultadoPersiana {
 export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
   const meta = META[e.tipo];
   if (!meta) throw new Error(`Tipo de persiana inválido: ${e.tipo}`);
+  // Regras parametrizáveis (módulo Admin → Regras de Cálculo).
+  const reg = getRegras().persiana;
+  const rt = reg.tipos[e.tipo];
 
   if (!(e.largura > 0) || !(e.altura > 0) || !(e.dimensao > 0)) {
     throw new Error('Largura, altura e dimensão devem ser positivos.');
@@ -60,16 +64,16 @@ export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
     throw new RN01Error(e.largura, e.dimensao);
   }
 
-  const alturaEfetiva = meta.dobrarAltura ? e.altura * 2 : e.altura;
-  const fatorAltura = alturaEfetiva + meta.margem;
+  const alturaEfetiva = rt.dobrar_altura ? e.altura * 2 : e.altura;
+  const fatorAltura = alturaEfetiva + rt.margem;
 
   // RN-02 — Produção sempre usa [Largura]; Venda usa [Dimensao] ou [Largura] × fator.
   const qtd_producao = roundHalfUp(e.largura * fatorAltura);
-  const baseVenda = meta.baseVenda === 'dimensao' ? e.dimensao : e.largura;
-  const qtd_venda = roundHalfUp(baseVenda * fatorAltura * meta.fatorVenda);
+  const baseVenda = rt.base_venda === 'dimensao' ? e.dimensao : e.largura;
+  const qtd_venda = roundHalfUp(baseVenda * fatorAltura * rt.fator_venda);
 
-  // RN-04 — TC padrão = 75% da altura; campo editável (usa valor informado se houver).
-  const tc = e.tc !== undefined ? roundHalfUp(e.tc) : roundHalfUp(e.altura * TC_FATOR);
+  // RN-04 — TC padrão = altura × fator (parametrizável); campo editável (usa valor informado se houver).
+  const tc = e.tc !== undefined ? roundHalfUp(e.tc) : roundHalfUp(e.altura * reg.tc_fator);
 
   // RN-03 — Valor Bruto = Qtd Venda (m²) × Preço de Venda do Tecido (R$/m²).
   const preco_tecido = e.preco_tecido ?? null;
@@ -85,7 +89,7 @@ export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
     altura: e.altura,
     dimensao: e.dimensao,
     altura_efetiva: alturaEfetiva,
-    margem: meta.margem,
+    margem: rt.margem,
     tc,
     qtd_producao,
     qtd_venda,

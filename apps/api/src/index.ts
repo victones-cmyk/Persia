@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import express, { type Request, type Response } from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
+import helmet from 'helmet';
 import cors from 'cors';
 import pg from 'pg';
 
@@ -19,12 +20,35 @@ import orcamentosRouter from './routes/orcamentos';
 import adminRouter from './routes/admin';
 import gcRouter from './routes/gc';
 import { getGcHealth } from './services/gc/health';
+import { carregarRegras } from './services/calc/regras';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 const app = express();
 
 // Railway/Proxy: necessário para cookies secure atrás de proxy TLS.
 app.set('trust proxy', 1);
+
+// Cabeçalhos de segurança HTTP (HSTS, X-Content-Type-Options, frameguard, CSP...).
+// CSP liberando apenas o necessário: recursos próprios + Google Fonts (DS v4).
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        // 'unsafe-inline' em estilos: React/Tailwind aplicam estilos inline em runtime.
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'self'"],
+      },
+    },
+    // HSTS só faz sentido sob HTTPS (produção/Railway).
+    hsts: isProduction,
+  }),
+);
 
 app.use(express.json({ limit: '1mb' }));
 app.use(
@@ -68,16 +92,12 @@ app.use(
 // ---------------------------------------------------------------------------
 
 // Saúde da própria API + conexão com o banco.
+// Público (usado pelo health check do Railway) — NÃO expor versão/commit aqui,
+// para não revelar a versão exata em uso a terceiros. O commit fica em /api/admin/versao.
 app.get('/api/health', async (_req: Request, res: Response) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({
-      status: 'ok',
-      db: 'ok',
-      // Preenchido pelo Railway só em deploys via GitHub — usado para verificar o auto-deploy.
-      commit: process.env.RAILWAY_GIT_COMMIT_SHA ?? null,
-      timestamp: new Date().toISOString(),
-    });
+    res.json({ status: 'ok', db: 'ok', timestamp: new Date().toISOString() });
   } catch {
     res.status(503).json({ status: 'degraded', db: 'offline', timestamp: new Date().toISOString() });
   }
@@ -128,6 +148,8 @@ app.use(errorHandler);
 
 const server = app.listen(env.PORT, () => {
   console.log(`🚀 API Pérsia ouvindo em http://localhost:${env.PORT} (${env.NODE_ENV})`);
+  // Carrega as regras de cálculo (módulo admin) para a memória.
+  void carregarRegras(prisma);
 });
 
 // Encerramento gracioso.

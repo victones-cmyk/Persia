@@ -55,6 +55,7 @@ export interface CalcularResposta {
 
 /** Campos de UM item (janela) enviados ao backend (cálculo em lote / orçamento). */
 export interface ItemInput {
+  ambiente?: string;
   tecido_id: string;
   cor_acessorio: Cor;
   acionamento: Acionamento;

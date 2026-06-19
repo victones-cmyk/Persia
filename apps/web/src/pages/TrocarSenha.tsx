@@ -72,9 +72,12 @@ export function TrocarSenha() {
               value={atual} onChange={(e) => { setAtual(e.target.value); setErro(null); }} autoFocus />
           </div>
           <div>
-            <label htmlFor="nova" className="form-label">Nova senha <span className="label-optional">(mín. 6)</span></label>
+            <label htmlFor="nova" className="form-label">Nova senha <span className="label-optional">(mín. 8, com letra e número)</span></label>
             <input id="nova" type="password" className="input" autoComplete="new-password"
               value={nova} onChange={(e) => { setNova(e.target.value); setErro(null); }} />
+            {nova.length > 0 && !senhaValida(nova) && (
+              <div className="helper-error">A senha deve ter ao menos 8 caracteres, com uma letra e um número.</div>
+            )}
           </div>
           <div>
             <label htmlFor="confirma" className="form-label">Confirmar nova senha</label>

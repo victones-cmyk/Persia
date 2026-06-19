@@ -13,6 +13,7 @@ import type { ComponenteCalculado } from './componentes.types';
 import { COND_DATA } from './componentes.data';
 import { evalFormula } from './formula';
 import { roundHalfUp } from './arredondamento';
+import { getRegras } from './regras';
 
 const COR_UPPER: Record<Cor, string> = {
   Branco: 'BRANCO',
@@ -32,17 +33,18 @@ function qtd(formula: string, largura: number, altura: number): number {
 export function componentesFixos(tipo: TipoPersiana, largura: number): ComponenteCalculado[] {
   const meta = META[tipo];
   const rolo = meta.familia === 'rolo';
+  const reg = getRegras().persiana;
 
-  // Fita: rolo desconta margem; romana usa largura cheia.
-  const fitaDupla = rolo ? '[Largura]-0.02' : '[Largura]';
-  const fitaColante = rolo ? '[Largura]-0.03' : '[Largura]';
+  // Fita: rolo desconta margem (parametrizável); romana usa largura cheia.
+  const fitaDupla = rolo ? `[Largura]-${reg.fita_dupla_desconto_rolo}` : '[Largura]';
+  const fitaColante = rolo ? `[Largura]-${reg.fita_colante_desconto_rolo}` : '[Largura]';
 
   return [
     { grupo: 'fixo', descricao: 'FITA DUPLA FACE', quantidade: qtd(fitaDupla, largura, 0), unidade: 'm' },
     { grupo: 'fixo', descricao: 'FITA COLANTE 15MM', quantidade: qtd(fitaColante, largura, 0), unidade: 'm' },
     { grupo: 'fixo', descricao: 'EMBALAGEM DE PERSIANA', quantidade: 1, unidade: 'un' },
     { grupo: 'fixo', descricao: meta.maoDeObra, quantidade: 1, unidade: 'un' },
-    { grupo: 'fixo', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', quantidade: qtd('[Largura]/0.5', largura, 0), unidade: 'un' },
+    { grupo: 'fixo', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', quantidade: qtd(`[Largura]/${reg.parafuso_passo}`, largura, 0), unidade: 'un' },
   ];
 }
 
@@ -76,6 +78,7 @@ export function componentesCondicionais(
 export function baseTampa(tipo: TipoPersiana, cor: Cor, largura: number): ComponenteCalculado[] {
   const meta = META[tipo];
   const corUp = COR_UPPER[cor];
+  const reg = getRegras().persiana;
 
   // Double Vision usa componentes próprios; demais usam BASE CÔNICA.
   const ehDoubleVision = tipo === 'persiana_rolo_double_vision';
@@ -86,12 +89,12 @@ export function baseTampa(tipo: TipoPersiana, cor: Cor, largura: number): Compon
     ? `TAMPA DA BASE DOUBLE VISION COR ${corUp}`
     : `TAMPA DA BASE CONICA COR ${corUp}`;
 
-  // Fórmula da base: rolo e DV usam [Largura]-0.025; romana usa [Largura].
-  const formulaBase = meta.familia === 'romana' ? '[Largura]' : '[Largura]-0.025';
+  // Fórmula da base: rolo e DV descontam (parametrizável); romana usa [Largura].
+  const formulaBase = meta.familia === 'romana' ? '[Largura]' : `[Largura]-${reg.base_desconto_rolo}`;
 
   return [
     { grupo: 'base', descricao: nomeBase, quantidade: qtd(formulaBase, largura, 0), unidade: 'm' },
-    { grupo: 'base', descricao: nomeTampa, quantidade: 2, unidade: 'un' },
+    { grupo: 'base', descricao: nomeTampa, quantidade: reg.tampas_por_persiana, unidade: 'un' },
   ];
 }
 

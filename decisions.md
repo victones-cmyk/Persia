@@ -181,6 +181,7 @@ Legenda de status: ✅ implementado · ⏳ aguardando terceiro (Victor/GestãoCl
   - Login "Usuário" + senha provisória, seletor de vendedor (funcionários **ativos** do GC), busca de tecido, admin com CRUD/excluir usuário. Auto-deploy GitHub→Railway OK.
   - **UX:** confirmação antes de enviar ao GC; modais 100% in-app (sem pop-up do navegador); **guarda de navegação** + **autosave local** (recupera orçamento não salvo ao reabrir o navegador); títulos das telas em negrito; marca da navbar clicável → Orçamentos; cache do GC reduzido a 1 min.
 - **Validação (18/06):** teste controlado de escrita da cortina OK (R$ 790, confirmado e apagado). **Replicação de 2 orçamentos reais do GC** (ver §10.15): ILHÓS bate ~0,7%; WAVE e varão a revisar.
+- **EM DESENVOLVIMENTO LOCAL — NÃO DEPLOYADO (a partir de 18/06):** o **Módulo de Regras de Cálculo** (§11) e as **correções da 1ª onda de homologação** (§10.16) estão prontos **só no ambiente local** (typecheck + 65 testes OK). **Nada disso está em produção** — o último commit em produção é o `72f6245` (rodadas até §10.14). Subir tudo junto quando o PH autorizar (e fazer 1 teste online do nº sequencial).
 - **Pendências:** fator do Wave (BLOQUEANTE-05); achados da validação §10.15 (varão por barra, qtd ilhós, acessórios wave); **homologação pelo Victor** (Fase 8); conferir fita 2× largura (OS).
 
 ---
@@ -374,3 +375,91 @@ Backend (estágio 1, commit df16718): `gc/acessorios.ts` (mapa acima, leitura po
 - **Nº 9822 — Cortina ILHÓS (2,65×2,32, blackout):** GC R$ 1.308,32 × calculadora **R$ 1.298,64 (~0,7%)**. Metragem 7,95 vs 8,00; entretela e ponteira batem. **Motor de ILHÓS validado.**
 - **Nº 9807 — Cortina WAVE (2,90×2,55, gaze):** divergências — tecido 7,85 vs 8,35 (fator 2,7 baixo vs ~2,88 da prática); acessórios wave da calc (cordão+rodízio+base) ≠ prática (fita wave por metro); entretela incluída pela calc; terminais 4 vs 2.
 - **Achados a revisar com o Victor (não corrigidos — decisão dele):** (1) fator do **Wave** (BLOQUEANTE-05); (2) **varão** sai por metro na calc, mas no GC é por **barra** (o **trilho** por metro bate); (3) **qtd de ilhós** (54 vs 58, espaçamento); (4) **estrutura de acessórios do Wave**; (5) entretela no Wave. Orçamentos do GC usados são **manuais** (refletem a prática e variam por vendedor); a calc segue as regras definidas com o Victor.
+
+### 10.16 ⏳ Homologação — 1ª onda de feedback do Victor (18/06/2026) — LOCAL, não deployado
+Doc do Victor: `Persia_Casos_de_Teste_Homologacao_Victor_v.2.docx` (raiz). Maioria dos casos OK. **Tudo abaixo está só no ambiente local.**
+
+**Corrigido/feito (local):**
+- **Barra em CM** (era o "bug" do cálculo de cortina): o campo "Tamanho da barra" estava em **metros** e o Victor digitava pensando em **cm** (ex.: "10" virava 10 m → metragem inflada, o "38 m"). Campo passou a ser **cm** (CortinaCard + módulo de Regras); converte p/ metros por baixo. **O motor estava correto.**
+- **Wave — acessórios contaminando** (img1): "Cordão wave/Rodízio wave/Base click" mapeiam todos p/ a categoria `wave`; o seletor (`acessorioSel`) passou a ser **por item** (não por categoria). Front: `CortinaCard`. Backend já casava por item.
+- **Transparência** (4.1): bloco **"Tecido (cálculo)"** no `CortinaCard` mostra metragem por camada (+ emenda + valor). Persiana já mostrava m² por item.
+- **Nome do ambiente na persiana** (Tab. 9): campo `Ambiente` por item no `PersianaForm`; vai no nome do produto do GC, no detalhe, na edição e no autosave (`ItemInput.ambiente`, `ItemSnapshot.ambiente`, `nomeProdutoGc`).
+- **Checkbox "Já possui" (trilho/varão)** (img2): quando marcado, o trilho/varão **não entra** no orçamento (não soma, não exige produto). Front (`CortinaCard`: `jaPossuiVarao`) + backend (`CortinaEntrada.ja_possui_varao` → `prepararCortina` pula o item da barra). Persiste no payload/entrada_json/autosave.
+- **Instalação na persiana** (3.5): campo "Instalação (R$)" no `ResultadoPanel`; entra como **linha de serviço** no envio (`executarEnvioGc` ganhou `instalacao_valor`; `resolverServicoInstalacao` exportado do controller de cortina e reusado); soma ao `valor_final`; salvo no `entrada_json`; exibido no detalhe; restaurado na edição/reenvio.
+
+**Investigação (sem bug — motor correto):** persiana multi-itens calcula cada item certo no servidor (R$349,03 + R$430,12 independentes); metragem de cortina correta (o "38 m" era a barra em m).
+
+**⏸ Pendente do Victor:** trilho duplo (qual acessório conta 1× vs por camada); **tecidos por grupo** (PH aprovou filtrar; falta saber como os tecidos estão agrupados no GC); calibração fina dos valores (aguardando 2–3 casos concretos com valor do DecorSoft); **cliente "Cliente final"** (precisa existir no GC); **fixação por busca** (só 3 opções → confirmar).
+
+**⏸ Pendente de teste online (não feito — "nada online"):** **Nº do orçamento sequencial** — hoje envia `codigo = Math.floor(Date.now()/1000)` (timestamp). Victor (img3) alerta que o GC é **sequencial** e número "aleatório" pode dar erro. Plano: **não enviar `codigo`** (GC gera) e ler o nº gerado via `GET /api/orcamentos/:id`. Exige 1 envio de teste controlado antes do deploy.
+
+**🟣 Estrutural (à parte):** orçamento **misto** cortina + persiana no mesmo orçamento (Tab. 9, 6.1) — mudança grande, planejar separado.
+
+---
+
+## 11. Módulo de Regras de Cálculo (18/06/2026) — LOCAL, não deployado
+
+Objetivo: o Victor (admin) **parametriza as regras do motor com autonomia**, sem depender da Stratos e **sem deploy** — salvou, vale na hora para toda a aplicação.
+
+- **Backend** `services/calc/regras.ts`: `RegrasCalculo` (interface), `REGRAS_DEFAULT` (= constantes originais do código), store em memória (`getRegras`), `carregarRegras` (no boot, lê `Configuracao` chave `regras_calculo` em JSON), `salvarRegras` (valida via `normalizar()` + grava + atualiza memória → reflete imediato; API é processo único). Sem migração (reusa `Configuracao`).
+- **Motor lê `getRegras()`**: `persiana.ts` (`tc_fator`; por tipo: margem, fator_venda, base_venda, dobrar_altura), `componentes.ts` (descontos fita/base, passo do parafuso, tampas), `cortina.ts` (`franzido_wave`, `passo_tecido`, `passo_botao_wave`, `folga_topo`/`tem_entretela` por modelo, defaults de franzido/barra/espaçamentos/aberturas). `META` mantém só o estático (codigoGc, familia, maoDeObra).
+- **Endpoints** (só admin): `GET`/`PUT /api/admin/regras-calculo`.
+- **Frontend** `pages/admin/AdminRegras.tsx` (item "Regras de Cálculo" na Sidebar, só admin). Abre em **visualização** (campos travados = regras em vigor); botão **Editar** habilita; **Cancelar edição** / **Restaurar padrão** / **Salvar**. "Tamanho da barra" exibido em **cm**.
+- **Validação:** 65 testes do motor passam (defaults = originais); double-check confirmou os 31 valores exibidos == originais; testes de cálculo confirmaram que alterar um parâmetro muda o resultado e reverter restaura.
+- **Limitação:** **fórmulas estruturais** (componentes condicionais, lógica de emenda) seguem no código — não são parametrizáveis por formulário.
+
+## 12. Auditoria de segurança — correções (18/06/2026) — LOCAL, não deployado
+
+Rodada a skill `vibe-code-security-auditor` no projeto inteiro (44 .ts API + 38 .ts/.tsx web + configs). Base já era sólida (sessão httpOnly/secure, bcrypt, controle de acesso por perfil no backend, sem IDOR, Prisma parametrizado, `.env` fora do git, sem XSS). 7 achados corrigidos **localmente** (nada em produção — último commit prod segue `72f6245`):
+
+1. **[Crítico] Senha de admin padrão no código + nunca forçada a trocar** — `seed.ts` lia `Admin@2026`/`Vendedor@2026` em texto e não setava `senha_provisoria` (default `false`). Agora lê de env obrigatória (`SEED_ADMIN_SENHA`, `SEED_VENDEDOR_SP_SENHA`, `SEED_VENDEDOR_SBC_SENHA`, mín. 8 chars) e cria com `senha_provisoria: true`. Vars documentadas no `.env.example`. **PENDÊNCIA OPERACIONAL:** a senha antiga está no histórico do git — trocar a senha do admin em produção quando reativarmos o deploy.
+2. **[Alto] Login sem proteção contra força bruta** — adicionado `express-rate-limit` em `POST /api/auth/login` (10 tentativas falhas/IP a cada 15 min → 429; `skipSuccessfulRequests`). Usa o `trust proxy` já existente. Testado: 429 a partir da 11ª falha.
+3. **[Alto] Dependência vulnerável** — `npm audit fix` subiu `axios`→1.17.0 / `form-data`→4.0.6. **Produção: 0 vulnerabilidades.** Os achados **dev-only** restantes (esbuild/vite/vitest/shell-quote) também foram zerados (18/06, ver §12.1): **`npm audit` = 0 vulnerabilidades** no monorepo inteiro.
+4. **[Médio] Cabeçalhos de segurança ausentes** — adicionado `helmet` em `index.ts` com CSP liberando só o necessário (recursos próprios + Google Fonts), HSTS só em produção. Confirmado via curl (CSP, X-Frame-Options SAMEORIGIN, nosniff etc.).
+5. **[Médio] Política de senha fraca (mín. 6)** — novo `lib/senha.ts` (`validarSenha`: mín. 8 + letra + número), usado em `authController.alterarSenha`, `adminController.criarUsuario`/`editarUsuario`. Frontend espelhado em `validacao.ts` (`senhaValida`), telas `TrocarSenha` e `AdminUsuarios` atualizadas. Login continua leniente (não bloqueia o botão).
+6. **[Baixo] Rascunho local sem expiração** — `rascunhoLocal.ts` agora descarta rascunho > 12h (e os sem `ts`); `useAuth.logout` limpa o rascunho ao sair (estações compartilhadas).
+7. **[Baixo] Health expunha commit** — removido `commit` do público `/api/health`; movido para `GET /api/admin/versao` (só admin). Confirmado 401 sem auth.
+
+**Ponto de atenção registrado (não corrigido):** sem token anti-CSRF; risco mitigado por `sameSite:'lax'` + cookie + API só-JSON. Reavaliar se for adicionada rota que aceite form/POST top-level.
+
+**Verificação:** typecheck API + web limpos; 65/65 testes passam; API sobe com helmet+rate-limit; login renderiza sem erro de console.
+
+### 12.1 Upgrade das dependências dev-only (18/06/2026) — LOCAL
+
+Para zerar os achados dev-only do `npm audit` sem deploy:
+- **`overrides` na raiz**: `esbuild ^0.25.0` (corrige o advisory do dev-server, raiz de vários achados) e `vite ^6.4.3` (mantém todo o vite alinhado no patch que corrige path-traversal / `fs.deny` bypass; **vite 6.4.3, não 8** — menor salto possível).
+- **web**: `vite ^5.4.11 → ^6.4.3`. `@vitejs/plugin-react@4.7` mantido (já cobre vite 6/7). `vite.config.ts` sem mudanças.
+- **api**: `vitest`/`@vitest/coverage-v8` `^2.1.8 → ^3.2.6` (vitest 3 aceita vite 6). `vitest.config.ts` sem mudanças.
+- **raiz**: `concurrently → 9.2.3` (resolve `shell-quote`).
+- Exigiu **reinstalação limpa** (`rm -rf node_modules + package-lock.json`) para o `overrides` valer — `npm install` incremental reaproveitava a árvore antiga.
+- **Resultado:** `npm audit` = **0 vulnerabilidades**. Verificado: typecheck API+web OK, 65/65 testes no vitest 3, **`vite build` (produção) OK**, dev server vite 6.4.3 sobe e login carrega sem erro de console. Node de build precisa ser ≥20 (vite 6.4.3 ok com node 20; não exige 20.19 como vite 7).
+
+## 13. Respostas do Victor (1ª onda do e-mail, 19/06/2026) + filtro de tecidos — LOCAL
+
+Victor respondeu as perguntas do e-mail (2 ondas, 19/06):
+
+1. **Exemplos de orçamentos corretos** — "vou montar e mando". ⏳ **PENDENTE** — sem isso não dá para fazer a calibração fina (igualar valor ao DecorSoft). É o item mais importante.
+2. **Cortina — quantidades com 2/3 tecidos:**
+   - **Varão** = N (1 por tecido), e o **vendedor escolhe cada um** (cliente pode misturar 19mm/28mm). ✅ **IMPLEMENTADO** — varão por camada (ver §13.2).
+   - **Demais acessórios** (rodízios/argolas/ponteiras/suportes/terminais) = **por tecido**. ✅ **JÁ CORRETO** — o motor multi-camada já soma por camada.
+   - **TRILHO** (não varão): Victor confirmou **(a) 1 trilho duplo/triplo** — conta **1 vez** (qty = largura), não soma por camada. ✅ **IMPLEMENTADO** (ver §13.2).
+3. **Tecidos por tipo** — "os tecidos de persiana já estão separados por tipo no GC". ✅ **INVESTIGADO E IMPLEMENTADO** (ver §13.1).
+4. **"PERSIANA FD"** — "grupo coringa de movimentação de estoque, não aparece em nada". ✅ **EXCLUÍDO** do filtro (só os 4 materiais aparecem). BLOQUEANTE-07 resolvido.
+
+### 13.1 Filtro de tecidos de persiana por tipo (implementado — LOCAL)
+
+Investigação (somente leitura no GC, 19/06/2026): "TECIDOS PARA PERSIANA" (235486) tem 5 subgrupos:
+`5914897` BLACKOUT, `5914896` TELA SOLAR (=screen), `5914898` TRANSLÚCIDO, `5914899` DOUBLE VISION, `5914919` **PERSIANA FD** (ambíguo — mistura BK e outros).
+
+- `tecidos.ts`: `TecidoGc` agora carrega `grupo_id`; `SUBGRUPO_PERSIANA` + `SUBGRUPO_DO_TIPO` mapeiam **por material** (rolo e romana compartilham o mesmo material). `tecidosParaTipo(tipo)` agora **filtra** (antes devolvia todos). Frontend já mandava `?tipo=` — sem mudança no front.
+- **PERSIANA FD** (não mapeado) → **fallback não-destrutivo**: aparece em TODOS os tipos até o Victor classificar. **BLOQUEANTE-07**.
+- **PERSIANA FD excluído** (Victor: grupo coringa, não aparece): filtro estrito `t.grupo_id === subgrupo`. Sem fallback.
+- Verificado contra o GC: cada tipo mostra só o material certo; romana == rolo por material. Cortina **não** foi filtrada (Victor só falou de persiana; tecidos de cortina seguem em lista única).
+
+### 13.2 Varão por camada (implementado — LOCAL)
+
+Victor (19/06): em cortina de 2/3 tecidos, há **N varões**, um **por camada**, e o vendedor escolhe o tipo de **cada um** (ex.: 2 finos 19mm + 1 grosso 28mm).
+- `cortina.ts` (`calcularCortinaMultiCamada`): para fixação **varão** e **varão suíço**, o varão **não é mais agregado** — emite 1 linha por camada (`"Varão (camada N)"` quando há +1 camada; `"Varão"` quando 1 só, sem mudança). **Trilho** = **1 trilho duplo/triplo**: conta **1 vez** (qty = largura), não soma por camada (Victor 19/06, resposta "a"). Verificado: trilho 2 camadas → `Trilho =3m` (antes 6m); rodízios/ganchos seguem por tecido (=60).
+- `acessorios.ts` (`categoriaDoItem`): remove o sufixo `(camada N)`/`(traseiro)` antes de mapear (preserva nomes com parênteses próprios, ex.: "Entretela (KOS)").
+- `CortinaCard.tsx` + `orcamentoCortinaController.ts`: "Cliente já possui o varão" agora pula **todas** as linhas de varão (`ehBarra()` casa pela base do nome). O card já renderiza 1 seletor por item → aparecem N seletores de varão automaticamente (front quase sem mudança).
+- **Verificado** (endpoint real `/cortina/completa`, 2 camadas): `Varão (camada 1)=3m`, `Varão (camada 2)=3m` (categoria `varao`); Ilhoses 120, Ponteira 4, Entretela 9 (frente). Trilho continua `=6m` agregado. 66 testes (1 novo), typecheck API+web OK, sem erro de console.

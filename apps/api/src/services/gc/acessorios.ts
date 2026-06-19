@@ -93,7 +93,10 @@ export async function buscarAcessorioGc(categoria: CategoriaAcessorio, id: strin
  * para a tela montar o seletor de produto certo. `fixacao` decide o grupo do suporte.
  */
 export function categoriaDoItem(item: string, fixacao: 'varao' | 'trilho' | 'varao_suico'): CategoriaAcessorio | null {
-  switch (item) {
+  // Remove sufixos de posição ("(camada N)", "(traseiro/traseira)") sem mexer em
+  // nomes que têm parênteses próprios (ex.: "Entretela (KOS)").
+  const base = item.replace(/\s*\((?:camada \d+|traseiro|traseira)\)$/i, '').trim();
+  switch (base) {
     case 'Varão': return 'varao';
     case 'Varão suíço': return 'varao_suico';
     case 'Trilho': return 'trilho';

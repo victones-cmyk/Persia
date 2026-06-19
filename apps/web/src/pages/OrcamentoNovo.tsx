@@ -54,6 +54,7 @@ export function OrcamentoNovo() {
   const [carregandoEdicao, setCarregandoEdicao] = useState(!!editarId);
   const [prontoEdicao, setProntoEdicao] = useState(!editarId);
   const [persianaInicial, setPersianaInicial] = useState<PersianaInicial | undefined>();
+  const [persianaInstalacao, setPersianaInstalacao] = useState<number | undefined>();
   const [cortinaInicial, setCortinaInicial] = useState<CortinaInicialOrc | undefined>();
 
   // Refs para o autosave (sem causar re-render a cada tecla).
@@ -113,6 +114,7 @@ export function OrcamentoNovo() {
             return;
           }
         } else {
+          setPersianaInstalacao(Number(entrada?.instalacao_valor) || undefined);
           if (entrada?.itens && entrada.itens.length > 0) {
             setPersianaInicial({ tipo: o.tipo_produto as TipoPersiana, itens: entrada.itens });
           } else if (o.itens_json && o.itens_json.length > 0) {
@@ -267,6 +269,7 @@ export function OrcamentoNovo() {
               gcStatus={gcStatus}
               gcUsuarioId={usuario?.gc_usuario_id ?? null}
               editarId={editarId}
+              instalacaoInicial={persianaInstalacao}
               onEnviado={aoEnviado}
             />
           </div>

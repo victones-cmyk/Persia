@@ -5,7 +5,33 @@ import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
+import { validarSenha } from '../lib/senha';
 import { listarFuncionarios } from '../services/gc/catalogos';
+import { getRegras, salvarRegras, REGRAS_DEFAULT } from '../services/calc/regras';
+
+// ---------------------------------------------------------------------------
+// Versão em produção (só admin) — usado para conferir o auto-deploy do Railway.
+// Movido para cá (era público em /api/health) para não expor a versão a terceiros.
+// ---------------------------------------------------------------------------
+export async function getVersao(_req: Request, res: Response): Promise<void> {
+  res.json({ commit: process.env.RAILWAY_GIT_COMMIT_SHA ?? null, timestamp: new Date().toISOString() });
+}
+
+// ---------------------------------------------------------------------------
+// Regras de cálculo (parametrização do motor — só admin)
+// ---------------------------------------------------------------------------
+export async function getRegrasCalculo(_req: Request, res: Response): Promise<void> {
+  res.json({ regras: getRegras(), padrao: REGRAS_DEFAULT });
+}
+
+export async function salvarRegrasCalculo(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const regras = await salvarRegras(prisma, (req.body?.regras ?? req.body));
+  await prisma.logAcao.create({
+    data: { usuario_id: sessao.id, acao: 'regras_calculo_atualizadas', detalhe: {} },
+  });
+  res.json({ regras });
+}
 
 // ---------------------------------------------------------------------------
 // Usuários
@@ -54,8 +80,9 @@ export async function criarUsuario(req: Request, res: Response): Promise<void> {
   if (!b.nome || !b.email || !b.senha) {
     throw new AppError(400, 'CAMPOS_OBRIGATORIOS', 'Nome, email e senha são obrigatórios.');
   }
-  if (String(b.senha).length < 6) {
-    throw new AppError(400, 'SENHA_CURTA', 'A senha deve ter ao menos 6 caracteres.');
+  const erroSenhaCriar = validarSenha(b.senha);
+  if (erroSenhaCriar) {
+    throw new AppError(400, 'SENHA_FRACA', erroSenhaCriar);
   }
   const existe = await prisma.usuario.findUnique({ where: { email: String(b.email).toLowerCase().trim() } });
   if (existe) throw new AppError(409, 'EMAIL_EXISTENTE', 'Já existe um usuário com este e-mail.');
@@ -99,7 +126,8 @@ export async function editarUsuario(req: Request, res: Response): Promise<void> 
   if (b.gc_usuario_id !== undefined) data.gc_usuario_id = b.gc_usuario_id || null;
   if (b.ativo !== undefined) data.ativo = Boolean(b.ativo);
   if (b.senha) {
-    if (String(b.senha).length < 6) throw new AppError(400, 'SENHA_CURTA', 'Senha muito curta.');
+    const erroSenhaEditar = validarSenha(b.senha);
+    if (erroSenhaEditar) throw new AppError(400, 'SENHA_FRACA', erroSenhaEditar);
     data.senha_hash = bcrypt.hashSync(String(b.senha), 10);
     // Reset de senha pelo admin → provisória; o usuário deve trocá-la no próximo login.
     data.senha_provisoria = true;

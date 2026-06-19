@@ -179,6 +179,7 @@ export function OrcamentoDetalhe() {
   const cortinaSnaps = cortinaJson?.cortinas ?? [];
   const instalacaoVal = Number(cortinaJson?.instalacao ?? 0);
   const persianaItens = !ehCortina && Array.isArray(orc.itens_json) ? orc.itens_json : [];
+  const instalacaoPersiana = !ehCortina ? Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0 : 0;
 
   return (
     <div>
@@ -233,7 +234,7 @@ export function OrcamentoDetalhe() {
               {persianaItens.map((it, i) => (
                 <div key={i} className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
                   <div className="flex justify-between items-start gap-2 mb-1">
-                    <span className="text-sm-ui font-semibold text-neutral-800">{i + 1}. {it.tecido_nome}</span>
+                    <span className="text-sm-ui font-semibold text-neutral-800">{i + 1}. {it.ambiente ? `${it.ambiente} — ` : ''}{it.tecido_nome}</span>
                     <span className="font-mono font-semibold tabular-nums whitespace-nowrap">{formatBRL(Number(it.valor_final))}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs-ui text-neutral-600">
@@ -246,6 +247,12 @@ export function OrcamentoDetalhe() {
                   </div>
                 </div>
               ))}
+              {instalacaoPersiana > 0 && (
+                <div className="flex justify-between items-center bg-neutral-50 border border-neutral-300 rounded-sm p-3">
+                  <span className="text-sm-ui font-semibold text-neutral-800">Instalação</span>
+                  <span className="font-mono font-semibold tabular-nums">{formatBRL(instalacaoPersiana)}</span>
+                </div>
+              )}
             </div>
           </div>
         ) : (

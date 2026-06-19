@@ -9,6 +9,7 @@ import {
   faPlus,
   faUsers,
   faClockRotateLeft,
+  faSliders,
 } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { useAuth } from '../hooks/useAuth';
@@ -29,6 +30,7 @@ const ITENS_GERAIS: Item[] = [
 
 const ITENS_ADMIN: Item[] = [
   { to: '/admin/usuarios', label: 'Usuários', icon: faUsers },
+  { to: '/admin/regras-calculo', label: 'Regras de Cálculo', icon: faSliders },
   { to: '/admin/log-acoes', label: 'Log de Ações', icon: faClockRotateLeft },
 ];
 

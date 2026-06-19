@@ -32,6 +32,7 @@ interface CortinaEntrada {
   tipo_barra?: 'simples' | 'dupla';
   camadas: CamadaEntrada[];
   acessorios: AcessorioEntrada[];
+  ja_possui_varao?: boolean; // cliente já tem o trilho/varão → não inclui
 }
 
 interface CortinaPreparada {
@@ -85,9 +86,15 @@ async function prepararCortina(c: CortinaEntrada): Promise<CortinaPreparada> {
     return { tecido_id: t.id, tecido_nome: t.nome, metragem: cam.metragem, valor_tecido: vt };
   });
 
+  // Nome do item da barra (trilho/varão) conforme a fixação — para o "Já possui".
+  // O varão pode vir por camada ("Varão (camada N)"), então casa pela base do nome.
+  const nomeBarra = c.fixacao === 'trilho' ? 'Trilho' : c.fixacao === 'varao_suico' ? 'Varão suíço' : 'Varão';
+  const ehBarra = (item: string) => item === nomeBarra || item.startsWith(`${nomeBarra} (camada `);
+
   // Acessórios: preço do GC × quantidade (auto do motor; manual do cliente, ex.: suporte).
   const acessoriosSnap: Record<string, unknown>[] = [];
   for (const a of r.acessorios) {
+    if (c.ja_possui_varao && ehBarra(a.item)) continue; // cliente já tem o trilho/varão
     const categoria = categoriaDoItem(a.item, c.fixacao) as CategoriaAcessorio | null;
     const entrada = (c.acessorios ?? []).find((x) => x.item === a.item);
     const produtoId = entrada?.produto_id ?? '';
@@ -120,7 +127,7 @@ async function prepararCortina(c: CortinaEntrada): Promise<CortinaPreparada> {
 }
 
 /** Resolve o id do serviço de instalação (o informado ou o 1º "INSTALAÇÃO"). */
-async function resolverServicoInstalacao(servicoId: string | undefined): Promise<string | null> {
+export async function resolverServicoInstalacao(servicoId: string | undefined): Promise<string | null> {
   const servicos = await listarServicos();
   if (servicoId && servicos.some((s) => s.id === String(servicoId))) return String(servicoId);
   const inst = servicos.find((s) => /instala/i.test(s.nome));

@@ -9,6 +9,9 @@ import {
   excluirUsuario,
   listarFuncionariosGc,
   listarLogAcoes,
+  getRegrasCalculo,
+  salvarRegrasCalculo,
+  getVersao,
 } from '../controllers/adminController';
 
 const router = Router();
@@ -22,5 +25,9 @@ router.delete('/usuarios/:id', excluirUsuario);
 router.get('/funcionarios-gc', listarFuncionariosGc);
 
 router.get('/log-acoes', listarLogAcoes);
+router.get('/versao', getVersao);
+
+router.get('/regras-calculo', getRegrasCalculo);
+router.put('/regras-calculo', salvarRegrasCalculo);
 
 export default router;

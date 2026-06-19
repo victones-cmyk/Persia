@@ -24,6 +24,7 @@ export function ResultadoPanel({
   gcStatus,
   gcUsuarioId,
   editarId,
+  instalacaoInicial,
   onEnviado,
 }: {
   dados: OrcamentoCalculado | null;
@@ -31,6 +32,7 @@ export function ResultadoPanel({
   gcStatus: GcStatus;
   gcUsuarioId: string | null;
   editarId?: string | null;
+  instalacaoInicial?: number;
   onEnviado: (orc: OrcamentoSalvo) => void;
 }) {
   const { showToast } = useToast();
@@ -38,10 +40,13 @@ export function ResultadoPanel({
   const [salvando, setSalvando] = useState(false);
   const [salvarAberto, setSalvarAberto] = useState(false);
   const [enviarAberto, setEnviarAberto] = useState(false);
+  const [instalacao, setInstalacao] = useState(instalacaoInicial ? String(instalacaoInicial) : '');
 
-  // Valor por item e total do orçamento (RN-10). dados null = orçamento ainda vazio.
+  // Valor por item, instalação e total do orçamento (RN-10). dados null = orçamento ainda vazio.
   const linhas = dados ? dados.itens.map((it) => ({ it, valor: it.resultado.valor_bruto ?? 0 })) : [];
-  const valorTotal = roundHalfUp(linhas.reduce((s, l) => s + l.valor, 0));
+  const valorItens = roundHalfUp(linhas.reduce((s, l) => s + l.valor, 0));
+  const valorInstalacao = Math.max(0, Number(instalacao) || 0);
+  const valorTotal = roundHalfUp(valorItens + valorInstalacao);
   const temItens = linhas.length > 0;
   const incompleto = !!dados?.incompleto; // há item com campos obrigatórios em branco
 
@@ -61,6 +66,7 @@ export function ResultadoPanel({
       const r = await api.post<{ orcamento: OrcamentoSalvo }>('/orcamentos', {
         tipo: dados.tipo,
         itens: dados.itens.map((it) => it.input),
+        instalacao_valor: valorInstalacao,
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(editarId ? { editar_id: editarId } : {}),
@@ -123,7 +129,11 @@ export function ResultadoPanel({
         )}
       </div>
 
-      <label className="form-label" htmlFor="valor-total">Valor total ({linhas.length} {linhas.length === 1 ? 'item' : 'itens'})</label>
+      <label className="form-label" htmlFor="instalacao-persiana">Instalação (R$)</label>
+      <input id="instalacao-persiana" type="number" className="input mb-3" min={0} step={0.01} placeholder="0,00"
+        value={instalacao} onChange={(e) => setInstalacao(e.target.value)} />
+
+      <label className="form-label" htmlFor="valor-total">Valor total ({linhas.length} {linhas.length === 1 ? 'item' : 'itens'}{valorInstalacao > 0 ? ' + instalação' : ''})</label>
       <input id="valor-total" className="input input-mono mb-4"
         style={{ color: 'var(--color-success)', fontSize: 20 }}
         value={formatBRL(valorTotal)} readOnly tabIndex={-1} onClick={selectAll} />

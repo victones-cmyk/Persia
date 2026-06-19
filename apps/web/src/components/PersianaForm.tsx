@@ -30,6 +30,7 @@ import type { PersianaSnapshot, PersianaItemSnap } from '../lib/rascunhoLocal';
 
 interface ItemForm {
   id: string;
+  ambiente: string;
   tecido_id: string;
   cor: Cor | '';
   acionamento: Acionamento | '';
@@ -47,13 +48,14 @@ interface ItemErro {
 }
 
 function itemVazio(): ItemForm {
-  return { id: crypto.randomUUID(), tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '' };
+  return { id: crypto.randomUUID(), ambiente: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '' };
 }
 
 /** Converte um item salvo (ItemInput) no estado do formulário (para edição de rascunho). */
 function inputParaForm(it: ItemInput): ItemForm {
   return {
     id: crypto.randomUUID(),
+    ambiente: it.ambiente ?? '',
     tecido_id: it.tecido_id,
     cor: it.cor_acessorio,
     acionamento: it.acionamento,
@@ -70,6 +72,7 @@ function inputParaForm(it: ItemInput): ItemForm {
 function snapParaForm(s: PersianaItemSnap): ItemForm {
   return {
     id: crypto.randomUUID(),
+    ambiente: s.ambiente ?? '',
     tecido_id: s.tecido_id,
     cor: s.cor as ItemForm['cor'],
     acionamento: s.acionamento as ItemForm['acionamento'],
@@ -84,7 +87,7 @@ function snapParaForm(s: PersianaItemSnap): ItemForm {
 
 function formParaSnap(it: ItemForm): PersianaItemSnap {
   return {
-    tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
+    ambiente: it.ambiente, tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
     largura: it.largura, altura: it.altura, tc: it.tc, tcManual: it.tcManual,
     rolamento: it.rolamento, base: it.base,
   };
@@ -175,13 +178,14 @@ export function PersianaForm({
 
   // "Sujo" = começou a preencher algo (guarda de navegação contra perda de dados).
   const sujo = tipo !== '' || itens.some((it) =>
-    it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base);
+    it.ambiente || it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base);
   useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
   // Autosave local: emite o estado bruto sempre que muda.
   useEffect(() => { onSnapshot?.({ tipo, itens: itens.map(formParaSnap) }); }, [tipo, itens, onSnapshot]);
 
   function toInput(it: ItemForm): ItemInput {
     return {
+      ambiente: it.ambiente || undefined,
       tecido_id: it.tecido_id,
       cor_acessorio: it.cor as Cor,
       acionamento: it.acionamento as Acionamento,
@@ -276,6 +280,12 @@ export function PersianaForm({
                   <FontAwesomeIcon icon={faTrash} /> Remover
                 </button>
               )}
+            </div>
+
+            {/* Ambiente (identifica a janela; aparece no orçamento) */}
+            <div className="mb-3">
+              <label className="form-label">Ambiente</label>
+              <input className="input" value={it.ambiente} onChange={(e) => atualizar(idx, { ambiente: e.target.value })} placeholder="Ex.: Sala, Quarto 1…" />
             </div>
 
             {/* Linha 1: Coleção (Tecido) · Cor · Acionamento */}

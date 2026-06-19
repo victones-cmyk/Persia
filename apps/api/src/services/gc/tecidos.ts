@@ -19,10 +19,32 @@ export interface TecidoGc {
   dimensao_m: number;
   preco_venda: number;
   preco_custo: number;
+  grupo_id: string; // subgrupo no GC (usado p/ filtrar por tipo de persiana)
 }
 
 // Grupos de produto no GestãoClick (GET /api/grupos_produtos).
 export const GRUPO_TECIDOS_PERSIANA = '235486'; // "TECIDOS PARA PERSIANA" (inclui subgrupos)
+
+// Subgrupos de "TECIDOS PARA PERSIANA" por MATERIAL (verificado no GC 19/06/2026).
+// Rolo e Romana compartilham o mesmo material — o filtro é por material, não por família.
+// "PERSIANA FD" (5914919) é grupo CORINGA do Victor (movimentação de estoque) e
+// NÃO deve aparecer na calculadora (Victor 19/06/2026) → filtro estrito pelos 4 materiais.
+export const SUBGRUPO_PERSIANA = {
+  blackout: '5914897', // BLACKOUT
+  screen: '5914896', // TELA SOLAR
+  translucido: '5914898', // TRANSLÚCIDO
+  double_vision: '5914899', // DOUBLE VISION
+} as const;
+
+const SUBGRUPO_DO_TIPO: Record<TipoPersiana, string> = {
+  persiana_rolo_blackout: SUBGRUPO_PERSIANA.blackout,
+  persiana_rolo_screen: SUBGRUPO_PERSIANA.screen,
+  persiana_rolo_translucido: SUBGRUPO_PERSIANA.translucido,
+  persiana_rolo_double_vision: SUBGRUPO_PERSIANA.double_vision,
+  persiana_romana_blackout: SUBGRUPO_PERSIANA.blackout,
+  persiana_romana_screen: SUBGRUPO_PERSIANA.screen,
+  persiana_romana_translucido: SUBGRUPO_PERSIANA.translucido,
+};
 // "TECIDOS PARA CORTINA" — grupo PAI que já engloba todos (Victor 15/06/2026).
 // O filtro grupo_id retorna também os descendentes (ex.: BOOKS TEXHAUS 5829560).
 export const GRUPO_TECIDO_CORTINA = '5913111';
@@ -105,6 +127,7 @@ async function tecidosPersiana(): Promise<TecidoGc[]> {
       dimensao_m: dimensao,
       preco_venda: preco.venda,
       preco_custo: preco.custo,
+      grupo_id: String(p.grupo_id ?? ''),
     });
   }
   cache = { tecidos, expiresAt: Date.now() + CACHE_TTL_MS };
@@ -112,11 +135,14 @@ async function tecidosPersiana(): Promise<TecidoGc[]> {
 }
 
 /**
- * Tecidos para a calculadora de persiana. Mostra TODOS os tecidos da categoria
- * "TECIDOS PARA PERSIANA" (regra Victor) — o vendedor escolhe o adequado ao tipo.
+ * Tecidos para a calculadora de persiana, FILTRADOS pelo material do tipo escolhido
+ * (Victor: ao escolher "Blackout" mostrar só blackout, etc.). Filtro estrito: só os
+ * 4 subgrupos de material. O grupo coringa "PERSIANA FD" fica de fora (Victor 19/06).
  */
-export async function tecidosParaTipo(_tipo: TipoPersiana): Promise<TecidoGc[]> {
-  return tecidosPersiana();
+export async function tecidosParaTipo(tipo: TipoPersiana): Promise<TecidoGc[]> {
+  const todos = await tecidosPersiana();
+  const subgrupo = SUBGRUPO_DO_TIPO[tipo];
+  return todos.filter((t) => t.grupo_id === subgrupo);
 }
 
 /** Busca um tecido de persiana pelo id. */
@@ -144,6 +170,7 @@ export async function tecidosCortina(): Promise<TecidoGc[]> {
       dimensao_m: dimensao,
       preco_venda: preco.venda,
       preco_custo: preco.custo,
+      grupo_id: String(p.grupo_id ?? ''),
     });
   }
   cacheCortina = { tecidos, expiresAt: Date.now() + CACHE_TTL_MS };

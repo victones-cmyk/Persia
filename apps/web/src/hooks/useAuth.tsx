@@ -4,6 +4,7 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError, setUnauthorizedHandler } from '../lib/api';
+import { limparRascunhoLocal } from '../lib/rascunhoLocal';
 
 export type Perfil = 'vendedor' | 'admin';
 
@@ -64,6 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       if (!(e instanceof ApiError)) throw e;
     }
+    // Não deixar dados de cliente (rascunho em preenchimento) na estação após sair.
+    limparRascunhoLocal();
     setUsuario(null);
   }
 

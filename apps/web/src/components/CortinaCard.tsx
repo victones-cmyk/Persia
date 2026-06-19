@@ -34,6 +34,7 @@ export interface CortinaResumo {
     camadas: { tecido_id: string; franzido?: number }[];
     acessorios: { item: string; categoria: CategoriaAcessorio | null; produto_id: string; quantidade: number; preco: number }[];
     nome_produto: string;
+    ja_possui_varao?: boolean; // cliente já tem o trilho/varão → não incluir
   } | null;
 }
 
@@ -63,8 +64,10 @@ export function CortinaCard({
   const [fixacao, setFixacao] = useState<FixacaoCortina>((restauro?.fixacao as FixacaoCortina) ?? inicial?.fixacao ?? 'varao');
   const [largura, setLargura] = useState(restauro?.largura ?? (inicial ? String(inicial.largura) : ''));
   const [altura, setAltura] = useState(restauro?.altura ?? (inicial ? String(inicial.altura) : ''));
-  const [tamanhoBarra, setTamanhoBarra] = useState(restauro?.tamanhoBarra ?? (inicial?.tamanho_barra != null ? String(inicial.tamanho_barra) : '')); // vazio = padrão 0,10 m no servidor
+  // Campo em CENTÍMETROS (Victor). inicial vem em metros (entrada_json) → exibe ×100; vazio = padrão do servidor.
+  const [tamanhoBarra, setTamanhoBarra] = useState(restauro?.tamanhoBarra ?? (inicial?.tamanho_barra != null ? String(inicial.tamanho_barra * 100) : ''));
   const [tipoBarra, setTipoBarra] = useState<'simples' | 'dupla' | ''>((restauro?.tipoBarra as 'simples' | 'dupla' | '') ?? inicial?.tipo_barra ?? '');
+  const [jaPossuiVarao, setJaPossuiVarao] = useState<boolean>(restauro?.jaPossuiVarao ?? inicial?.ja_possui_varao ?? false);
   const [camadas, setCamadas] = useState<CamadaState[]>(
     restauro && restauro.camadas.length > 0
       ? restauro.camadas.map((c) => ({ id: crypto.randomUUID(), tecidoId: c.tecidoId, franzido: c.franzido }))
@@ -73,8 +76,8 @@ export function CortinaCard({
         : [novaCamada()],
   );
   const [acessorioSel, setAcessorioSel] = useState<Record<string, string>>(
-    restauro?.acessorioSel ?? (inicial ? Object.fromEntries(inicial.acessorios.filter((a) => a.categoria).map((a) => [a.categoria as string, a.produto_id])) : {}),
-  ); // categoria → produto_id
+    restauro?.acessorioSel ?? (inicial ? Object.fromEntries(inicial.acessorios.map((a) => [a.item, a.produto_id])) : {}),
+  ); // item → produto_id (por item, não por categoria — cada item do wave tem seu produto)
   const [qtdManual, setQtdManual] = useState<Record<string, string>>(
     restauro?.qtdManual ?? (inicial ? Object.fromEntries(inicial.acessorios.map((a) => [a.item, String(a.quantidade)])) : {}),
   ); // item → qtd digitada (não-auto, ex.: suporte). String p/ permitir campo vazio.
@@ -93,6 +96,10 @@ export function CortinaCard({
 
   const fixacoesDisponiveis = modelo ? FIXACOES_CORTINA.filter((f) => FIXACOES_POR_MODELO[modelo].includes(f.value)) : [];
   const isWave = modelo === 'wave';
+  // Nome do item da barra (trilho/varão) conforme a fixação — para o "Já possui".
+  // O varão pode vir por camada ("Varão (camada N)"), então casa pela base do nome.
+  const nomeBarra = fixacao === 'trilho' ? 'Trilho' : fixacao === 'varao_suico' ? 'Varão suíço' : 'Varão';
+  const ehBarra = (item: string) => item === nomeBarra || item.startsWith(`${nomeBarra} (camada `);
 
   // Assinatura das entradas que afetam o cálculo (dispara o recálculo, com debounce).
   const camadasValidas = camadas.filter((c) => c.tecidoId);
@@ -105,7 +112,7 @@ export function CortinaCard({
     && camadas.every((c) => c.tecidoId);
 
   // Campos de barra/franzido vazios → undefined (servidor usa o padrão).
-  const tamanhoBarraNum = tamanhoBarra === '' ? undefined : Number(tamanhoBarra);
+  const tamanhoBarraNum = tamanhoBarra === '' ? undefined : Number(tamanhoBarra) / 100; // cm (UI) → m (servidor)
   const tipoBarraVal = tipoBarra || undefined;
   const franzidoDe = (c: CamadaState) => (isWave || c.franzido === '' ? undefined : Number(c.franzido));
 
@@ -149,7 +156,8 @@ export function CortinaCard({
     let completo = true;
     const acessoriosPayload: NonNullable<CortinaResumo['payload']>['acessorios'] = [];
     for (const a of calc.acessorios) {
-      const sel = a.categoria ? acessorioSel[a.categoria] : undefined;
+      if (jaPossuiVarao && ehBarra(a.item)) continue; // cliente já tem o trilho/varão → não inclui
+      const sel = acessorioSel[a.item];
       const preco = precoSelecionado(a.categoria, sel);
       const qtd = qtdDe(a.item, a.auto, a.quantidade);
       if (!sel || qtd <= 0) completo = false;
@@ -166,11 +174,11 @@ export function CortinaCard({
         ambiente, modelo: modelo as ModeloCortina, fixacao, largura: Number(largura), altura: Number(altura),
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, franzido: franzidoDe(c) })),
-        acessorios: acessoriosPayload, nome_produto: nomeProduto,
+        acessorios: acessoriosPayload, nome_produto: nomeProduto, ja_possui_varao: jaPossuiVarao,
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calc, acessorioSel, qtdManual, ambiente, modelo, fixacao, largura, altura]);
+  }, [calc, acessorioSel, qtdManual, ambiente, modelo, fixacao, largura, altura, jaPossuiVarao, nomeBarra]);
 
   // Reporta o resumo ao container sempre que mudar.
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
@@ -187,11 +195,11 @@ export function CortinaCard({
   onSnapshotRef.current = onSnapshot;
   useEffect(() => {
     onSnapshotRef.current?.({
-      ambiente, modelo, fixacao, largura, altura, tamanhoBarra, tipoBarra,
+      ambiente, modelo, fixacao, largura, altura, tamanhoBarra, tipoBarra, jaPossuiVarao,
       camadas: camadas.map((c) => ({ tecidoId: c.tecidoId, franzido: c.franzido })),
       acessorioSel, qtdManual,
     });
-  }, [ambiente, modelo, fixacao, largura, altura, tamanhoBarra, tipoBarra, camadas, acessorioSel, qtdManual]);
+  }, [ambiente, modelo, fixacao, largura, altura, tamanhoBarra, tipoBarra, jaPossuiVarao, camadas, acessorioSel, qtdManual]);
 
   const setCamada = (id: string, patch: Partial<CamadaState>) =>
     setCamadas((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -239,8 +247,8 @@ export function CortinaCard({
           <MedidaInput value={altura} onChange={setAltura} />
         </div>
         <div>
-          <label className="form-label">Tamanho da barra (m)</label>
-          <input type="number" className="input" min={0} step={0.01} value={tamanhoBarra} onChange={(e) => setTamanhoBarra(e.target.value)} placeholder="" />
+          <label className="form-label">Tamanho da barra (cm)</label>
+          <input type="number" className="input" min={0} step={1} value={tamanhoBarra} onChange={(e) => setTamanhoBarra(e.target.value)} placeholder="" />
         </div>
         <div>
           <label className="form-label">Tipo de barra</label>
@@ -251,6 +259,12 @@ export function CortinaCard({
           </select>
         </div>
       </div>
+
+      {/* Cliente já possui o trilho/varão → não inclui no orçamento */}
+      <label className="flex items-center gap-2 text-sm-ui mb-3">
+        <input type="checkbox" checked={jaPossuiVarao} onChange={(e) => setJaPossuiVarao(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
+        Cliente já possui o {nomeBarra.toLowerCase()} (não incluir no orçamento)
+      </label>
 
       {/* Camadas (tecidos) */}
       <div className="mb-3">
@@ -287,14 +301,40 @@ export function CortinaCard({
 
       {erro && <div className="helper-error mb-2">{erro}</div>}
 
+      {/* Tecido — memória de cálculo (transparência: quanto o sistema usou) */}
+      {calc && (
+        <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3 mb-2">
+          <div className="text-xs-ui font-bold text-neutral-600 mb-2">Tecido (cálculo)</div>
+          <div className="space-y-1">
+            {calc.camadas.map((cam, i) => (
+              <div key={i} className="grid grid-cols-12 gap-2 items-center text-xs-ui">
+                <div className="col-span-6 text-neutral-700">{i === 0 ? 'Frente' : `Camada ${i + 1}`}: {cam.tecido.nome}</div>
+                <div className="col-span-3 font-mono tabular-nums text-right text-neutral-600">
+                  {formatNum(cam.metragem, 2)} m{cam.metodo === 'emenda' ? ' (emenda)' : ''}
+                </div>
+                <div className="col-span-3 font-mono tabular-nums text-right text-neutral-800">{formatBRL(cam.valor_tecido)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Acessórios (vendedor escolhe o produto de cada grupo) */}
       {calc && (
         <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
           <div className="text-xs-ui font-bold text-neutral-600 mb-2">Acessórios<span className="label-required">*</span> <span className="font-normal text-neutral-400">(escolha o produto de cada item)</span></div>
           <div className="space-y-2">
             {calc.acessorios.map((a) => {
+              if (jaPossuiVarao && ehBarra(a.item)) {
+                return (
+                  <div key={a.item} className="grid grid-cols-12 gap-2 items-center text-xs-ui text-neutral-400">
+                    <div className="col-span-5">{a.item}</div>
+                    <div className="col-span-7 text-right italic">Cliente já possui — não incluído</div>
+                  </div>
+                );
+              }
               const opts = a.categoria && opcoes ? (opcoes.acessorios[a.categoria] ?? []) : [];
-              const sel = a.categoria ? acessorioSel[a.categoria] ?? '' : '';
+              const sel = acessorioSel[a.item] ?? '';
               const qtd = qtdDe(a.item, a.auto, a.quantidade);
               const preco = precoSelecionado(a.categoria, sel);
               return (
@@ -313,7 +353,7 @@ export function CortinaCard({
                   </div>
                   <div className="col-span-4">
                     <select className="input" style={{ height: 30, fontSize: 12 }} value={sel} disabled={!opcoes}
-                      onChange={(e) => a.categoria && setAcessorioSel((s) => ({ ...s, [a.categoria!]: e.target.value }))}>
+                      onChange={(e) => setAcessorioSel((s) => ({ ...s, [a.item]: e.target.value }))}>
                       <option value="">{opcoes ? '(escolher)' : 'carregando opções…'}</option>
                       {opts.map((o) => <option key={o.id} value={o.id}>{o.nome} — {formatBRL(o.preco)}</option>)}
                     </select>

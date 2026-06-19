@@ -13,6 +13,7 @@
 // cima ao múltiplo de 0,05 m em PASSO_TECIDO.
 
 import { roundHalfUp } from './arredondamento';
+import { getRegras } from './regras';
 
 export class NotImplementedError extends Error {
   code = 'CORTINA_NAO_IMPLEMENTADA';
@@ -66,39 +67,26 @@ export interface ResultadoCortina {
   itens: ItemCortina[];
 }
 
-// Folga de topo (altura) por modelo — planilha v.3 / respostas do Victor.
-const FOLGA_TOPO: Record<ModeloCortina, number> = {
-  ilhos: 0.1, // "10 cm gastos na cortina de ilhós"
-  prega: 0.12, // cabeçote da entretela (12 cm)
-  franzido: 0.08, // sem entretela: ~8 cm de acabamento
-  wave: 0.12, // cabeçote da entretela (12 cm)
-};
-const TEM_ENTRETELA: Record<ModeloCortina, boolean> = { ilhos: true, prega: true, franzido: false, wave: true };
-
-// Fator de franzimento do WAVE. Victor (16/06): trilho 3,00 m → 8,10 m de tecido
-// ⇒ 8,10 / 3,00 = 2,7. TENTATIVO: ele vai medir mais larguras p/ confirmar se o
-// fator se mantém (BLOQUEANTE-05).
-const FRANZIDO_WAVE = 2.7;
-
-// Tecido cortado de 5 em 5 cm (Victor 16/06). Arredonda p/ cima ao múltiplo de 0,05 m.
-const PASSO_TECIDO = 0.05;
+// Folga de topo, entretela, fator do wave e passo de corte são PARAMETRIZÁVEIS
+// (módulo Admin → Regras de Cálculo). Lidos de getRegras().cortina.
 
 function arredondaParaMultiplo(n: number, mult: number): number {
   return roundHalfUp(Math.ceil(roundHalfUp(n / mult, 6)) * mult);
 }
 function arredondaTecido(n: number): number {
-  return arredondaParaMultiplo(n, PASSO_TECIDO);
+  return arredondaParaMultiplo(n, getRegras().cortina.passo_tecido);
 }
 
 /**
- * Acessórios do Wave (deduzido dos áudios do Victor): cordão com 1 botão a cada
- * 5 cm a partir do zero, arredondado p/ cima até múltiplo de 4. O TECIDO do wave
- * NÃO sai daqui — usa FRANZIDO_WAVE (largura × 2,7), medido pelo Victor.
+ * Acessórios do Wave: cordão com 1 botão a cada `passo_botao_wave` m a partir do
+ * zero, arredondado p/ cima até múltiplo de 4. O TECIDO do wave NÃO sai daqui —
+ * usa o fator do wave (largura × franzido_wave).
  */
 function dadosWave(largura: number): { botoes: number; cordao_m: number } {
-  const botoes = arredondaParaMultiplo(Math.ceil(largura / 0.05 + 1), 4);
+  const passo = getRegras().cortina.passo_botao_wave;
+  const botoes = arredondaParaMultiplo(Math.ceil(largura / passo + 1), 4);
   const vaos = botoes - 1;
-  return { botoes, cordao_m: roundHalfUp(vaos * 0.05) };
+  return { botoes, cordao_m: roundHalfUp(vaos * passo) };
 }
 
 function nomeVarao(f: FixacaoCortina): string {
@@ -133,23 +121,24 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
     throw new Error('Largura, altura e largura do tecido devem ser positivas.');
   }
 
-  const franzidoFrente = e.franzido_frente ?? 3;
-  const franzidoTras = e.franzido_tras ?? 2;
-  const tamanhoBarra = e.tamanho_barra ?? 0.1;
-  const fatorBarra = (e.tipo_barra ?? 'dupla') === 'dupla' ? 2 : 1;
-  const aberturas = e.aberturas ?? 1;
-  const espIlhos = e.espacamento_ilhos ?? 0.15;
-  const espFerragem = e.espacamento_ferragem ?? 0.1;
+  const reg = getRegras().cortina;
+  const franzidoFrente = e.franzido_frente ?? reg.franzido_frente_default;
+  const franzidoTras = e.franzido_tras ?? reg.franzido_tras_default;
+  const tamanhoBarra = e.tamanho_barra ?? reg.tamanho_barra_default;
+  const fatorBarra = (e.tipo_barra ?? reg.tipo_barra_default) === 'dupla' ? 2 : 1;
+  const aberturas = e.aberturas ?? reg.aberturas_default;
+  const espIlhos = e.espacamento_ilhos ?? reg.espacamento_ilhos_default;
+  const espFerragem = e.espacamento_ferragem ?? reg.espacamento_ferragem_default;
   const larguraTecidoTras = e.largura_tecido_tras ?? e.largura_tecido;
   const multParidade = aberturas >= 2 ? 4 : 2;
 
-  const barraConsumo = roundHalfUp(FOLGA_TOPO[e.modelo] + tamanhoBarra * fatorBarra);
+  const barraConsumo = roundHalfUp(reg.folga_topo[e.modelo] + tamanhoBarra * fatorBarra);
   const metodo: 'normal' | 'emenda' = e.altura + barraConsumo <= e.largura_tecido ? 'normal' : 'emenda';
 
   // ---- Tecido frente ----
   // Wave usa fator próprio (2,7, medido pelo Victor); nos demais é largura × franzido.
   const wave = e.modelo === 'wave' ? dadosWave(e.largura) : null;
-  const consumoFrente = roundHalfUp(e.largura * (wave ? FRANZIDO_WAVE : franzidoFrente));
+  const consumoFrente = roundHalfUp(e.largura * (wave ? reg.franzido_wave : franzidoFrente));
   const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo);
 
   // ---- Tecido de trás / forro ----
@@ -198,7 +187,7 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   }
 
   // ---- Entretela (KOS): só modelos com entretela; qtd = metragem do tecido frente ----
-  if (TEM_ENTRETELA[e.modelo]) {
+  if (reg.tem_entretela[e.modelo]) {
     itens.push({ tipo: 'acessorio', item: 'Entretela (KOS)', quantidade: frente.metragem, unidade: 'm', auto: true });
   }
 
@@ -271,6 +260,15 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
   const camadas: CamadaResultado[] = [];
   const acc = new Map<string, ItemCortina>(); // acessórios agregados por nome
 
+  // Barra (fixação) com 2/3 tecidos — regras do Victor (19/06):
+  //  • VARÃO / VARÃO SUÍÇO: 1 POR CAMADA, escolhido individualmente pelo vendedor
+  //    (cliente pode misturar, ex. 2 finos 19mm + 1 grosso 28mm) → não agrega, vira
+  //    uma linha por camada.
+  //  • TRILHO: conta UMA VEZ (1 trilho duplo/triplo), NÃO soma por camada.
+  const varaoPorCamada = e.fixacao === 'varao' || e.fixacao === 'varao_suico';
+  const nomeBarraBase = nomeVarao(e.fixacao);
+  const multiCamada = e.camadas.length > 1;
+
   e.camadas.forEach((cam, i) => {
     const r = calcularCortina({
       modelo: e.modelo,
@@ -291,6 +289,18 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
     for (const it of r.itens) {
       if (it.tipo === 'tecido') continue; // tecido é por camada
       if (it.item === 'Entretela (KOS)' && i > 0) continue; // entretela só na frente
+      // Barra (varão/varão suíço/trilho): regra própria, não cai na agregação normal.
+      if (it.item === nomeBarraBase) {
+        if (varaoPorCamada) {
+          // Varão/varão suíço: linha independente por camada (nomeada quando há +1).
+          const nome = multiCamada ? `${nomeBarraBase} (camada ${i + 1})` : nomeBarraBase;
+          acc.set(nome, { ...it, item: nome });
+        } else if (!acc.has(nomeBarraBase)) {
+          // Trilho: 1 trilho duplo/triplo — conta uma vez (qty = largura), não soma.
+          acc.set(nomeBarraBase, { ...it });
+        }
+        continue;
+      }
       const cur = acc.get(it.item);
       if (cur) cur.quantidade = roundHalfUp(cur.quantidade + it.quantidade);
       else acc.set(it.item, { ...it });
