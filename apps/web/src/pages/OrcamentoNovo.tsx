@@ -29,6 +29,8 @@ import {
 
 const ESTADO_CORTINA_VAZIO: CortinaOrcamentoEstado = { total: 0, todasCompletas: false, temCortinas: false, count: 0, cortinas: [] };
 
+type Secao = 'persiana' | 'cortina';
+
 // Recuperação: detecta se o rascunho local tem conteúdo real em cada seção (e não só
 // os campos vazios iniciais), para reabrir já com a seção certa marcada.
 function persianaSnapTemConteudo(s?: PersianaSnapshot | null): boolean {
@@ -60,9 +62,16 @@ export function OrcamentoNovo() {
   );
   const [resultado, setResultado] = useState<OrcamentoCalculado | null>(null); // persiana
   const [cortinaEstado, setCortinaEstado] = useState<CortinaOrcamentoEstado>(ESTADO_CORTINA_VAZIO);
-  // O vendedor escolhe o que incluir; cada seção só aparece quando marcada.
-  const [incluiPersiana, setIncluiPersiana] = useState(() => persianaSnapTemConteudo(rascunhoLocal?.persiana));
-  const [incluiCortina, setIncluiCortina] = useState(() => cortinaSnapTemConteudo(rascunhoLocal?.cortina));
+  // O vendedor escolhe o que incluir; cada seção só aparece quando marcada e na
+  // ORDEM em que foi selecionada (a 1ª escolhida fica em cima).
+  const [ordem, setOrdem] = useState<Secao[]>(() => {
+    const o: Secao[] = [];
+    if (persianaSnapTemConteudo(rascunhoLocal?.persiana)) o.push('persiana');
+    if (cortinaSnapTemConteudo(rascunhoLocal?.cortina)) o.push('cortina');
+    return o;
+  });
+  const incluiPersiana = ordem.includes('persiana');
+  const incluiCortina = ordem.includes('cortina');
   const [instalacao, setInstalacao] = useState(rascunhoLocal?.instalacao_valor ?? '');
   const [recuperado] = useState(!!rascunhoLocal);
 
@@ -113,7 +122,7 @@ export function OrcamentoNovo() {
   // Marcar/desmarcar uma seção. Ao desmarcar, zera resultado/snapshot daquela seção
   // para que não conte no total nem volte na recuperação.
   function toggleIncluiPersiana(v: boolean) {
-    setIncluiPersiana(v);
+    setOrdem((prev) => (v ? (prev.includes('persiana') ? prev : [...prev, 'persiana']) : prev.filter((s) => s !== 'persiana')));
     if (!v) {
       setResultado(null);
       persianaSnapRef.current = null; persianaSujoRef.current = false;
@@ -121,7 +130,7 @@ export function OrcamentoNovo() {
     }
   }
   function toggleIncluiCortina(v: boolean) {
-    setIncluiCortina(v);
+    setOrdem((prev) => (v ? (prev.includes('cortina') ? prev : [...prev, 'cortina']) : prev.filter((s) => s !== 'cortina')));
     if (!v) {
       setCortinaEstado(ESTADO_CORTINA_VAZIO);
       cortinaSnapRef.current = null; cortinaSujoRef.current = false;
@@ -147,14 +156,15 @@ export function OrcamentoNovo() {
         const ehCortina = o.tipo_produto === 'cortina';
         setInstalacao(entrada?.instalacao_valor ? String(entrada.instalacao_valor) : '');
 
+        const novaOrdem: Secao[] = [];
         if (ehMisto) {
-          if (entrada?.itens?.length) { setPersianaInicial({ tipo: entrada.tipo as TipoPersiana, itens: entrada.itens }); setIncluiPersiana(true); }
-          if (entrada?.cortinas?.length) { setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 }); setIncluiCortina(true); }
+          if (entrada?.itens?.length) { setPersianaInicial({ tipo: entrada.tipo as TipoPersiana, itens: entrada.itens }); novaOrdem.push('persiana'); }
+          if (entrada?.cortinas?.length) { setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 }); novaOrdem.push('cortina'); }
         } else if (ehCortina) {
-          if (entrada?.cortinas?.length) { setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 }); setIncluiCortina(true); }
+          if (entrada?.cortinas?.length) { setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 }); novaOrdem.push('cortina'); }
           else { showToast('error', 'Rascunho antigo', 'Este rascunho não tem dados para reabrir. Crie um novo orçamento.'); navigate(`/orcamentos/${editarId}`); return; }
         } else {
-          if (entrada?.itens?.length) { setPersianaInicial({ tipo: o.tipo_produto as TipoPersiana, itens: entrada.itens }); setIncluiPersiana(true); }
+          if (entrada?.itens?.length) { setPersianaInicial({ tipo: o.tipo_produto as TipoPersiana, itens: entrada.itens }); novaOrdem.push('persiana'); }
           else if (o.itens_json && o.itens_json.length > 0) {
             setPersianaInicial({
               tipo: o.tipo_produto as TipoPersiana,
@@ -163,9 +173,10 @@ export function OrcamentoNovo() {
                 largura: Number(s.largura_m), altura: Number(s.altura_m), tc: Number(s.tc_m), rolamento: s.rolamento, base: s.base,
               })),
             });
-            setIncluiPersiana(true);
+            novaOrdem.push('persiana');
           } else { showToast('error', 'Rascunho sem itens', 'Não há itens para reabrir.'); navigate(`/orcamentos/${editarId}`); return; }
         }
+        setOrdem(novaOrdem);
         setProntoEdicao(true);
       } catch {
         if (vivo) { showToast('error', 'Não foi possível abrir o orçamento para edição.'); navigate('/orcamentos'); }
@@ -316,42 +327,41 @@ export function OrcamentoNovo() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-6">
-          {!incluiPersiana && !incluiCortina && (
+          {ordem.length === 0 && (
             <div className="card p-6 text-center text-neutral-500 text-sm-ui">
               Marque acima o que deseja incluir: <strong>Persianas</strong>, <strong>Cortinas</strong> ou os dois.
             </div>
           )}
 
-          {/* Seção PERSIANAS */}
-          {incluiPersiana && (
-            <section>
-              <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
-              {prontoEdicao && (
-                <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} />
-              )}
-            </section>
-          )}
-
-          {/* Seção CORTINAS */}
-          {incluiCortina && (
-            <section>
-              <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas</h2>
-              {prontoEdicao && (
-                <CortinaOrcamento
-                  embutido
-                  cliente={cliente}
-                  gcStatus={gcStatus}
-                  gcUsuarioId={usuario?.gc_usuario_id ?? null}
-                  inicial={cortinaInicial}
-                  restauro={rascunhoLocal?.cortina}
-                  editarId={editarId}
-                  onDirtyChange={onDirtyCortina}
-                  onSnapshot={onSnapCortina}
-                  onEnviado={() => {}}
-                  onEstado={setCortinaEstado}
-                />
-              )}
-            </section>
+          {/* Seções renderizadas na ORDEM em que o vendedor as selecionou. */}
+          {ordem.map((s) =>
+            s === 'persiana' ? (
+              <section key="persiana">
+                <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
+                {prontoEdicao && (
+                  <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} />
+                )}
+              </section>
+            ) : (
+              <section key="cortina">
+                <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas</h2>
+                {prontoEdicao && (
+                  <CortinaOrcamento
+                    embutido
+                    cliente={cliente}
+                    gcStatus={gcStatus}
+                    gcUsuarioId={usuario?.gc_usuario_id ?? null}
+                    inicial={cortinaInicial}
+                    restauro={rascunhoLocal?.cortina}
+                    editarId={editarId}
+                    onDirtyChange={onDirtyCortina}
+                    onSnapshot={onSnapCortina}
+                    onEnviado={() => {}}
+                    onEstado={setCortinaEstado}
+                  />
+                )}
+              </section>
+            ),
           )}
         </div>
 
