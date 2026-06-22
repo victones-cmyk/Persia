@@ -157,16 +157,18 @@ export function CortinaCard({
     const acessoriosPayload: NonNullable<CortinaResumo['payload']>['acessorios'] = [];
     for (const a of calc.acessorios) {
       if (jaPossuiVarao && ehBarra(a.item)) continue; // cliente já tem o trilho/varão → não inclui
+      const qtd = qtdDe(a.item, a.auto, a.quantidade);
+      // Item manual (ex.: Suporte) com qtd 0 → não incluir, não exige produto (Victor v.3.1).
+      if (!a.auto && qtd <= 0) continue;
       const sel = acessorioSel[a.item];
       const preco = precoSelecionado(a.categoria, sel);
-      const qtd = qtdDe(a.item, a.auto, a.quantidade);
       if (!sel || qtd <= 0) completo = false;
       total += preco * qtd;
       acessoriosPayload.push({ item: a.item, categoria: a.categoria, produto_id: sel ?? '', quantidade: qtd, preco });
     }
     const tecidoNome = calc.camadas[0]?.tecido.nome ?? '';
     const tipo = TIPO_POR_CAMADAS[calc.n_camadas] ?? '';
-    const nomeProduto = `${MODELOS_CORTINA.find((m) => m.value === modelo)?.label ?? modelo}${tipo ? ` ${tipo}` : ''} • ${tecidoNome} • ${formatNum(Number(largura))}×${formatNum(Number(altura))}m`;
+    const nomeProduto = `Cortina ${MODELOS_CORTINA.find((m) => m.value === modelo)?.label ?? modelo}${tipo ? ` ${tipo}` : ''} • ${tecidoNome} • ${formatNum(Number(largura))}×${formatNum(Number(altura))}m`;
     return {
       total: Math.round(total * 100) / 100,
       completo,

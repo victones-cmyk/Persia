@@ -463,3 +463,24 @@ Victor (19/06): em cortina de 2/3 tecidos, há **N varões**, um **por camada**,
 - `acessorios.ts` (`categoriaDoItem`): remove o sufixo `(camada N)`/`(traseiro)` antes de mapear (preserva nomes com parênteses próprios, ex.: "Entretela (KOS)").
 - `CortinaCard.tsx` + `orcamentoCortinaController.ts`: "Cliente já possui o varão" agora pula **todas** as linhas de varão (`ehBarra()` casa pela base do nome). O card já renderiza 1 seletor por item → aparecem N seletores de varão automaticamente (front quase sem mudança).
 - **Verificado** (endpoint real `/cortina/completa`, 2 camadas): `Varão (camada 1)=3m`, `Varão (camada 2)=3m` (categoria `varao`); Ilhoses 120, Ponteira 4, Entretela 9 (frente). Trilho continua `=6m` agregado. 66 testes (1 novo), typecheck API+web OK, sem erro de console.
+
+## 14. Homologação — 3ª onda (v.3.1, 22/06/2026)
+
+Doc do Victor: `Persia_Casos_de_Teste_Homologacao_Victor_v.3.1.docx`. Quase tudo **OK** (Regras de Cálculo 100%; persianas calculando certo — diferenças pequenas são preços ainda não exatos no GC, calibração do lado dele). 8 apontamentos novos:
+
+**✅ Feito e deployado:**
+- **#2 Suporte = 0:** item manual com qtd 0 não é mais barrado — é **omitido** do orçamento. `orcamentoCortinaController.prepararCortina` (pula antes de exigir produto) + `CortinaCard` (não marca incompleto).
+- **#3 Nome do produto com "Cortina":** prefixo "Cortina " no `nomeProduto` (persiana já vinha com "PERSIANA" via TIPO_LABEL). `orcamentoCortinaController` + `CortinaCard` (display).
+
+**⏸ Depende do Victor (e-mail enviado):**
+- **#1 Cortina com emenda "franze 3×":** investigado — no código o franzido É considerado na emenda (`tiras = ceil(largura×franzido / larguraTecido)`); provável causa = campo franzido em branco → padrão 3. **Precisa de exemplo concreto dele** pra reproduzir (não mexer no cálculo no escuro).
+- **#5 Wave — acessórios obrigatórios automáticos + Terminais nos modelos de trilho:** precisa do **produto-padrão** de cordão/rodízio wave/base click e da decisão sobre Terminais.
+
+**🔜 Próximo (no nosso lado):**
+- **#4 Instalação por peça:** Victor — "instalação é cobrada por peça; hoje o vendedor soma o total". Mudar de valor único → **valor por peça × nº de peças**. Mexe em valor + UI (painéis persiana/cortina) + payload GC + reenvio + detalhe → fazer com preview. (Ainda não feito.)
+
+**🟣 Grandes (planejar à parte):**
+- **#6 Modelo de tecido por camada** (ex.: frente Wave, fundo Franzido) — hoje o modelo é da cortina inteira; mudança no motor + UI.
+- **#7 Orçamento misto** persiana + cortina no mesmo orçamento — estrutural.
+
+**Não marcado por ele:** varão por camada (item 4 da seção 1) ficou em branco — pedimos confirmação no e-mail (já validado por nós via endpoint).

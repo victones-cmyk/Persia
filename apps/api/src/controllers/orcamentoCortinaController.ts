@@ -95,15 +95,17 @@ async function prepararCortina(c: CortinaEntrada): Promise<CortinaPreparada> {
   const acessoriosSnap: Record<string, unknown>[] = [];
   for (const a of r.acessorios) {
     if (c.ja_possui_varao && ehBarra(a.item)) continue; // cliente já tem o trilho/varão
-    const categoria = categoriaDoItem(a.item, c.fixacao) as CategoriaAcessorio | null;
     const entrada = (c.acessorios ?? []).find((x) => x.item === a.item);
+    const qtd = a.auto ? a.quantidade : Number(entrada?.quantidade ?? 0);
+    // Item manual (ex.: Suporte) com quantidade 0 → não incluir no orçamento (Victor v.3.1).
+    if (!a.auto && !(qtd > 0)) continue;
+    const categoria = categoriaDoItem(a.item, c.fixacao) as CategoriaAcessorio | null;
     const produtoId = entrada?.produto_id ?? '';
     if (!categoria || !produtoId) {
       throw new AppError(400, 'ACESSORIO_SEM_PRODUTO', `Escolha o produto do acessório "${a.item}".`);
     }
     const prod = await buscarAcessorioGc(categoria, produtoId);
     if (!prod) throw new AppError(400, 'ACESSORIO_INVALIDO', `Produto inválido para "${a.item}".`);
-    const qtd = a.auto ? a.quantidade : Number(entrada?.quantidade ?? 0);
     if (!(qtd > 0)) throw new AppError(400, 'ACESSORIO_QTD', `Quantidade inválida para "${a.item}".`);
     const subtotal = roundHalfUp(prod.preco * qtd);
     valorTotal = roundHalfUp(valorTotal + subtotal);
@@ -112,7 +114,7 @@ async function prepararCortina(c: CortinaEntrada): Promise<CortinaPreparada> {
 
   const tipo = TIPO_CAMADAS_LABEL[r.n_camadas] ?? '';
   const modeloLabel = MODELOS_CORTINA_LABEL[c.modelo] ?? c.modelo;
-  const nomeProduto = `${modeloLabel}${tipo ? ` ${tipo}` : ''} • ${camadasSnap[0].tecido_nome} • ${largura.toFixed(2)}×${altura.toFixed(2)}m`.slice(0, 100);
+  const nomeProduto = `Cortina ${modeloLabel}${tipo ? ` ${tipo}` : ''} • ${camadasSnap[0].tecido_nome} • ${largura.toFixed(2)}×${altura.toFixed(2)}m`.slice(0, 100);
 
   return {
     ambiente: c.ambiente?.trim() || '',
