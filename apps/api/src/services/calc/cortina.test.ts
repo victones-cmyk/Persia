@@ -120,6 +120,32 @@ describe('Cortina — método de emenda (altura > largura do tecido)', () => {
   });
 });
 
+describe('Cortina — emenda respeita o franzido (exemplo do Victor 22/06)', () => {
+  // Parede L2,00 × A4,00, tecido 3,00m, barra 0,10 dupla, prega (folga 0,12 → faixa 4,32).
+  const caso = (franzido: number) =>
+    calcularCortina({
+      modelo: 'prega', fixacao: 'trilho', config: 'um_tecido',
+      largura: 2.0, altura: 4.0, largura_tecido: 3.0,
+      franzido_frente: franzido, tamanho_barra: 0.1, tipo_barra: 'dupla',
+    });
+  it('franzido 2 → 2 faixas × 4,32 = 8,64 m', () => {
+    const r = caso(2);
+    expect(r.metodo).toBe('emenda');
+    expect(r.tiras_frente).toBe(2);
+    expect(r.metragem_frente).toBe(8.64);
+  });
+  it('franzido 2,5 → 3 faixas = 12,96 m (arredonda p/ cima)', () => {
+    const r = caso(2.5);
+    expect(r.tiras_frente).toBe(3);
+    expect(r.metragem_frente).toBe(12.96);
+  });
+  it('franzido 3 → 3 faixas = 12,96 m', () => {
+    const r = caso(3);
+    expect(r.tiras_frente).toBe(3);
+    expect(r.metragem_frente).toBe(12.96);
+  });
+});
+
 describe('Cortina Wave (fator de tecido medido pelo Victor + acessórios deduzidos)', () => {
   it('trilho 3 m → tecido/entretela 8,10 m (fator 2,7), 64 botões, cordão 3,15 m', () => {
     const r = calcularCortina({ ...BASE, modelo: 'wave', fixacao: 'trilho', largura: 3, largura_tecido: 3.0 });

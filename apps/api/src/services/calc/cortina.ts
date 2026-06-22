@@ -108,10 +108,15 @@ function metragemFace(
   altura: number,
   barraConsumo: number,
   metodo: 'normal' | 'emenda',
+  franzido: number,
 ): { metragem: number; tiras: number | null } {
   if (metodo === 'normal') return { metragem: arredondaTecido(consumo), tiras: null };
-  const tiras = Math.ceil(consumo / larguraTecido);
-  return { metragem: roundHalfUp(tiras * arredondaTecido(altura + barraConsumo)), tiras };
+  // Emenda (Victor 22/06): o FRANZIDO define o nº de faixas — no mínimo ceil(franzido),
+  // e nunca menos que o necessário p/ cobrir a largura franzida (parede larga). Cada faixa
+  // = altura + acabamento de topo + barra (valor EXATO, conforme o exemplo do Victor: ex.
+  // A4,00 + 0,12 + 0,20 = 4,32; franzido 2 → 2 faixas = 8,64; 2,5 ou 3 → 3 faixas = 12,96).
+  const tiras = Math.max(Math.ceil(franzido), Math.ceil(consumo / larguraTecido));
+  return { metragem: roundHalfUp(tiras * (altura + barraConsumo)), tiras };
 }
 
 /** Calcula uma cortina dos modelos Ilhós / Prega / Franzido. */
@@ -138,8 +143,9 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   // ---- Tecido frente ----
   // Wave usa fator próprio (2,7, medido pelo Victor); nos demais é largura × franzido.
   const wave = e.modelo === 'wave' ? dadosWave(e.largura) : null;
-  const consumoFrente = roundHalfUp(e.largura * (wave ? reg.franzido_wave : franzidoFrente));
-  const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo);
+  const fatorFrente = wave ? reg.franzido_wave : franzidoFrente;
+  const consumoFrente = roundHalfUp(e.largura * fatorFrente);
+  const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo, fatorFrente);
 
   // ---- Tecido de trás / forro ----
   let metragemTras: number | null = null;
@@ -148,7 +154,7 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   } else if (e.config === 'dois_tecidos_varao_duplo') {
     const consumoTras = roundHalfUp(e.largura * franzidoTras);
     const metodoTras: 'normal' | 'emenda' = e.altura + barraConsumo <= larguraTecidoTras ? 'normal' : 'emenda';
-    metragemTras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras).metragem;
+    metragemTras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras, franzidoTras).metragem;
   }
 
   const varaoDuplo = e.config === 'dois_tecidos_varao_duplo';

@@ -472,9 +472,13 @@ Doc do Victor: `Persia_Casos_de_Teste_Homologacao_Victor_v.3.1.docx`. Quase tudo
 - **#2 Suporte = 0:** item manual com qtd 0 não é mais barrado — é **omitido** do orçamento. `orcamentoCortinaController.prepararCortina` (pula antes de exigir produto) + `CortinaCard` (não marca incompleto).
 - **#3 Nome do produto com "Cortina":** prefixo "Cortina " no `nomeProduto` (persiana já vinha com "PERSIANA" via TIPO_LABEL). `orcamentoCortinaController` + `CortinaCard` (display).
 
-**⏸ Depende do Victor (e-mail enviado):**
-- **#1 Cortina com emenda "franze 3×":** investigado — no código o franzido É considerado na emenda (`tiras = ceil(largura×franzido / larguraTecido)`); provável causa = campo franzido em branco → padrão 3. **Precisa de exemplo concreto dele** pra reproduzir (não mexer no cálculo no escuro).
-- **#5 Wave — acessórios obrigatórios automáticos + Terminais nos modelos de trilho:** precisa do **produto-padrão** de cordão/rodízio wave/base click e da decisão sobre Terminais.
+**✅ Feito e deployado (3ª onda, respostas do Victor 22/06):**
+- **#1 Cortina com emenda — RESOLVIDO.** Bug confirmado por reprodução: o franzido quase não mudava o nº de faixas (`ceil(largura×franzido/larguraTecido)` ficava preso em 2 p/ o exemplo dele) e a altura da faixa arredondava p/ 5cm. Vitor (exemplo): parede 2×4, tecido 3m, barra 0,10 dupla → fr2 = 2 faixas (8,64), fr2,5/fr3 = 3 faixas (12,96), faixa = altura+0,12+0,20 = 4,32 (exato). Correção em `cortina.ts/metragemFace`: `tiras = max(ceil(franzido), ceil(consumo/larguraTecido))` e faixa = `altura + barra_consumo` **sem** arredondar p/ 5cm. 3 testes novos reproduzem o exemplo (8,64/12,96/12,96). Total 70 testes.
+  - ⚠️ **Confirmar com Victor (edge):** (a) parede mais larga que o rolo (exemplo só cobriu 2m < 3m); (b) o "corte de 5 em 5 cm" vale na emenda? (usei exato p/ bater o número dele); (c) o exemplo citou "wave" com franzido manual, mas wave usa fator fixo 2,7 — wave deve respeitar o franzido escolhido ou manter 2,7?
+
+**⏸ Ainda depende do Victor:**
+- **#5 Wave — auto-selecionar obrigatórios + Fita wave + Terminais:** Victor confirmou auto-selecionar (cordão wave → produto "cordão wave" etc.) e que **falta a "Fita wave"** (qtd = "mesma quantidade do franzido"). Pendências p/ implementar certo: **quantidade exata da fita wave** e se **Terminais** deve aparecer nos demais modelos de trilho (não respondeu). 
+- **Varão por camada:** Victor confirmou "está indo certo" ✅.
 
 **✅ Feito e deployado (continuação):**
 - **#4 Instalação por peça:** semântica de `instalacao_valor` mudou para **valor POR PEÇA**; total = unitário × nº de peças (janelas/cortinas). Backend: `orcamentos.ts` (`LinhaServicoGc.quantidade`; serviço vai com `quantidade = nº peças`, `valor = unitário`), `orcamentoController` + `orcamentoCortinaController` (criação + reenvio). Frontend: painéis (label "Instalação por peça" + linha "R$X × N = total") e `OrcamentoDetalhe` (calcula o total a partir do unitário). entrada_json/itens_json guardam o **unitário**. Teste novo de `montarPayload` (serviço com quantidade). Verificado: typecheck 2 apps + 67 testes + web build OK. (Banco local estava offline → e2e de salvar não rodou; math é multiplicação simples + coberta por teste.)
