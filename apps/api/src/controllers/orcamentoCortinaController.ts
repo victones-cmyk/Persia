@@ -22,7 +22,7 @@ import { MODELOS_CORTINA_LABEL, TIPO_CAMADAS_LABEL } from '../services/calc/cort
 
 interface CamadaEntrada { tecido_id: string; franzido?: number | string }
 interface AcessorioEntrada { item: string; produto_id?: string; quantidade?: number }
-interface CortinaEntrada {
+export interface CortinaEntrada {
   ambiente?: string;
   modelo: 'ilhos' | 'prega' | 'franzido' | 'wave';
   fixacao: 'varao' | 'trilho' | 'varao_suico';
@@ -35,7 +35,7 @@ interface CortinaEntrada {
   ja_possui_varao?: boolean; // cliente já tem o trilho/varão → não inclui
 }
 
-interface CortinaPreparada {
+export interface CortinaPreparada {
   ambiente: string;
   nome_produto: string;
   valor_total: number;
@@ -48,7 +48,7 @@ interface CortinaPreparada {
 }
 
 /** Recalcula UMA cortina no servidor (tecido + acessórios) e devolve o preparado. */
-async function prepararCortina(c: CortinaEntrada): Promise<CortinaPreparada> {
+export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPreparada> {
   const largura = Number(c.largura);
   const altura = Number(c.altura);
   if (!(largura > 0) || !(altura > 0)) throw new AppError(400, 'MEDIDAS_INVALIDAS', 'Largura e altura devem ser positivas.');

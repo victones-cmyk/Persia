@@ -31,6 +31,7 @@ enum TipoProduto {
   persiana_romana_screen
   persiana_romana_translucido
   cortina
+  misto
 }
 
 model Loja {

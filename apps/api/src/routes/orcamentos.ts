@@ -10,6 +10,7 @@ import {
   atualizarOrcamento,
 } from '../controllers/orcamentoController';
 import { criarOrcamentoCortina } from '../controllers/orcamentoCortinaController';
+import { criarOrcamentoMisto } from '../controllers/orcamentoMistoController';
 
 const router = Router();
 router.use(requireAuth);
@@ -17,6 +18,7 @@ router.use(requireAuth);
 router.get('/', listarOrcamentos);
 router.post('/', criarOrcamento);
 router.post('/cortina', criarOrcamentoCortina);
+router.post('/misto', criarOrcamentoMisto);
 router.post('/:id/reenviar', reenviarOrcamento);
 router.post('/:id/cancelar', cancelarOrcamento);
 router.put('/:id', atualizarOrcamento);

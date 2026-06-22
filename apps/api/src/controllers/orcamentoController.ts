@@ -25,9 +25,10 @@ import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
 import { reenviarCortina, resolverServicoInstalacao } from './orcamentoCortinaController';
+import { reenviarMisto } from './orcamentoMistoController';
 
 /** Entrada de um item (janela) vinda do frontend. */
-interface ItemEntrada {
+export interface ItemEntrada {
   ambiente?: string;
   tecido_id: string;
   cor_acessorio: Cor;
@@ -60,7 +61,7 @@ interface ItemPreparado {
 }
 
 /** Snapshot persistido em itens_json (independe do GC para reenvio/exibição). */
-interface ItemSnapshot {
+export interface ItemSnapshot {
   ambiente: string;
   tecido_codigo_gc: string;
   tecido_nome: string;
@@ -88,7 +89,7 @@ function nomeProdutoGc(tipo: TipoPersiana, it: { ambiente?: string; tecido_nome:
 }
 
 /** Recalcula cada item no servidor. Sem desconto: o valor cheio vai ao GestãoClick. */
-function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<string, TecidoGc>): {
+export function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<string, TecidoGc>): {
   preparados: ItemPreparado[];
   valorBrutoTotal: number;
 } {
@@ -148,7 +149,7 @@ function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<st
  * remove TODOS os produtos já criados (best-effort) para não poluir o GC.
  * Retorna os gc_produto_id na MESMA ORDEM dos itens.
  */
-async function executarEnvioGc(args: {
+export async function executarEnvioGc(args: {
   itens: { nome_produto: string; valor_final: number; valor_custo: number }[];
   instalacao_por_peca?: number; // valor unitário da instalação (por peça/janela)
   pecas?: number; // nº de peças (= nº de itens) para a instalação
@@ -209,7 +210,7 @@ async function executarEnvioGc(args: {
   }
 }
 
-function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[]): ItemSnapshot[] {
+export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[]): ItemSnapshot[] {
   return preparados.map((p, i) => ({
     ambiente: p.ambiente,
     tecido_codigo_gc: p.tecido.id,
@@ -390,8 +391,9 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
   }
   if (!orc.gc_cliente_id) throw new AppError(400, 'SEM_CLIENTE', 'Orçamento sem cliente vinculado.');
 
-  // Cortina tem montagem própria (produtos + serviço de instalação).
+  // Cortina e misto têm montagem própria.
   if (orc.tipo_produto === 'cortina') { await reenviarCortina(orc, sessao, res); return; }
+  if (orc.tipo_produto === 'misto') { await reenviarMisto(orc, sessao, res); return; }
 
   const snaps = (orc.itens_json as unknown as ItemSnapshot[] | null) ?? [];
   if (snaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento sem itens para reenviar.');
