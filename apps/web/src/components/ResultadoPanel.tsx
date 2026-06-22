@@ -45,7 +45,10 @@ export function ResultadoPanel({
   // Valor por item, instalação e total do orçamento (RN-10). dados null = orçamento ainda vazio.
   const linhas = dados ? dados.itens.map((it) => ({ it, valor: it.resultado.valor_bruto ?? 0 })) : [];
   const valorItens = roundHalfUp(linhas.reduce((s, l) => s + l.valor, 0));
-  const valorInstalacao = Math.max(0, Number(instalacao) || 0);
+  // Instalação POR PEÇA (Victor v.3.1): valor unitário × nº de janelas.
+  const instalacaoPorPeca = Math.max(0, Number(instalacao) || 0);
+  const nPecas = linhas.length;
+  const valorInstalacao = roundHalfUp(instalacaoPorPeca * nPecas);
   const valorTotal = roundHalfUp(valorItens + valorInstalacao);
   const temItens = linhas.length > 0;
   const incompleto = !!dados?.incompleto; // há item com campos obrigatórios em branco
@@ -66,7 +69,7 @@ export function ResultadoPanel({
       const r = await api.post<{ orcamento: OrcamentoSalvo }>('/orcamentos', {
         tipo: dados.tipo,
         itens: dados.itens.map((it) => it.input),
-        instalacao_valor: valorInstalacao,
+        instalacao_valor: instalacaoPorPeca,
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(editarId ? { editar_id: editarId } : {}),
@@ -129,9 +132,13 @@ export function ResultadoPanel({
         )}
       </div>
 
-      <label className="form-label" htmlFor="instalacao-persiana">Instalação (R$)</label>
-      <input id="instalacao-persiana" type="number" className="input mb-3" min={0} step={0.01} placeholder="0,00"
+      <label className="form-label" htmlFor="instalacao-persiana">Instalação por peça (R$)</label>
+      <input id="instalacao-persiana" type="number" className="input" min={0} step={0.01} placeholder="0,00"
         value={instalacao} onChange={(e) => setInstalacao(e.target.value)} />
+      {instalacaoPorPeca > 0 && nPecas > 0 && (
+        <div className="helper-text mb-3">{formatBRL(instalacaoPorPeca)} × {nPecas} {nPecas === 1 ? 'janela' : 'janelas'} = <strong>{formatBRL(valorInstalacao)}</strong></div>
+      )}
+      {!(instalacaoPorPeca > 0 && nPecas > 0) && <div className="mb-3" />}
 
       <label className="form-label" htmlFor="valor-total">Valor total ({linhas.length} {linhas.length === 1 ? 'item' : 'itens'}{valorInstalacao > 0 ? ' + instalação' : ''})</label>
       <input id="valor-total" className="input input-mono mb-4"

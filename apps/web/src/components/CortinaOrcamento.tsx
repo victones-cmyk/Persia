@@ -92,7 +92,10 @@ export function CortinaOrcamento({
   }, [ids, snaps, instalacao, onSnapshot]);
 
   const totalCortinas = ids.reduce((s, id) => s + (resumos[id]?.total ?? 0), 0);
-  const valorInstalacao = Math.max(0, Number(instalacao) || 0);
+  // Instalação POR PEÇA (Victor v.3.1): valor unitário × nº de cortinas.
+  const instalacaoPorPeca = Math.max(0, Number(instalacao) || 0);
+  const nPecas = ids.length;
+  const valorInstalacao = Math.round(instalacaoPorPeca * nPecas * 100) / 100;
   const totalGeral = Math.round((totalCortinas + valorInstalacao) * 100) / 100;
 
   const todasCompletas = ids.length > 0 && ids.every((id) => resumos[id]?.completo && resumos[id]?.payload);
@@ -109,7 +112,7 @@ export function CortinaOrcamento({
       const cortinas = ids.map((id) => resumos[id]?.payload).filter(Boolean);
       const r = await api.post<{ orcamento: OrcamentoSalvo }>('/orcamentos/cortina', {
         cortinas,
-        instalacao_valor: valorInstalacao,
+        instalacao_valor: instalacaoPorPeca,
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(editarId ? { editar_id: editarId } : {}),
@@ -174,9 +177,13 @@ export function CortinaOrcamento({
             ))}
           </div>
 
-          <label className="form-label" htmlFor="instalacao">Instalação (R$)</label>
-          <input id="instalacao" type="number" className="input mb-3" min={0} step={0.01} placeholder="0,00"
+          <label className="form-label" htmlFor="instalacao">Instalação por peça (R$)</label>
+          <input id="instalacao" type="number" className="input" min={0} step={0.01} placeholder="0,00"
             value={instalacao} onChange={(e) => setInstalacao(e.target.value)} />
+          {instalacaoPorPeca > 0 && nPecas > 0 && (
+            <div className="helper-text mb-3">{formatBRL(instalacaoPorPeca)} × {nPecas} {nPecas === 1 ? 'cortina' : 'cortinas'} = <strong>{formatBRL(valorInstalacao)}</strong></div>
+          )}
+          {!(instalacaoPorPeca > 0 && nPecas > 0) && <div className="mb-3" />}
 
           <label className="form-label" htmlFor="total-cortina">Valor total</label>
           <input id="total-cortina" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}

@@ -15,10 +15,12 @@ export interface LinhaProdutoGc {
   valor_custo: number;
 }
 
-/** Uma linha de serviço do orçamento (ex.: instalação da cortina). */
+/** Uma linha de serviço do orçamento (ex.: instalação). Instalação é por peça:
+ * valor_venda = valor unitário; quantidade = nº de peças (cortinas/janelas). */
 export interface LinhaServicoGc {
   gc_servico_id: string;
   valor_venda: number;
+  quantidade?: number; // default 1
 }
 
 export interface NovoOrcamentoGc {
@@ -67,7 +69,7 @@ export function montarPayload(o: NovoOrcamentoGc): Record<string, unknown> {
   if (temServico) {
     payload.servicos = servicos.map((s) => ({
       servico_id: s.gc_servico_id,
-      quantidade: 1,
+      quantidade: s.quantidade ?? 1,
       valor_venda: s.valor_venda,
     }));
   }

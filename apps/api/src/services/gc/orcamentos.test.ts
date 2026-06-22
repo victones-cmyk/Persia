@@ -44,6 +44,17 @@ describe('montarPayload (orçamento GC multi-itens)', () => {
     expect(servicos).toEqual([{ servico_id: 'S1', quantidade: 1, valor_venda: 140 }]);
   });
 
+  it('instalação por peça → serviço com quantidade = nº de peças', () => {
+    const payload = montarPayload({
+      cliente_id: 'C',
+      data: '2026-06-12',
+      produtos: [{ gc_produto_id: 'P', valor_venda: 500, valor_custo: 50 }],
+      servicos: [{ gc_servico_id: 'INST', valor_venda: 60, quantidade: 3 }], // R$60/peça × 3
+    });
+    const servicos = payload.servicos as Array<Record<string, unknown>>;
+    expect(servicos).toEqual([{ servico_id: 'INST', quantidade: 3, valor_venda: 60 }]);
+  });
+
   it('só serviço → tipo "servico"; sem serviço → sem a chave servicos', () => {
     const soServico = montarPayload({ cliente_id: 'C', data: '2026-06-12', produtos: [], servicos: [{ gc_servico_id: 'S', valor_venda: 80 }] });
     expect(soServico.tipo).toBe('servico');

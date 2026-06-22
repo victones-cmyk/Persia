@@ -476,8 +476,8 @@ Doc do Victor: `Persia_Casos_de_Teste_Homologacao_Victor_v.3.1.docx`. Quase tudo
 - **#1 Cortina com emenda "franze 3×":** investigado — no código o franzido É considerado na emenda (`tiras = ceil(largura×franzido / larguraTecido)`); provável causa = campo franzido em branco → padrão 3. **Precisa de exemplo concreto dele** pra reproduzir (não mexer no cálculo no escuro).
 - **#5 Wave — acessórios obrigatórios automáticos + Terminais nos modelos de trilho:** precisa do **produto-padrão** de cordão/rodízio wave/base click e da decisão sobre Terminais.
 
-**🔜 Próximo (no nosso lado):**
-- **#4 Instalação por peça:** Victor — "instalação é cobrada por peça; hoje o vendedor soma o total". Mudar de valor único → **valor por peça × nº de peças**. Mexe em valor + UI (painéis persiana/cortina) + payload GC + reenvio + detalhe → fazer com preview. (Ainda não feito.)
+**✅ Feito e deployado (continuação):**
+- **#4 Instalação por peça:** semântica de `instalacao_valor` mudou para **valor POR PEÇA**; total = unitário × nº de peças (janelas/cortinas). Backend: `orcamentos.ts` (`LinhaServicoGc.quantidade`; serviço vai com `quantidade = nº peças`, `valor = unitário`), `orcamentoController` + `orcamentoCortinaController` (criação + reenvio). Frontend: painéis (label "Instalação por peça" + linha "R$X × N = total") e `OrcamentoDetalhe` (calcula o total a partir do unitário). entrada_json/itens_json guardam o **unitário**. Teste novo de `montarPayload` (serviço com quantidade). Verificado: typecheck 2 apps + 67 testes + web build OK. (Banco local estava offline → e2e de salvar não rodou; math é multiplicação simples + coberta por teste.)
 
 **🟣 Grandes (planejar à parte):**
 - **#6 Modelo de tecido por camada** (ex.: frente Wave, fundo Franzido) — hoje o modelo é da cortina inteira; mudança no motor + UI.

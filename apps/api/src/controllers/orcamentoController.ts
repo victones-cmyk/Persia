@@ -150,7 +150,8 @@ function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<st
  */
 async function executarEnvioGc(args: {
   itens: { nome_produto: string; valor_final: number; valor_custo: number }[];
-  instalacao_valor?: number;
+  instalacao_por_peca?: number; // valor unitário da instalação (por peça/janela)
+  pecas?: number; // nº de peças (= nº de itens) para a instalação
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
@@ -168,13 +169,14 @@ async function executarEnvioGc(args: {
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
     }
 
-    // Instalação (opcional) entra como linha de serviço, igual à cortina.
+    // Instalação POR PEÇA (Victor v.3.1): 1 linha de serviço com qtd = nº de peças.
     const servicos: LinhaServicoGc[] = [];
-    const valorInstalacao = Math.max(0, Number(args.instalacao_valor) || 0);
-    if (valorInstalacao > 0) {
+    const instalacaoPorPeca = Math.max(0, Number(args.instalacao_por_peca) || 0);
+    const pecas = Math.max(0, Number(args.pecas) || 0);
+    if (instalacaoPorPeca > 0 && pecas > 0) {
       const servicoId = await resolverServicoInstalacao(undefined);
       if (!servicoId) throw new AppError(400, 'SERVICO_INSTALACAO', 'Nenhum serviço de instalação encontrado no GestãoClick.');
-      servicos.push({ gc_servico_id: servicoId, valor_venda: valorInstalacao });
+      servicos.push({ gc_servico_id: servicoId, valor_venda: instalacaoPorPeca, quantidade: pecas });
     }
 
     // Não enviamos número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
@@ -271,12 +273,14 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeiro = preparados[0];
 
-  // Instalação (opcional) — entra como serviço; soma ao valor final.
-  const valorInstalacao = Math.max(0, Number(b.instalacao_valor) || 0);
+  // Instalação POR PEÇA (Victor v.3.1): valor unitário × nº de peças (= nº de itens).
+  const instalacaoPorPeca = Math.max(0, Number(b.instalacao_valor) || 0);
+  const pecas = preparados.length;
+  const valorInstalacao = roundHalfUp(instalacaoPorPeca * pecas);
   const valorTotal = roundHalfUp(valorBrutoTotal + valorInstalacao);
 
-  // Entrada bruta — permite reabrir o rascunho na calculadora para edição.
-  const entradaJson = { tipo, itens: itensEntrada, instalacao_valor: valorInstalacao } as unknown as Prisma.InputJsonValue;
+  // Entrada bruta — permite reabrir o rascunho na calculadora. instalacao_valor = POR PEÇA.
+  const entradaJson = { tipo, itens: itensEntrada, instalacao_valor: instalacaoPorPeca } as unknown as Prisma.InputJsonValue;
 
   // Grava: cria novo ou atualiza o rascunho em edição (mesmo registro).
   const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>
@@ -324,7 +328,8 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   try {
     const envio = await executarEnvioGc({
       itens: preparados.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
-      instalacao_valor: valorInstalacao,
+      instalacao_por_peca: instalacaoPorPeca,
+      pecas,
       gc_cliente_id: String(b.gc_cliente_id),
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
@@ -392,12 +397,13 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
   if (snaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento sem itens para reenviar.');
 
   const loja = await resolverLoja(orc.loja_id);
-  const instalacaoReenvio = Math.max(0, Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0);
+  const instalacaoPorPeca = Math.max(0, Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0);
 
   try {
     const envio = await executarEnvioGc({
       itens: preparadosDoSnapshot(snaps),
-      instalacao_valor: instalacaoReenvio,
+      instalacao_por_peca: instalacaoPorPeca,
+      pecas: snaps.length,
       gc_cliente_id: orc.gc_cliente_id,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,

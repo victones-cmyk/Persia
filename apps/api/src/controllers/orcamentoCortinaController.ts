@@ -163,7 +163,10 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   for (const c of cortinasEntrada) preparadas.push(await prepararCortina(c));
 
   const valorCortinas = roundHalfUp(preparadas.reduce((s, p) => s + p.valor_total, 0));
-  const valorInstalacao = Math.max(0, Number(b.instalacao_valor) || 0);
+  // Instalação POR PEÇA (Victor v.3.1): valor unitário × nº de cortinas.
+  const instalacaoPorPeca = Math.max(0, Number(b.instalacao_valor) || 0);
+  const pecas = preparadas.length;
+  const valorInstalacao = roundHalfUp(instalacaoPorPeca * pecas);
   const valorTotal = roundHalfUp(valorCortinas + valorInstalacao);
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeira = preparadas[0];
@@ -178,7 +181,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     tipo_produto: 'cortina' as const,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
     loja_id: editarOrc?.loja_id ?? loja.id,
-    entrada_json: { cortinas: cortinasEntrada, instalacao_valor: valorInstalacao } as unknown as Prisma.InputJsonValue,
+    entrada_json: { cortinas: cortinasEntrada, instalacao_valor: instalacaoPorPeca } as unknown as Prisma.InputJsonValue,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
     tecido_codigo_gc: primeira.tecido_id,
@@ -189,7 +192,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     desconto_pct: 0,
     valor_final: valorTotal,
     desconto_aprovado_por: null,
-    itens_json: { cortinas: preparadas.map((p) => p.snapshot), instalacao: valorInstalacao } as unknown as Prisma.InputJsonValue,
+    itens_json: { cortinas: preparadas.map((p) => p.snapshot), instalacao: instalacaoPorPeca } as unknown as Prisma.InputJsonValue,
   };
 
   // Apenas salvar: rascunho local, sem tocar no GestãoClick.
@@ -211,10 +214,10 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     }
 
     const servicos: LinhaServicoGc[] = [];
-    if (valorInstalacao > 0) {
+    if (instalacaoPorPeca > 0 && pecas > 0) {
       const servicoId = await resolverServicoInstalacao(b.instalacao_servico_id);
       if (!servicoId) throw new AppError(400, 'SERVICO_INSTALACAO', 'Nenhum serviço de instalação encontrado no GestãoClick.');
-      servicos.push({ gc_servico_id: servicoId, valor_venda: valorInstalacao });
+      servicos.push({ gc_servico_id: servicoId, valor_venda: instalacaoPorPeca, quantidade: pecas });
     }
 
     // Sem número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
@@ -263,7 +266,9 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
   const itens = orc.itens_json as { cortinas?: CortinaSnapshot[]; instalacao?: number } | null;
   const cortinas = itens?.cortinas ?? [];
   if (cortinas.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento de cortina sem itens para enviar.');
-  const valorInstalacao = Math.max(0, Number(itens?.instalacao) || 0);
+  // Instalação por peça: valor unitário × nº de cortinas.
+  const instalacaoPorPeca = Math.max(0, Number(itens?.instalacao) || 0);
+  const pecasInst = cortinas.length;
   const loja = await resolverLoja(orc.loja_id);
 
   const criados: string[] = [];
@@ -277,10 +282,10 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: valor, valor_custo: custo });
     }
     const servicos: LinhaServicoGc[] = [];
-    if (valorInstalacao > 0) {
+    if (instalacaoPorPeca > 0 && pecasInst > 0) {
       const servicoId = await resolverServicoInstalacao(undefined);
       if (!servicoId) throw new AppError(400, 'SERVICO_INSTALACAO', 'Nenhum serviço de instalação encontrado no GestãoClick.');
-      servicos.push({ gc_servico_id: servicoId, valor_venda: valorInstalacao });
+      servicos.push({ gc_servico_id: servicoId, valor_venda: instalacaoPorPeca, quantidade: pecasInst });
     }
     const gcOrc = await gcCriarOrcamento({
       cliente_id: orc.gc_cliente_id!,

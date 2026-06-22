@@ -177,9 +177,12 @@ export function OrcamentoDetalhe() {
   const ehCortina = orc.tipo_produto === 'cortina';
   const cortinaJson = ehCortina ? (orc.itens_json as unknown as { cortinas?: CortinaSnap[]; instalacao?: number } | null) : null;
   const cortinaSnaps = cortinaJson?.cortinas ?? [];
-  const instalacaoVal = Number(cortinaJson?.instalacao ?? 0);
+  // Instalação é POR PEÇA (Victor v.3.1): o valor guardado é unitário; total = unit × nº peças.
+  const instalacaoCortinaPorPeca = Number(cortinaJson?.instalacao ?? 0);
+  const instalacaoVal = Math.round(instalacaoCortinaPorPeca * cortinaSnaps.length * 100) / 100;
   const persianaItens = !ehCortina && Array.isArray(orc.itens_json) ? orc.itens_json : [];
-  const instalacaoPersiana = !ehCortina ? Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0 : 0;
+  const instalacaoPersianaPorPeca = !ehCortina ? Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0 : 0;
+  const instalacaoPersiana = Math.round(instalacaoPersianaPorPeca * persianaItens.length * 100) / 100;
 
   return (
     <div>
@@ -219,7 +222,7 @@ export function OrcamentoDetalhe() {
               {cortinaSnaps.map((c, i) => <CortinaItem key={i} c={c} indice={i} />)}
               {instalacaoVal > 0 && (
                 <div className="flex justify-between items-center bg-neutral-50 border border-neutral-300 rounded-sm p-3">
-                  <span className="text-sm-ui font-semibold text-neutral-800">Instalação</span>
+                  <span className="text-sm-ui font-semibold text-neutral-800">Instalação{cortinaSnaps.length > 1 ? ` (${cortinaSnaps.length} × ${formatBRL(instalacaoCortinaPorPeca)})` : ''}</span>
                   <span className="font-mono font-semibold tabular-nums">{formatBRL(instalacaoVal)}</span>
                 </div>
               )}
@@ -249,7 +252,7 @@ export function OrcamentoDetalhe() {
               ))}
               {instalacaoPersiana > 0 && (
                 <div className="flex justify-between items-center bg-neutral-50 border border-neutral-300 rounded-sm p-3">
-                  <span className="text-sm-ui font-semibold text-neutral-800">Instalação</span>
+                  <span className="text-sm-ui font-semibold text-neutral-800">Instalação{persianaItens.length > 1 ? ` (${persianaItens.length} × ${formatBRL(instalacaoPersianaPorPeca)})` : ''}</span>
                   <span className="font-mono font-semibold tabular-nums">{formatBRL(instalacaoPersiana)}</span>
                 </div>
               )}
