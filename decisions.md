@@ -488,3 +488,12 @@ Doc do Victor: `Persia_Casos_de_Teste_Homologacao_Victor_v.3.1.docx`. Quase tudo
 - **#7 Orçamento misto** persiana + cortina no mesmo orçamento — estrutural.
 
 **Não marcado por ele:** varão por camada (item 4 da seção 1) ficou em branco — pedimos confirmação no e-mail (já validado por nós via endpoint).
+
+## 15. Orçamento misto — persiana + cortina no mesmo orçamento (22/06/2026)
+
+Construído na branch `feat/orcamento-misto` (isolada da produção) e mergeado na `main` só após verificação e2e. UX escolhida pelo PH: **tela única** com seções de persiana e cortina.
+
+- **Schema:** enum `TipoProduto` ganhou `misto` (migração `20260622000000`, `ADD VALUE IF NOT EXISTS` — PG16). Local foi aplicado via `db execute` (o `migrate dev` trava por shadow DB lento no OneDrive); em produção o `migrate deploy` aplica normalmente.
+- **Backend** `orcamentoMistoController.ts`: `criarOrcamentoMisto` recalcula persianas (`prepararItens`) + cortinas (`prepararCortina`), cria todos os produtos e envia **1 orçamento** ao GC (reusa `executarEnvioGc`); instalação **por peça × nº total de peças** (persianas + cortinas). `reenviarMisto` para o replay. Rota `POST /orcamentos/misto`; o reenvio roteia `tipo='misto'`. Funções reutilizáveis exportadas dos controllers puros.
+- **Frontend** `OrcamentoNovo` virou **tela única**: seções Persianas e Cortinas + painel/total/envio unificado. O envio escolhe a rota: só persiana → `/orcamentos`; só cortina → `/orcamentos/cortina`; os dois → `/orcamentos/misto` (casos puros seguem na lógica testada). `CortinaOrcamento` ganhou modo `embutido` (sem painel próprio, reporta estado ao pai). Autosave/edição/detalhe/lista cobrem os 3 tipos.
+- **Verificado (e2e, banco local):** API sobe sem crash; misto valida (`MISTO_INVALIDO`) e salva completo (1 persiana + 1 cortina → `tipo:misto`, estrutura `{persiana:{itens}, cortinas, instalacao}` correta); tela única renderiza as 2 seções + painel sem erro de console; typecheck API+web + 70 testes + web build OK.
