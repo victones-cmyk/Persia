@@ -29,6 +29,20 @@ import {
 
 const ESTADO_CORTINA_VAZIO: CortinaOrcamentoEstado = { total: 0, todasCompletas: false, temCortinas: false, count: 0, cortinas: [] };
 
+// Recuperação: detecta se o rascunho local tem conteúdo real em cada seção (e não só
+// os campos vazios iniciais), para reabrir já com a seção certa marcada.
+function persianaSnapTemConteudo(s?: PersianaSnapshot | null): boolean {
+  if (!s) return false;
+  if (s.tipo) return true;
+  return s.itens?.some((it) =>
+    it.ambiente || it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base) ?? false;
+}
+function cortinaSnapTemConteudo(s?: CortinaSnapshot | null): boolean {
+  if (!s) return false;
+  return s.cortinas?.some((c) =>
+    c.modelo || c.fixacao || c.largura || c.altura || c.tamanhoBarra || (c.camadas?.some((ca) => ca.tecidoId || ca.franzido))) ?? false;
+}
+
 export function OrcamentoNovo() {
   const { usuario } = useAuth();
   const { status: gcStatus } = useGcHealth();
@@ -46,6 +60,9 @@ export function OrcamentoNovo() {
   );
   const [resultado, setResultado] = useState<OrcamentoCalculado | null>(null); // persiana
   const [cortinaEstado, setCortinaEstado] = useState<CortinaOrcamentoEstado>(ESTADO_CORTINA_VAZIO);
+  // O vendedor escolhe o que incluir; cada seção só aparece quando marcada.
+  const [incluiPersiana, setIncluiPersiana] = useState(() => persianaSnapTemConteudo(rascunhoLocal?.persiana));
+  const [incluiCortina, setIncluiCortina] = useState(() => cortinaSnapTemConteudo(rascunhoLocal?.cortina));
   const [instalacao, setInstalacao] = useState(rascunhoLocal?.instalacao_valor ?? '');
   const [recuperado] = useState(!!rascunhoLocal);
 
@@ -93,6 +110,25 @@ export function OrcamentoNovo() {
   const onDirtyCortina = useCallback((sujo: boolean) => { cortinaSujoRef.current = sujo; setDirty(sujo || persianaSujoRef.current); agendarSalvar(); }, [agendarSalvar, setDirty]);
   const onSelecionarCliente = useCallback((c: ClienteResumo | null) => { setCliente(c); agendarSalvar(); }, [agendarSalvar]);
 
+  // Marcar/desmarcar uma seção. Ao desmarcar, zera resultado/snapshot daquela seção
+  // para que não conte no total nem volte na recuperação.
+  function toggleIncluiPersiana(v: boolean) {
+    setIncluiPersiana(v);
+    if (!v) {
+      setResultado(null);
+      persianaSnapRef.current = null; persianaSujoRef.current = false;
+      setDirty(cortinaSujoRef.current); agendarSalvar();
+    }
+  }
+  function toggleIncluiCortina(v: boolean) {
+    setIncluiCortina(v);
+    if (!v) {
+      setCortinaEstado(ESTADO_CORTINA_VAZIO);
+      cortinaSnapRef.current = null; cortinaSujoRef.current = false;
+      setDirty(persianaSujoRef.current); agendarSalvar();
+    }
+  }
+
   useEffect(() => {
     if (!editarId) return;
     let vivo = true;
@@ -112,13 +148,13 @@ export function OrcamentoNovo() {
         setInstalacao(entrada?.instalacao_valor ? String(entrada.instalacao_valor) : '');
 
         if (ehMisto) {
-          if (entrada?.itens?.length) setPersianaInicial({ tipo: entrada.tipo as TipoPersiana, itens: entrada.itens });
-          if (entrada?.cortinas?.length) setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 });
+          if (entrada?.itens?.length) { setPersianaInicial({ tipo: entrada.tipo as TipoPersiana, itens: entrada.itens }); setIncluiPersiana(true); }
+          if (entrada?.cortinas?.length) { setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 }); setIncluiCortina(true); }
         } else if (ehCortina) {
-          if (entrada?.cortinas?.length) setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 });
+          if (entrada?.cortinas?.length) { setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 }); setIncluiCortina(true); }
           else { showToast('error', 'Rascunho antigo', 'Este rascunho não tem dados para reabrir. Crie um novo orçamento.'); navigate(`/orcamentos/${editarId}`); return; }
         } else {
-          if (entrada?.itens?.length) setPersianaInicial({ tipo: o.tipo_produto as TipoPersiana, itens: entrada.itens });
+          if (entrada?.itens?.length) { setPersianaInicial({ tipo: o.tipo_produto as TipoPersiana, itens: entrada.itens }); setIncluiPersiana(true); }
           else if (o.itens_json && o.itens_json.length > 0) {
             setPersianaInicial({
               tipo: o.tipo_produto as TipoPersiana,
@@ -127,6 +163,7 @@ export function OrcamentoNovo() {
                 largura: Number(s.largura_m), altura: Number(s.altura_m), tc: Number(s.tc_m), rolamento: s.rolamento, base: s.base,
               })),
             });
+            setIncluiPersiana(true);
           } else { showToast('error', 'Rascunho sem itens', 'Não há itens para reabrir.'); navigate(`/orcamentos/${editarId}`); return; }
         }
         setProntoEdicao(true);
@@ -262,37 +299,60 @@ export function OrcamentoNovo() {
         <ClienteSearch selecionado={cliente} onSelecionar={onSelecionarCliente} />
       </div>
 
-      <p className="text-sm-ui text-neutral-500 mb-4">Adicione persianas e/ou cortinas — tudo vai no mesmo orçamento.</p>
+      {/* Seletor: o vendedor decide o que entra no orçamento. */}
+      <div className="card p-4 mb-4">
+        <div className="form-label mb-2">O que incluir neste orçamento?</div>
+        <div className="flex flex-wrap gap-6">
+          <label className="flex items-center gap-2 text-md-ui cursor-pointer">
+            <input type="checkbox" checked={incluiPersiana} onChange={(e) => toggleIncluiPersiana(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
+            <FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas
+          </label>
+          <label className="flex items-center gap-2 text-md-ui cursor-pointer">
+            <input type="checkbox" checked={incluiCortina} onChange={(e) => toggleIncluiCortina(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
+            <FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas
+          </label>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-6">
+          {!incluiPersiana && !incluiCortina && (
+            <div className="card p-6 text-center text-neutral-500 text-sm-ui">
+              Marque acima o que deseja incluir: <strong>Persianas</strong>, <strong>Cortinas</strong> ou os dois.
+            </div>
+          )}
+
           {/* Seção PERSIANAS */}
-          <section>
-            <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
-            {prontoEdicao && (
-              <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} />
-            )}
-          </section>
+          {incluiPersiana && (
+            <section>
+              <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
+              {prontoEdicao && (
+                <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} />
+              )}
+            </section>
+          )}
 
           {/* Seção CORTINAS */}
-          <section>
-            <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas</h2>
-            {prontoEdicao && (
-              <CortinaOrcamento
-                embutido
-                cliente={cliente}
-                gcStatus={gcStatus}
-                gcUsuarioId={usuario?.gc_usuario_id ?? null}
-                inicial={cortinaInicial}
-                restauro={rascunhoLocal?.cortina}
-                editarId={editarId}
-                onDirtyChange={onDirtyCortina}
-                onSnapshot={onSnapCortina}
-                onEnviado={() => {}}
-                onEstado={setCortinaEstado}
-              />
-            )}
-          </section>
+          {incluiCortina && (
+            <section>
+              <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas</h2>
+              {prontoEdicao && (
+                <CortinaOrcamento
+                  embutido
+                  cliente={cliente}
+                  gcStatus={gcStatus}
+                  gcUsuarioId={usuario?.gc_usuario_id ?? null}
+                  inicial={cortinaInicial}
+                  restauro={rascunhoLocal?.cortina}
+                  editarId={editarId}
+                  onDirtyChange={onDirtyCortina}
+                  onSnapshot={onSnapCortina}
+                  onEnviado={() => {}}
+                  onEstado={setCortinaEstado}
+                />
+              )}
+            </section>
+          )}
         </div>
 
         {/* Painel unificado */}

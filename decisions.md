@@ -483,11 +483,18 @@ Doc do Victor: `Persia_Casos_de_Teste_Homologacao_Victor_v.3.1.docx`. Quase tudo
 **✅ Feito e deployado (continuação):**
 - **#4 Instalação por peça:** semântica de `instalacao_valor` mudou para **valor POR PEÇA**; total = unitário × nº de peças (janelas/cortinas). Backend: `orcamentos.ts` (`LinhaServicoGc.quantidade`; serviço vai com `quantidade = nº peças`, `valor = unitário`), `orcamentoController` + `orcamentoCortinaController` (criação + reenvio). Frontend: painéis (label "Instalação por peça" + linha "R$X × N = total") e `OrcamentoDetalhe` (calcula o total a partir do unitário). entrada_json/itens_json guardam o **unitário**. Teste novo de `montarPayload` (serviço com quantidade). Verificado: typecheck 2 apps + 67 testes + web build OK. (Banco local estava offline → e2e de salvar não rodou; math é multiplicação simples + coberta por teste.)
 
-**🟣 Grandes (planejar à parte):**
-- **#6 Modelo de tecido por camada** (ex.: frente Wave, fundo Franzido) — hoje o modelo é da cortina inteira; mudança no motor + UI.
-- **#7 Orçamento misto** persiana + cortina no mesmo orçamento — estrutural.
+**Grandes:**
+- **✅ #7 Orçamento misto** persiana + cortina no mesmo orçamento — FEITO e deployado (ver §15).
+- **⏸ #6 Modelo de tecido por camada** (ex.: frente Wave, fundo Franzido) — depende do Victor (entretela com modelos misturados? como wave e franzido coexistem na mesma fixação?).
 
-**Não marcado por ele:** varão por camada (item 4 da seção 1) ficou em branco — pedimos confirmação no e-mail (já validado por nós via endpoint).
+**Não marcado por ele:** varão por camada (item 4 da seção 1) — Victor confirmou "está indo certo" ✅.
+
+### 14.1 Resumo — falta do Victor (3 tópicos, gate do próximo deploy)
+1. **Wave:** quantidade exata da **fita wave**; **Terminais** nos outros modelos de trilho?; o wave **respeita o franzido** escolhido ou mantém o fator fixo 2,7? → destrava auto-selecionar obrigatórios + fita wave + terminais.
+2. **Emenda (confirmação):** parede mais larga que o rolo conta as faixas como?; corte na emenda é exato ou "de 5 em 5 cm"?
+3. **#6 Modelo por camada:** frente wave + fundo franzido — regra da entretela e coexistência de acessórios/fixação.
+
+**Feito a partir do v.3.1 (5 itens):** instalação por peça; cortina com emenda respeitando o franzido; suporte pode ser 0; nome do produto com "Cortina"/"Persiana"; orçamento misto.
 
 ## 15. Orçamento misto — persiana + cortina no mesmo orçamento (22/06/2026)
 
