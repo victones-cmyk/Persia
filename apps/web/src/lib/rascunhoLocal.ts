@@ -41,10 +41,11 @@ export interface CortinaSnapshot {
 }
 
 export interface RascunhoLocal {
-  tipo: 'persiana' | 'cortina';
+  tipo: 'persiana' | 'cortina' | 'misto';
   cliente: { id: string; nome: string } | null;
   persiana?: PersianaSnapshot;
   cortina?: CortinaSnapshot;
+  instalacao_valor?: string; // instalação por peça (tela única/misto)
   ts: number;
 }
 
@@ -59,7 +60,7 @@ export function lerRascunhoLocal(): RascunhoLocal | null {
     const bruto = localStorage.getItem(CHAVE);
     if (!bruto) return null;
     const r = JSON.parse(bruto) as RascunhoLocal;
-    if (!r || (r.tipo !== 'persiana' && r.tipo !== 'cortina')) return null;
+    if (!r || (r.tipo !== 'persiana' && r.tipo !== 'cortina' && r.tipo !== 'misto')) return null;
     // Descarta rascunhos antigos (e os de versões sem carimbo de tempo).
     if (typeof r.ts !== 'number' || Date.now() - r.ts > VALIDADE_MS) {
       limparRascunhoLocal();

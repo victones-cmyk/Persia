@@ -22,7 +22,7 @@ const FILTROS: { valor: '' | StatusOrcamento; label: string }[] = [
 ];
 
 function tipoLabel(t: string): string {
-  return t === 'cortina' ? 'Cortina' : 'Persiana';
+  return t === 'cortina' ? 'Cortina' : t === 'misto' ? 'Misto' : 'Persiana';
 }
 
 function dataBR(iso: string): string {

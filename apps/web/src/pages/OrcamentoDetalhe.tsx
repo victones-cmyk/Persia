@@ -11,7 +11,7 @@ import { formatBRL, formatNum } from '../lib/formatacao';
 import { StatusBadge } from '../components/StatusBadge';
 import { ClienteSearch } from '../components/ClienteSearch';
 import { ConfirmModal } from '../components/ConfirmModal';
-import type { OrcamentoDetalhe as Orc } from '../lib/orcamentoTypes';
+import type { OrcamentoDetalhe as Orc, ItemSnapshot } from '../lib/orcamentoTypes';
 import type { ClienteResumo } from '../lib/calcTypes';
 import { TIPOS_PERSIANA, ACIONAMENTOS } from '../lib/calcTypes';
 import { MODELOS_CORTINA, FIXACOES_CORTINA } from '../lib/cortinaTypes';
@@ -173,16 +173,26 @@ export function OrcamentoDetalhe() {
     );
   }
 
-  // Cortina guarda { cortinas:[...], instalacao } em itens_json (não é array de itens).
+  // itens_json: persiana = ItemSnapshot[]; cortina = { cortinas, instalacao };
+  // misto = { persiana:{itens}, cortinas, instalacao }. Unificamos os 3 casos.
   const ehCortina = orc.tipo_produto === 'cortina';
+  const ehMisto = orc.tipo_produto === 'misto';
+  const mistoJson = ehMisto ? (orc.itens_json as unknown as { persiana?: { itens?: ItemSnapshot[] }; cortinas?: CortinaSnap[]; instalacao?: number } | null) : null;
   const cortinaJson = ehCortina ? (orc.itens_json as unknown as { cortinas?: CortinaSnap[]; instalacao?: number } | null) : null;
-  const cortinaSnaps = cortinaJson?.cortinas ?? [];
-  // Instalação é POR PEÇA (Victor v.3.1): o valor guardado é unitário; total = unit × nº peças.
-  const instalacaoCortinaPorPeca = Number(cortinaJson?.instalacao ?? 0);
-  const instalacaoVal = Math.round(instalacaoCortinaPorPeca * cortinaSnaps.length * 100) / 100;
-  const persianaItens = !ehCortina && Array.isArray(orc.itens_json) ? orc.itens_json : [];
-  const instalacaoPersianaPorPeca = !ehCortina ? Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0 : 0;
-  const instalacaoPersiana = Math.round(instalacaoPersianaPorPeca * persianaItens.length * 100) / 100;
+
+  const persianaItens: ItemSnapshot[] = ehMisto
+    ? (mistoJson?.persiana?.itens ?? [])
+    : (!ehCortina && Array.isArray(orc.itens_json) ? orc.itens_json : []);
+  const cortinaSnaps: CortinaSnap[] = ehMisto ? (mistoJson?.cortinas ?? []) : (cortinaJson?.cortinas ?? []);
+
+  // Instalação POR PEÇA (Victor v.3.1): valor unitário guardado; total = unit × nº de peças.
+  const instalacaoPorPeca = ehMisto
+    ? Number(mistoJson?.instalacao ?? 0)
+    : ehCortina
+      ? Number(cortinaJson?.instalacao ?? 0)
+      : Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0;
+  const pecas = persianaItens.length + cortinaSnaps.length;
+  const instalacaoTotal = Math.round(instalacaoPorPeca * pecas * 100) / 100;
 
   return (
     <div>
@@ -212,51 +222,46 @@ export function OrcamentoDetalhe() {
 
         <Linha label="Produto" valor={tipoLabel(orc.tipo_produto)} />
 
-        {/* Itens do orçamento */}
-        {ehCortina && cortinaSnaps.length > 0 ? (
-          <div className="mt-3 mb-1">
-            <div className="text-xs-ui font-bold text-neutral-600 mb-2">
-              {cortinaSnaps.length} {cortinaSnaps.length === 1 ? 'cortina' : 'cortinas'}
-            </div>
-            <div className="space-y-2">
-              {cortinaSnaps.map((c, i) => <CortinaItem key={i} c={c} indice={i} />)}
-              {instalacaoVal > 0 && (
-                <div className="flex justify-between items-center bg-neutral-50 border border-neutral-300 rounded-sm p-3">
-                  <span className="text-sm-ui font-semibold text-neutral-800">Instalação{cortinaSnaps.length > 1 ? ` (${cortinaSnaps.length} × ${formatBRL(instalacaoCortinaPorPeca)})` : ''}</span>
-                  <span className="font-mono font-semibold tabular-nums">{formatBRL(instalacaoVal)}</span>
+        {/* Itens do orçamento — persianas e/ou cortinas (cobre misto) */}
+        {(persianaItens.length > 0 || cortinaSnaps.length > 0) ? (
+          <div className="mt-3 mb-1 space-y-2">
+            {persianaItens.length > 0 && (
+              <>
+                <div className="text-xs-ui font-bold text-neutral-600 mb-1">
+                  {persianaItens.length} {persianaItens.length === 1 ? 'persiana' : 'persianas'}
                 </div>
-              )}
-            </div>
-          </div>
-        ) : persianaItens.length > 0 ? (
-          <div className="mt-3 mb-1">
-            <div className="text-xs-ui font-bold text-neutral-600 mb-2">
-              {persianaItens.length} {persianaItens.length === 1 ? 'item' : 'itens'}
-            </div>
-            <div className="space-y-2">
-              {persianaItens.map((it, i) => (
-                <div key={i} className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
-                  <div className="flex justify-between items-start gap-2 mb-1">
-                    <span className="text-sm-ui font-semibold text-neutral-800">{i + 1}. {it.ambiente ? `${it.ambiente} — ` : ''}{it.tecido_nome}</span>
-                    <span className="font-mono font-semibold tabular-nums whitespace-nowrap">{formatBRL(Number(it.valor_final))}</span>
+                {persianaItens.map((it, i) => (
+                  <div key={`p${i}`} className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
+                    <div className="flex justify-between items-start gap-2 mb-1">
+                      <span className="text-sm-ui font-semibold text-neutral-800">{i + 1}. {it.ambiente ? `${it.ambiente} — ` : ''}{it.tecido_nome}</span>
+                      <span className="font-mono font-semibold tabular-nums whitespace-nowrap">{formatBRL(Number(it.valor_final))}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs-ui text-neutral-600">
+                      <span>Medidas: {formatNum(Number(it.largura_m))} × {formatNum(Number(it.altura_m))} m</span>
+                      <span>TC: {formatNum(Number(it.tc_m))} m</span>
+                      <span>Acionamento: {acionamentoLabel(it.acionamento)}</span>
+                      <span>Cor: {it.cor_acessorio || '—'}</span>
+                      {it.rolamento && <span>Rolamento: {it.rolamento}</span>}
+                      {it.base && <span>Base: {it.base}</span>}
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs-ui text-neutral-600">
-                    <span>Medidas: {formatNum(Number(it.largura_m))} × {formatNum(Number(it.altura_m))} m</span>
-                    <span>TC: {formatNum(Number(it.tc_m))} m</span>
-                    <span>Acionamento: {acionamentoLabel(it.acionamento)}</span>
-                    <span>Cor: {it.cor_acessorio || '—'}</span>
-                    {it.rolamento && <span>Rolamento: {it.rolamento}</span>}
-                    {it.base && <span>Base: {it.base}</span>}
-                  </div>
+                ))}
+              </>
+            )}
+            {cortinaSnaps.length > 0 && (
+              <>
+                <div className="text-xs-ui font-bold text-neutral-600 mb-1 mt-1">
+                  {cortinaSnaps.length} {cortinaSnaps.length === 1 ? 'cortina' : 'cortinas'}
                 </div>
-              ))}
-              {instalacaoPersiana > 0 && (
-                <div className="flex justify-between items-center bg-neutral-50 border border-neutral-300 rounded-sm p-3">
-                  <span className="text-sm-ui font-semibold text-neutral-800">Instalação{persianaItens.length > 1 ? ` (${persianaItens.length} × ${formatBRL(instalacaoPersianaPorPeca)})` : ''}</span>
-                  <span className="font-mono font-semibold tabular-nums">{formatBRL(instalacaoPersiana)}</span>
-                </div>
-              )}
-            </div>
+                {cortinaSnaps.map((c, i) => <CortinaItem key={`c${i}`} c={c} indice={i} />)}
+              </>
+            )}
+            {instalacaoTotal > 0 && (
+              <div className="flex justify-between items-center bg-neutral-50 border border-neutral-300 rounded-sm p-3">
+                <span className="text-sm-ui font-semibold text-neutral-800">Instalação{pecas > 1 ? ` (${pecas} × ${formatBRL(instalacaoPorPeca)})` : ''}</span>
+                <span className="font-mono font-semibold tabular-nums">{formatBRL(instalacaoTotal)}</span>
+              </div>
+            )}
           </div>
         ) : (
           <>

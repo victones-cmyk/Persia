@@ -17,8 +17,18 @@ import type { GcStatus } from '../hooks/useGcHealth';
 import type { AcessoriosCortinaResp } from '../lib/cortinaTypes';
 import type { CortinaSnapshot, CortinaCardSnap } from '../lib/rascunhoLocal';
 
+/** Estado reportado ao pai quando embutido (tela de orçamento misto). */
+export interface CortinaOrcamentoEstado {
+  total: number; // soma das cortinas (SEM instalação)
+  todasCompletas: boolean;
+  temCortinas: boolean; // ao menos uma cortina com payload
+  count: number; // nº de cortinas com payload
+  cortinas: NonNullable<CortinaResumo['payload']>[];
+}
+
 export function CortinaOrcamento({
   cliente, gcStatus, gcUsuarioId, inicial, restauro, editarId, onDirtyChange, onSnapshot, onEnviado,
+  embutido = false, onEstado, onCarregar,
 }: {
   cliente: ClienteResumo | null;
   gcStatus: GcStatus;
@@ -29,6 +39,9 @@ export function CortinaOrcamento({
   onDirtyChange?: (sujo: boolean) => void; // guarda de navegação
   onSnapshot?: (snap: CortinaSnapshot) => void; // autosave local
   onEnviado: (orc: OrcamentoSalvo) => void;
+  embutido?: boolean; // tela única (misto): não renderiza painel/instalação/botões próprios
+  onEstado?: (e: CortinaOrcamentoEstado) => void; // reporta total/completude/payloads ao pai
+  onCarregar?: (pronto: boolean) => void; // avisa o pai quando tecidos/opções carregaram
 }) {
   const { showToast } = useToast();
   const [tecidos, setTecidos] = useState<TecidoOpcao[]>([]);
@@ -64,10 +77,11 @@ export function CortinaOrcamento({
     api.get<{ tecidos: TecidoOpcao[] }>('/calcular/cortina/tecidos')
       .then((t) => setTecidos(t.tecidos))
       .catch(() => setErroCarga(true))
-      .finally(() => setCarregando(false));
+      .finally(() => { setCarregando(false); onCarregar?.(true); });
     api.get<AcessoriosCortinaResp>('/calcular/cortina/acessorios')
       .then((o) => setOpcoes(o))
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setResumo = (id: string, r: CortinaResumo) => setResumos((m) => ({ ...m, [id]: r }));
@@ -99,6 +113,15 @@ export function CortinaOrcamento({
   const totalGeral = Math.round((totalCortinas + valorInstalacao) * 100) / 100;
 
   const todasCompletas = ids.length > 0 && ids.every((id) => resumos[id]?.completo && resumos[id]?.payload);
+
+  // Modo embutido (tela única/misto): reporta total/completude/payloads ao pai.
+  const onEstadoRef = useRef(onEstado); onEstadoRef.current = onEstado;
+  useEffect(() => {
+    if (!embutido) return;
+    const cortinas = ids.map((id) => resumos[id]?.payload).filter(Boolean) as NonNullable<CortinaResumo['payload']>[];
+    onEstadoRef.current?.({ total: totalCortinas, todasCompletas, temCortinas: cortinas.length > 0, count: cortinas.length, cortinas });
+  }, [embutido, totalCortinas, todasCompletas, ids, resumos]);
+
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !gcUsuarioId;
   const ocupado = enviando || salvando;
@@ -136,29 +159,52 @@ export function CortinaOrcamento({
     return <div className="alert alert-error max-w-form"><span>Não foi possível carregar os dados do GestãoClick. Tente recarregar.</span></div>;
   }
 
+  // Coluna de cards (reutilizada no modo normal e no embutido/misto).
+  const colCortinas = (
+    <div className="space-y-4">
+      {ids.map((id, i) => (
+        <CortinaCard
+          key={id}
+          indice={i}
+          tecidos={tecidos}
+          opcoes={opcoes}
+          inicial={iniciais.current[id] ?? undefined}
+          restauro={restauros.current[id]}
+          onChange={(r) => setResumo(id, r)}
+          onPreenchidoChange={(v) => setPreenchido(id, v)}
+          onSnapshot={(s) => setSnap(id, s)}
+          onRemover={() => setRemoverCortinaId(id)}
+          podeRemover={ids.length > 1}
+        />
+      ))}
+      <button type="button" className="btn btn-default w-full" onClick={() => setIds((xs) => [...xs, crypto.randomUUID()])}>
+        <FontAwesomeIcon icon={faPlus} /> Adicionar cortina
+      </button>
+    </div>
+  );
+
+  const modalRemover = (
+    <ConfirmModal
+      aberto={removerCortinaId !== null}
+      titulo="Remover cortina"
+      mensagem="Deseja remover esta cortina do orçamento?"
+      confirmarLabel="Remover"
+      cancelarLabel="Voltar"
+      perigo
+      onConfirmar={() => { if (removerCortinaId) removerCortina(removerCortinaId); setRemoverCortinaId(null); }}
+      onCancelar={() => setRemoverCortinaId(null)}
+    />
+  );
+
+  // Modo embutido (tela única/misto): só os cards; o painel/total/envio é do pai.
+  if (embutido) {
+    return <div>{colCortinas}{modalRemover}</div>;
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Coluna esquerda: cortinas */}
-      <div className="lg:col-span-2 space-y-4">
-        {ids.map((id, i) => (
-          <CortinaCard
-            key={id}
-            indice={i}
-            tecidos={tecidos}
-            opcoes={opcoes}
-            inicial={iniciais.current[id] ?? undefined}
-            restauro={restauros.current[id]}
-            onChange={(r) => setResumo(id, r)}
-            onPreenchidoChange={(v) => setPreenchido(id, v)}
-            onSnapshot={(s) => setSnap(id, s)}
-            onRemover={() => setRemoverCortinaId(id)}
-            podeRemover={ids.length > 1}
-          />
-        ))}
-        <button type="button" className="btn btn-default w-full" onClick={() => setIds((xs) => [...xs, crypto.randomUUID()])}>
-          <FontAwesomeIcon icon={faPlus} /> Adicionar cortina
-        </button>
-      </div>
+      <div className="lg:col-span-2">{colCortinas}</div>
 
       {/* Coluna direita: resumo + instalação + total + ações */}
       <div className="lg:col-span-1">
@@ -205,16 +251,7 @@ export function CortinaOrcamento({
         </div>
       </div>
 
-      <ConfirmModal
-        aberto={removerCortinaId !== null}
-        titulo="Remover cortina"
-        mensagem="Deseja remover esta cortina do orçamento?"
-        confirmarLabel="Remover"
-        cancelarLabel="Voltar"
-        perigo
-        onConfirmar={() => { if (removerCortinaId) removerCortina(removerCortinaId); setRemoverCortinaId(null); }}
-        onCancelar={() => setRemoverCortinaId(null)}
-      />
+      {modalRemover}
       <ConfirmModal
         aberto={salvarAberto}
         titulo="Salvar orçamento"
