@@ -8,6 +8,7 @@ import { AppError } from '../middleware/errorHandler';
 import { validarSenha } from '../lib/senha';
 import { listarFuncionarios } from '../services/gc/catalogos';
 import { getRegras, salvarRegras, REGRAS_DEFAULT } from '../services/calc/regras';
+import { composicaoCalculo } from '../services/calc/composicao';
 
 // ---------------------------------------------------------------------------
 // Versão em produção (só admin) — usado para conferir o auto-deploy do Railway.
@@ -21,7 +22,9 @@ export async function getVersao(_req: Request, res: Response): Promise<void> {
 // Regras de cálculo (parametrização do motor — só admin)
 // ---------------------------------------------------------------------------
 export async function getRegrasCalculo(_req: Request, res: Response): Promise<void> {
-  res.json({ regras: getRegras(), padrao: REGRAS_DEFAULT });
+  // composicao: quais produtos do GC entram em cada cálculo (para o admin saber, ao
+  // mudar um preço no GC, onde isso influencia a calculadora). Cálculo puro/local.
+  res.json({ regras: getRegras(), padrao: REGRAS_DEFAULT, composicao: composicaoCalculo() });
 }
 
 export async function salvarRegrasCalculo(req: Request, res: Response): Promise<void> {

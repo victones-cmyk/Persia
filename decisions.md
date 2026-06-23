@@ -496,6 +496,13 @@ Doc do Victor: `Persia_Casos_de_Teste_Homologacao_Victor_v.3.1.docx`. Quase tudo
 
 **Feito a partir do v.3.1 (5 itens):** instalação por peça; cortina com emenda respeitando o franzido; suporte pode ser 0; nome do produto com "Cortina"/"Persiana"; orçamento misto.
 
+### 14.2 Respostas do Victor (23/06/2026)
+1. **Wave →** "Acredito que 2,7 vai dar certo." Confirma **manter o fator fixo 2,7** (BLOQUEANTE-05 deixa de ser tentativo). **Já implementado** (`reg.franzido_wave = 2,7`) — nada a mudar. ⚠️ **Não respondeu** as outras duas partes: quantidade da **fita wave** e se **Terminais** devem sair também nos outros modelos de trilho (hoje Terminais só no wave, qtd 4). Ficam em aberto, mas ele tratou o tópico como ok.
+2. **Emenda →** "A conta é feita pelo fator de franzimento e a largura do tecido, como naquele exemplo do e-mail." **Confirma exatamente** a regra já no ar: `tiras = max(ceil(franzido), ceil(consumo/larguraTecido))` (bate com 8,64/12,96). **Nada a mudar.**
+3. **#6 Modelo por camada → MUDOU de abordagem.** Não quer mais "frente wave + fundo franzido como modelos diferentes". Quer: **o sistema sempre calcular uma cortina simples e ele poder adicionar o tecido.** Ofereceu **call** para explicar. ⏸ #6 antigo descartado; nova mecânica **pendente da call** (precisa definir o que "adicionar tecido" significa no cálculo/UI/envio ao GC).
+
+**Conclusão:** as respostas (1) e (2) só **confirmam o que já está em produção** — não há nada novo a implementar/deployar por elas. O único item que gera trabalho é o (3), e ele **depende da call**. Restam abertos: fita wave (qtd) + Terminais nos demais trilhos (tópico 1) — levar junto na call.
+
 ## 15. Orçamento misto — persiana + cortina no mesmo orçamento (22/06/2026)
 
 Construído na branch `feat/orcamento-misto` (isolada da produção) e mergeado na `main` só após verificação e2e. UX escolhida pelo PH: **tela única** com seções de persiana e cortina.
@@ -504,3 +511,12 @@ Construído na branch `feat/orcamento-misto` (isolada da produção) e mergeado 
 - **Backend** `orcamentoMistoController.ts`: `criarOrcamentoMisto` recalcula persianas (`prepararItens`) + cortinas (`prepararCortina`), cria todos os produtos e envia **1 orçamento** ao GC (reusa `executarEnvioGc`); instalação **por peça × nº total de peças** (persianas + cortinas). `reenviarMisto` para o replay. Rota `POST /orcamentos/misto`; o reenvio roteia `tipo='misto'`. Funções reutilizáveis exportadas dos controllers puros.
 - **Frontend** `OrcamentoNovo` virou **tela única**: seções Persianas e Cortinas + painel/total/envio unificado. O envio escolhe a rota: só persiana → `/orcamentos`; só cortina → `/orcamentos/cortina`; os dois → `/orcamentos/misto` (casos puros seguem na lógica testada). `CortinaOrcamento` ganhou modo `embutido` (sem painel próprio, reporta estado ao pai). Autosave/edição/detalhe/lista cobrem os 3 tipos.
 - **Verificado (e2e, banco local):** API sobe sem crash; misto valida (`MISTO_INVALIDO`) e salva completo (1 persiana + 1 cortina → `tipo:misto`, estrutura `{persiana:{itens}, cortinas, instalacao}` correta); tela única renderiza as 2 seções + painel sem erro de console; typecheck API+web + 70 testes + web build OK.
+
+## 16. Composição por tipo no Admin → Regras de Cálculo (23/06/2026)
+
+Victor pediu para, na tela de Regras de Cálculo, **ver quais produtos do GestãoClick entram em cada cálculo** — assim, ao alterar um preço no GC, sabe onde isso influencia a calculadora. UX (PH): **tooltip ao passar o mouse** no tipo/modelo, sem criar telas novas.
+
+- **Assimetria real do motor (decidido com PH):** a PERSIANA precifica **só pelo tecido** (RN-03 — componentes são lista técnica/OS, não entram no preço, ver `componentes.ts:9`); a CORTINA soma **tecido + acessórios** lidos do GC. Por isso o tooltip separa **2 grupos**: 🟢 "Afeta o preço do cálculo" e ⚪ "Lista técnica (não afeta o preço)". Modelo da persiana **mantido** (só tecido) — confirmado com PH que está correto.
+- **Backend** `services/calc/composicao.ts` (novo) + `composicaoCalculo()` exposto no `GET /admin/regras-calculo` (cálculo **puro, sem chamadas ao GC**). A lista de acessórios da cortina é **derivada do próprio motor** (roda `calcularCortinaMultiCamada` por fixação e mapeia cada item ao grupo do GC via `categoriaDoItem`), então **acompanha mudanças de regra** sem drift (ex.: ligar entretela num modelo já reflete). Persiana: tecido (subgrupo do material) em "afeta o preço"; fixos + base/tampa + condicionais (estes com **código GC**, dedup de `COND_DATA`) em "lista técnica".
+- **Frontend** `AdminRegras.tsx`: `ComposicaoCell` (ícone ⓘ + popover no hover), com **abertura pra cima** quando não há espaço abaixo (últimas linhas) e rolagem interna (maxHeight 380) — evita deslocar a barra de rolagem.
+- **Verificado:** saída conferida (persiana blackout = tecido + lista técnica com #códigos; cortina por modelo = grupos certos por fixação); API 401 (protegida) sem crash; popover pra cima/baixo validado no preview (logado); typecheck API + build web OK.

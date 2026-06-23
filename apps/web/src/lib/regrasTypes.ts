@@ -37,7 +37,25 @@ export interface RegrasCalculo {
   };
 }
 
+// Composição: quais produtos do GestãoClick entram em cada cálculo (tooltip do admin).
+export interface ItemComposicao {
+  rotulo: string;
+  grupo_gc?: string;
+  grupo_gc_id?: string;
+  codigo_gc?: string;
+  obs?: string;
+}
+export interface ComposicaoTipo {
+  afeta_preco: ItemComposicao[];
+  lista_tecnica: ItemComposicao[];
+}
+export interface ComposicaoCalculo {
+  persiana: Record<TipoPersiana, ComposicaoTipo>;
+  cortina: Record<ModeloCortina, ComposicaoTipo>;
+}
+
 export interface RegrasResp {
   regras: RegrasCalculo;
   padrao: RegrasCalculo;
+  composicao: ComposicaoCalculo;
 }
