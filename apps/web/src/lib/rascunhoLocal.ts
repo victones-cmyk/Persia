@@ -31,7 +31,7 @@ export interface CortinaCardSnap {
   tamanhoBarra: string;
   tipoBarra: string;
   jaPossuiVarao?: boolean;
-  camadas: { tecidoId: string; franzido: string }[];
+  camadas: { tecidoId: string; franzido: string; modelo?: string }[];
   acessorioSel: Record<string, string>;
   qtdManual: Record<string, string>;
 }

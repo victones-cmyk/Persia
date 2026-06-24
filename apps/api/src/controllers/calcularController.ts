@@ -17,7 +17,7 @@ import {
   tecidosCortina,
   buscarTecidoCortinaGc,
 } from '../services/gc/tecidos';
-import { listarAcessoriosCortina, categoriaDoItem } from '../services/gc/acessorios';
+import { listarAcessoriosCortina, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo } from '../services/gc/acessorios';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { AppError } from '../middleware/errorHandler';
 
@@ -259,14 +259,15 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
     tecidos.push(t);
   }
 
-  const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string }, i: number) => ({
+  const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string; modelo?: string }, i: number) => ({
     largura_tecido: tecidos[i]!.dimensao_m,
     franzido: c.franzido !== undefined && c.franzido !== '' ? Number(c.franzido) : undefined,
+    modelo: c.modelo ? (c.modelo as CamadaCortina['modelo']) : undefined, // modelo PRÓPRIO da camada (Victor v.4.1)
   }));
 
   try {
     const r = calcularCortinaMultiCamada({
-      modelo: b.modelo,
+      modelo: b.modelo ?? camadasCalc[0]?.modelo, // fallback = modelo da 1ª camada
       fixacao: b.fixacao,
       largura: Number(b.largura),
       altura: Number(b.altura),
@@ -287,12 +288,21 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
     });
     const valorTecidoTotal = roundHalfUp(camadas.reduce((s, c) => s + c.valor_tecido, 0));
 
-    const acessorios = r.acessorios.map((a) => ({
-      item: a.item,
-      categoria: categoriaDoItem(a.item, b.fixacao),
-      quantidade: a.quantidade,
-      unidade: a.unidade,
-      auto: a.auto,
+    // Itens obrigatórios do wave (Victor v.4.1): produto resolvido pelo servidor (sem
+    // seleção do vendedor) → devolve auto_produto + nome + preço para a tela só exibir.
+    const acessorios = await Promise.all(r.acessorios.map(async (a) => {
+      const base = {
+        item: a.item,
+        categoria: categoriaDoItem(a.item, b.fixacao),
+        quantidade: a.quantidade,
+        unidade: a.unidade,
+        auto: a.auto,
+      };
+      if (ehWaveFixo(a.item)) {
+        const prod = await resolverProdutoWaveFixo(a.item);
+        return { ...base, auto_produto: true, produto_id: prod?.id ?? '', produto_nome: prod?.nome ?? '', preco: prod?.preco ?? 0 };
+      }
+      return base;
     }));
 
     res.json({ modelo: r.modelo, fixacao: r.fixacao, n_camadas: r.n_camadas, camadas, acessorios, valor_tecido_total: valorTecidoTotal });

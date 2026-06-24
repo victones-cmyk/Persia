@@ -175,11 +175,14 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
 
   // ---- Ferragem da frente ----
   if (wave) {
-    // Wave: cordão (m), rodízio wave e base click (= nº de botões), terminais (2 por ponta).
+    // Wave: cordão (m), rodízio wave e base click (= nº de botões). Fita wave (Victor v.4.1):
+    // = a largura franzida ("franzido em cima"); na cortina sem emenda isso é a própria
+    // metragem do tecido, na com emenda é o consumo franzido (não a metragem total das faixas).
+    const fitaWave = metodo === 'emenda' ? consumoFrente : frente.metragem;
     itens.push({ tipo: 'acessorio', item: 'Cordão wave', quantidade: wave.cordao_m, unidade: 'm', auto: true });
     itens.push({ tipo: 'acessorio', item: 'Rodízio wave', quantidade: wave.botoes, unidade: 'un', auto: true });
     itens.push({ tipo: 'acessorio', item: 'Base click', quantidade: wave.botoes, unidade: 'un', auto: true });
-    itens.push({ tipo: 'acessorio', item: 'Terminais', quantidade: 4, unidade: 'un', auto: true });
+    itens.push({ tipo: 'acessorio', item: 'Fita wave', quantidade: fitaWave, unidade: 'm', auto: true });
   } else if (e.modelo === 'ilhos') {
     // Ilhós: 1 a cada 15 cm da largura franzida. Arredonda p/ cima até par / múltiplo de 4.
     itens.push({ tipo: 'acessorio', item: 'Ilhoses', quantidade: arredondaParaMultiplo(Math.ceil(consumoFrente / espIlhos), multParidade), unidade: 'un', auto: true });
@@ -201,6 +204,12 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   if (e.fixacao !== 'trilho') {
     itens.push({ tipo: 'acessorio', item: 'Ponteira', quantidade: 2, unidade: 'un', auto: true });
     if (varaoDuplo) itens.push({ tipo: 'acessorio', item: 'Ponteira (traseira)', quantidade: 2, unidade: 'un', auto: true });
+  }
+
+  // ---- Terminais (Victor v.4.1): em TODO trilho ou varão suíço (2 por ponta = 4),
+  // qualquer modelo — não é mais exclusivo do Wave. ----
+  if (e.fixacao === 'trilho' || e.fixacao === 'varao_suico') {
+    itens.push({ tipo: 'acessorio', item: 'Terminais', quantidade: 4, unidade: 'un', auto: true });
   }
 
   return {
@@ -228,6 +237,7 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
 export interface CamadaCortina {
   largura_tecido: number; // largura do rolo do tecido desta camada (m)
   franzido?: number; // default 3 (no wave, ignorado: usa 2,7)
+  modelo?: ModeloCortina; // modelo PRÓPRIO da camada (Victor v.4.1: frente wave + fundo franzido). Default = e.modelo.
 }
 
 export interface EntradaCortinaCompleta {
@@ -277,7 +287,7 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
 
   e.camadas.forEach((cam, i) => {
     const r = calcularCortina({
-      modelo: e.modelo,
+      modelo: cam.modelo ?? e.modelo, // Victor v.4.1: cada camada pode ter seu próprio modelo
       fixacao: e.fixacao,
       config: 'um_tecido',
       largura: e.largura,
@@ -294,7 +304,8 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
 
     for (const it of r.itens) {
       if (it.tipo === 'tecido') continue; // tecido é por camada
-      if (it.item === 'Entretela (KOS)' && i > 0) continue; // entretela só na frente
+      // Entretela (Victor v.4.1): entra em CADA camada cujo modelo use entretela — não
+      // mais "só na frente". O motor já emite a entretela só nos modelos com entretela.
       // Barra (varão/varão suíço/trilho): regra própria, não cai na agregação normal.
       if (it.item === nomeBarraBase) {
         if (varaoPorCamada) {
@@ -305,6 +316,12 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
           // Trilho: 1 trilho duplo/triplo — conta uma vez (qty = largura), não soma.
           acc.set(nomeBarraBase, { ...it });
         }
+        continue;
+      }
+      // Terminais no TRILHO: é 1 rail só (duplo/triplo) → conta uma vez, não soma por
+      // camada. No varão suíço cada camada tem seu próprio rail, então soma (normal).
+      if (it.item === 'Terminais' && e.fixacao === 'trilho') {
+        if (!acc.has('Terminais')) acc.set('Terminais', { ...it });
         continue;
       }
       const cur = acc.get(it.item);

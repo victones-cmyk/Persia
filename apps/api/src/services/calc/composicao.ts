@@ -70,14 +70,15 @@ function composicaoPersiana(tipo: TipoPersiana): ComposicaoTipo {
     { rotulo: ehDV ? 'TAMPA DA BASE DOUBLE VISION (cor do acessório)' : 'TAMPA DA BASE CÔNICA (cor do acessório)' },
   ];
 
-  // Componentes condicionais (têm código GC): variam por cor/acionamento/medida.
+  // Componentes condicionais: variam por cor/acionamento/medida. NÃO exibimos código:
+  // os códigos da planilha são do DecorSoft (não do GestãoClick) e, na persiana, os
+  // componentes não entram no preço do cálculo (só o tecido). Mostramos só o nome.
   const vistos = new Set<string>();
   for (const r of COND_DATA) {
     if (r.tipo !== tipo) continue;
-    const chave = `${r.materialCodigo}|${r.descricao}`;
-    if (vistos.has(chave)) continue;
-    vistos.add(chave);
-    lista_tecnica.push({ rotulo: r.descricao, codigo_gc: r.materialCodigo, obs: 'condicional (cor/acionamento/medida)' });
+    if (vistos.has(r.descricao)) continue;
+    vistos.add(r.descricao);
+    lista_tecnica.push({ rotulo: r.descricao, obs: 'condicional (cor/acionamento/medida)' });
   }
 
   return { afeta_preco, lista_tecnica };

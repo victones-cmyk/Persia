@@ -190,7 +190,7 @@ describe('Cortina multi-camada (modelo "+" do Victor)', () => {
     expect(accQtd(r, 'Ponteira')).toBe(2);
   });
 
-  it('dupla (2 camadas) → varão POR CAMADA; ferragem soma; entretela só na frente', () => {
+  it('dupla (2 camadas) → varão POR CAMADA; ferragem soma; entretela POR CAMADA (Victor v.4.1)', () => {
     const r = calcularCortinaMultiCamada({
       modelo: 'ilhos', fixacao: 'varao', largura: 3, altura: 2.6,
       camadas: [{ largura_tecido: 3.0, franzido: 3 }, { largura_tecido: 3.0, franzido: 3 }],
@@ -203,7 +203,25 @@ describe('Cortina multi-camada (modelo "+" do Victor)', () => {
     expect(accQtd(r, 'Varão (camada 2)')).toBe(3);
     expect(accQtd(r, 'Ilhoses')).toBe(120); // 60 + 60 (por tecido)
     expect(accQtd(r, 'Ponteira')).toBe(4); // 2 + 2 (por tecido)
-    expect(accQtd(r, 'Entretela (KOS)')).toBe(9); // só a frente
+    // Entretela agora entra em CADA camada com entretela (Victor v.4.1): 9 + 9 = 18.
+    expect(accQtd(r, 'Entretela (KOS)')).toBe(18);
+  });
+
+  it('frente WAVE + fundo FRANZIDO (modelo por camada, Victor v.4.1)', () => {
+    const r = calcularCortinaMultiCamada({
+      modelo: 'wave', fixacao: 'trilho', largura: 3, altura: 2,
+      camadas: [{ largura_tecido: 2.8, modelo: 'wave' }, { largura_tecido: 2.8, modelo: 'franzido', franzido: 2.5 }],
+    });
+    expect(r.n_camadas).toBe(2);
+    // Camada wave → itens do wave (incl. fita wave); camada franzido → rodízios.
+    expect(accQtd(r, 'Cordão wave')).toBeGreaterThan(0);
+    expect(accQtd(r, 'Fita wave')).toBeGreaterThan(0);
+    expect(accQtd(r, 'Rodízios/ganchos')).toBe(30);
+    // Trilho conta 1 vez e os Terminais também (1 rail só), mesmo com 2 camadas.
+    expect(accQtd(r, 'Trilho')).toBe(3);
+    expect(accQtd(r, 'Terminais')).toBe(4);
+    // Entretela só da camada wave (franzido não tem entretela).
+    expect(accQtd(r, 'Entretela (KOS)')).toBe(r.camadas[0].metragem);
   });
 
   it('varão suíço → por camada; trilho conta 1 vez (duplo/triplo, Victor 19/06)', () => {

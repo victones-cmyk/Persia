@@ -109,8 +109,31 @@ export function categoriaDoItem(item: string, fixacao: 'varao' | 'trilho' | 'var
     case 'Entretela (KOS)': return 'entretela';
     case 'Cordão wave':
     case 'Rodízio wave':
-    case 'Base click': return 'wave';
+    case 'Base click':
+    case 'Fita wave': return 'wave';
     case 'Terminais': return 'terminal';
     default: return null;
   }
+}
+
+// Itens OBRIGATÓRIOS do Wave (Victor v.4.1): o vendedor NÃO escolhe — o sistema resolve
+// sozinho, pois há 1 produto fixo por item no grupo WAVE do GestãoClick (verificado:
+// CORDÃO WAVE, RODIZIO WAVE, BASE CLICK WAVE, FITA WAVE AVULSA). Casa pelo nome.
+const WAVE_FIXO_KEYWORD: Record<string, RegExp> = {
+  'Cordão wave': /cord[ãa]o/i,
+  'Rodízio wave': /rod[íi]zio/i,
+  'Base click': /base\s*click/i,
+  'Fita wave': /fita/i,
+};
+
+export function ehWaveFixo(item: string): boolean {
+  return item in WAVE_FIXO_KEYWORD;
+}
+
+/** Resolve o produto fixo do GestãoClick para um item obrigatório do Wave (ou null). */
+export async function resolverProdutoWaveFixo(item: string): Promise<AcessorioOpcao | null> {
+  const re = WAVE_FIXO_KEYWORD[item];
+  if (!re) return null;
+  const { acessorios } = await listarAcessoriosCortina();
+  return acessorios.wave?.find((p) => re.test(p.nome)) ?? null;
 }

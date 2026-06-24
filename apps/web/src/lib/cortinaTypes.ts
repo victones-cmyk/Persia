@@ -91,6 +91,12 @@ export interface AcessorioCalc {
   quantidade: number;
   unidade: 'm' | 'un';
   auto: boolean;
+  // Wave (Victor v.4.1): itens obrigatórios com produto resolvido pelo servidor — o
+  // vendedor não escolhe; a tela só exibe o produto/preço.
+  auto_produto?: boolean;
+  produto_id?: string;
+  produto_nome?: string;
+  preco?: number;
 }
 /** Resposta de POST /api/calcular/cortina/completa. */
 export interface CalcCortinaCompletaResp {

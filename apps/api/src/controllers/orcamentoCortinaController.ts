@@ -10,7 +10,7 @@ import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { calcularCortinaMultiCamada, type CamadaCortina } from '../services/calc/cortina';
 import { buscarTecidoCortinaGc } from '../services/gc/tecidos';
-import { buscarAcessorioGc, categoriaDoItem, type CategoriaAcessorio } from '../services/gc/acessorios';
+import { buscarAcessorioGc, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo, type CategoriaAcessorio } from '../services/gc/acessorios';
 import { listarServicos } from '../services/gc/catalogos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc, type LinhaServicoGc } from '../services/gc/orcamentos';
@@ -18,9 +18,9 @@ import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
-import { MODELOS_CORTINA_LABEL, TIPO_CAMADAS_LABEL } from '../services/calc/cortinaLabels';
+import { MODELOS_CORTINA_LABEL } from '../services/calc/cortinaLabels';
 
-interface CamadaEntrada { tecido_id: string; franzido?: number | string }
+interface CamadaEntrada { tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave' }
 interface AcessorioEntrada { item: string; produto_id?: string; quantidade?: number }
 export interface CortinaEntrada {
   ambiente?: string;
@@ -67,10 +67,11 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
   const camadasCalc: CamadaCortina[] = c.camadas.map((cam, i) => ({
     largura_tecido: tecidos[i]!.dimensao_m,
     franzido: cam.franzido !== undefined && cam.franzido !== '' ? Number(cam.franzido) : undefined,
+    modelo: cam.modelo, // modelo PRÓPRIO da camada (Victor v.4.1: frente wave + fundo franzido)
   }));
 
   const r = calcularCortinaMultiCamada({
-    modelo: c.modelo, fixacao: c.fixacao, largura, altura, camadas: camadasCalc,
+    modelo: c.modelo ?? camadasCalc[0]?.modelo, fixacao: c.fixacao, largura, altura, camadas: camadasCalc,
     tamanho_barra: c.tamanho_barra !== undefined && c.tamanho_barra !== '' ? Number(c.tamanho_barra) : undefined,
     tipo_barra: c.tipo_barra,
   });
@@ -99,22 +100,38 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     const qtd = a.auto ? a.quantidade : Number(entrada?.quantidade ?? 0);
     // Item manual (ex.: Suporte) com quantidade 0 → não incluir no orçamento (Victor v.3.1).
     if (!a.auto && !(qtd > 0)) continue;
-    const categoria = categoriaDoItem(a.item, c.fixacao) as CategoriaAcessorio | null;
-    const produtoId = entrada?.produto_id ?? '';
-    if (!categoria || !produtoId) {
-      throw new AppError(400, 'ACESSORIO_SEM_PRODUTO', `Escolha o produto do acessório "${a.item}".`);
+
+    let categoria: CategoriaAcessorio | null;
+    let prod: { id: string; nome: string; preco: number } | null;
+    if (ehWaveFixo(a.item)) {
+      // Itens obrigatórios do wave (Victor v.4.1): o servidor resolve o produto (sem seleção).
+      categoria = 'wave';
+      prod = await resolverProdutoWaveFixo(a.item);
+      if (!prod) throw new AppError(400, 'WAVE_PRODUTO', `Produto do wave "${a.item}" não encontrado no GestãoClick.`);
+    } else {
+      categoria = categoriaDoItem(a.item, c.fixacao) as CategoriaAcessorio | null;
+      const produtoId = entrada?.produto_id ?? '';
+      if (!categoria || !produtoId) {
+        throw new AppError(400, 'ACESSORIO_SEM_PRODUTO', `Escolha o produto do acessório "${a.item}".`);
+      }
+      prod = await buscarAcessorioGc(categoria, produtoId);
+      if (!prod) throw new AppError(400, 'ACESSORIO_INVALIDO', `Produto inválido para "${a.item}".`);
     }
-    const prod = await buscarAcessorioGc(categoria, produtoId);
-    if (!prod) throw new AppError(400, 'ACESSORIO_INVALIDO', `Produto inválido para "${a.item}".`);
     if (!(qtd > 0)) throw new AppError(400, 'ACESSORIO_QTD', `Quantidade inválida para "${a.item}".`);
     const subtotal = roundHalfUp(prod.preco * qtd);
     valorTotal = roundHalfUp(valorTotal + subtotal);
-    acessoriosSnap.push({ item: a.item, categoria, produto_id: produtoId, produto_nome: prod.nome, quantidade: qtd, preco: prod.preco, subtotal });
+    acessoriosSnap.push({ item: a.item, categoria, produto_id: prod.id, produto_nome: prod.nome, quantidade: qtd, preco: prod.preco, subtotal });
   }
 
-  const tipo = TIPO_CAMADAS_LABEL[r.n_camadas] ?? '';
-  const modeloLabel = MODELOS_CORTINA_LABEL[c.modelo] ?? c.modelo;
-  const nomeProduto = `Cortina ${modeloLabel}${tipo ? ` ${tipo}` : ''} • ${camadasSnap[0].tecido_nome} • ${largura.toFixed(2)}×${altura.toFixed(2)}m`.slice(0, 100);
+  // Nome do produto (Victor v.4.1): "AMBIENTE, Cortina MODELO1 TECIDO1 + MODELO2 TECIDO2 LxA".
+  // Ambiente na frente; cada camada com seu modelo + tecido; medidas no fim.
+  const amb = c.ambiente?.trim() ? `${c.ambiente.trim()}, ` : '';
+  const corpo = camadasSnap.map((cs, i) => {
+    const m = c.camadas[i]?.modelo ?? c.modelo;
+    return `${MODELOS_CORTINA_LABEL[m] ?? m} ${cs.tecido_nome}`;
+  }).join(' + ');
+  const dim = `${largura.toFixed(2).replace('.', ',')}X${altura.toFixed(2).replace('.', ',')}`;
+  const nomeProduto = `${amb}Cortina ${corpo} ${dim}`.slice(0, 100);
 
   return {
     ambiente: c.ambiente?.trim() || '',

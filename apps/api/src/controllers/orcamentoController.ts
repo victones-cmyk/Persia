@@ -84,8 +84,9 @@ export interface ItemSnapshot {
 }
 
 function nomeProdutoGc(tipo: TipoPersiana, it: { ambiente?: string; tecido_nome: string; largura: number; altura: number; cor_acessorio: string; acionamento: Acionamento }): string {
-  const amb = it.ambiente?.trim() ? ` - ${it.ambiente.trim()}` : '';
-  return `${TIPO_LABEL[tipo]}${amb} - ${it.tecido_nome} - ${it.largura.toFixed(2)}x${it.altura.toFixed(2)} - ${it.cor_acessorio} - ${ACIONAMENTO_LABEL[it.acionamento]}`.slice(0, 120);
+  // Victor (v.4.1): o AMBIENTE vem na frente do nome do produto. Ex.: "SALA, Persiana ...".
+  const amb = it.ambiente?.trim() ? `${it.ambiente.trim()}, ` : '';
+  return `${amb}${TIPO_LABEL[tipo]} - ${it.tecido_nome} - ${it.largura.toFixed(2)}x${it.altura.toFixed(2)} - ${it.cor_acessorio} - ${ACIONAMENTO_LABEL[it.acionamento]}`.slice(0, 120);
 }
 
 /** Recalcula cada item no servidor. Sem desconto: o valor cheio vai ao GestãoClick. */
