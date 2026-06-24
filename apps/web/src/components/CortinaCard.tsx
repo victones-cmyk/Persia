@@ -41,6 +41,23 @@ interface CamadaState { id: string; tecidoId: string; modelo: ModeloCortina | ''
 
 const novaCamada = (modelo: ModeloCortina | '' = ''): CamadaState => ({ id: crypto.randomUUID(), tecidoId: '', modelo, franzido: '' });
 
+// Itens obrigatórios do wave: o produto é resolvido na tela (sem seletor), casando pelo
+// nome dentro do grupo WAVE já carregado. Espelha o WAVE_FIXO_KEYWORD do backend.
+const WAVE_KW: Record<string, RegExp> = {
+  'Cordão wave': /cord[ãa]o/i,
+  'Rodízio wave': /rod[íi]zio/i,
+  'Base click': /base\s*click/i,
+  'Fita wave': /fita/i,
+};
+
+/** Código curto do tecido p/ o nome do produto (espelha o tecidoCurto do backend). */
+function tecidoCurto(nome: string): string {
+  const m = nome.match(/\bTEX[-\s]?\d{2,4}\b/i);
+  if (m) return m[0].toUpperCase().replace(/\s+/, '-');
+  const base = nome.split(/\s+LARGURA|\s+L:|\s+COMPOSI/i)[0].trim();
+  return base.length > 28 ? `${base.slice(0, 28).trim()}…` : base;
+}
+
 /** Entrada inicial de uma cortina (para reabrir um rascunho em edição) = payload salvo. */
 export type CortinaInicial = NonNullable<CortinaResumo['payload']>;
 
@@ -160,6 +177,13 @@ export function CortinaCard({
     return opcoes?.acessorios[categoria]?.find((o) => o.id === produtoId)?.preco ?? 0;
   };
 
+  // Resolve o produto fixo do wave (Cordão/Rodízio/Base click/Fita) nos acessórios já carregados.
+  const resolveWave = (item: string) => {
+    const re = WAVE_KW[item];
+    if (!re || !opcoes) return undefined;
+    return opcoes.acessorios.wave?.find((o) => re.test(o.nome));
+  };
+
   const resumo = useMemo<CortinaResumo>(() => {
     if (!calc) return { total: 0, completo: false, payload: null };
     let total = calc.valor_tecido_total;
@@ -170,9 +194,10 @@ export function CortinaCard({
       const qtd = qtdDe(a.item, a.auto, a.quantidade);
       if (!a.auto && qtd <= 0) continue;
       if (a.auto_produto) {
-        // Wave obrigatório: produto resolvido pelo servidor; preço já vem no cálculo.
-        total += (a.preco ?? 0) * qtd;
-        acessoriosPayload.push({ item: a.item, categoria: a.categoria, produto_id: a.produto_id ?? '', quantidade: qtd, preco: a.preco ?? 0 });
+        // Wave obrigatório: produto resolvido na tela a partir dos acessórios já carregados.
+        const prodW = resolveWave(a.item);
+        total += (prodW?.preco ?? 0) * qtd;
+        acessoriosPayload.push({ item: a.item, categoria: a.categoria, produto_id: prodW?.id ?? '', quantidade: qtd, preco: prodW?.preco ?? 0 });
         continue;
       }
       const sel = acessorioSel[a.item];
@@ -186,7 +211,7 @@ export function CortinaCard({
     const corpo = calc.camadas.map((cam, i) => {
       const m = camadas[i]?.modelo;
       const ml = MODELOS_CORTINA.find((x) => x.value === m)?.label ?? '';
-      return `${ml} ${cam.tecido.nome}`;
+      return `${ml} ${tecidoCurto(cam.tecido.nome)}`;
     }).join(' + ');
     const nomeProduto = `${amb}Cortina ${corpo} ${formatNum(Number(largura))}x${formatNum(Number(altura))}`;
     return {
@@ -200,7 +225,7 @@ export function CortinaCard({
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calc, acessorioSel, qtdManual, ambiente, fixacao, largura, altura, jaPossuiVarao, nomeBarra, JSON.stringify(camadas.map((c) => c.modelo))]);
+  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, largura, altura, jaPossuiVarao, nomeBarra, JSON.stringify(camadas.map((c) => c.modelo))]);
 
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
 
@@ -361,12 +386,13 @@ export function CortinaCard({
               const qtd = qtdDe(a.item, a.auto, a.quantidade);
               // Item obrigatório do wave: produto resolvido pelo servidor (sem seletor).
               if (a.auto_produto) {
+                const prodW = resolveWave(a.item);
                 return (
                   <div key={a.item} className="grid grid-cols-12 gap-2 items-center">
                     <div className="col-span-4 text-xs-ui text-neutral-700">{a.item}</div>
                     <div className="col-span-2 text-xs-ui font-mono tabular-nums text-neutral-600 text-right pr-1">{formatNum(qtd, a.unidade === 'un' ? 0 : 2)} {a.unidade}</div>
-                    <div className="col-span-4 text-xs-ui text-neutral-500 italic truncate" title={a.produto_nome}>{a.produto_nome || 'automático'}</div>
-                    <div className="col-span-2 text-xs-ui font-mono tabular-nums text-right text-neutral-800">{formatBRL((a.preco ?? 0) * qtd)}</div>
+                    <div className="col-span-4 text-xs-ui text-neutral-500 italic truncate" title={prodW?.nome}>{prodW?.nome || (opcoes ? 'automático' : 'carregando…')}</div>
+                    <div className="col-span-2 text-xs-ui font-mono tabular-nums text-right text-neutral-800">{formatBRL((prodW?.preco ?? 0) * qtd)}</div>
                   </div>
                 );
               }

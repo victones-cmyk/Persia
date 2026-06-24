@@ -17,7 +17,7 @@ import {
   tecidosCortina,
   buscarTecidoCortinaGc,
 } from '../services/gc/tecidos';
-import { listarAcessoriosCortina, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo } from '../services/gc/acessorios';
+import { listarAcessoriosCortina, categoriaDoItem, ehWaveFixo } from '../services/gc/acessorios';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { AppError } from '../middleware/errorHandler';
 
@@ -288,21 +288,17 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
     });
     const valorTecidoTotal = roundHalfUp(camadas.reduce((s, c) => s + c.valor_tecido, 0));
 
-    // Itens obrigatórios do wave (Victor v.4.1): produto resolvido pelo servidor (sem
-    // seleção do vendedor) → devolve auto_produto + nome + preço para a tela só exibir.
-    const acessorios = await Promise.all(r.acessorios.map(async (a) => {
-      const base = {
-        item: a.item,
-        categoria: categoriaDoItem(a.item, b.fixacao),
-        quantidade: a.quantidade,
-        unidade: a.unidade,
-        auto: a.auto,
-      };
-      if (ehWaveFixo(a.item)) {
-        const prod = await resolverProdutoWaveFixo(a.item);
-        return { ...base, auto_produto: true, produto_id: prod?.id ?? '', produto_nome: prod?.nome ?? '', preco: prod?.preco ?? 0 };
-      }
-      return base;
+    // Acessórios: cálculo PURO (sem buscar produto no GC — isso rodava a cada tecla e
+    // travava o form quando o cache estava frio). Os itens obrigatórios do wave são só
+    // marcados com auto_produto; a tela resolve o produto a partir dos acessórios que já
+    // foram carregados uma vez (e o servidor reconfere na hora de enviar, em prepararCortina).
+    const acessorios = r.acessorios.map((a) => ({
+      item: a.item,
+      categoria: categoriaDoItem(a.item, b.fixacao),
+      quantidade: a.quantidade,
+      unidade: a.unidade,
+      auto: a.auto,
+      auto_produto: ehWaveFixo(a.item),
     }));
 
     res.json({ modelo: r.modelo, fixacao: r.fixacao, n_camadas: r.n_camadas, camadas, acessorios, valor_tecido_total: valorTecidoTotal });

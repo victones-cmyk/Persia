@@ -20,6 +20,15 @@ import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
 import { MODELOS_CORTINA_LABEL } from '../services/calc/cortinaLabels';
 
+/** Código/nome curto do tecido para o NOME do produto (Victor pediu "TEX-XX"). Os nomes
+ * completos do GC são longos e estouravam o limite do nome (cortava as medidas). */
+function tecidoCurto(nome: string): string {
+  const m = nome.match(/\bTEX[-\s]?\d{2,4}\b/i);
+  if (m) return m[0].toUpperCase().replace(/\s+/, '-');
+  const base = nome.split(/\s+LARGURA|\s+L:|\s+COMPOSI/i)[0].trim();
+  return base.length > 28 ? `${base.slice(0, 28).trim()}…` : base;
+}
+
 interface CamadaEntrada { tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave' }
 interface AcessorioEntrada { item: string; produto_id?: string; quantidade?: number }
 export interface CortinaEntrada {
@@ -128,10 +137,10 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
   const amb = c.ambiente?.trim() ? `${c.ambiente.trim()}, ` : '';
   const corpo = camadasSnap.map((cs, i) => {
     const m = c.camadas[i]?.modelo ?? c.modelo;
-    return `${MODELOS_CORTINA_LABEL[m] ?? m} ${cs.tecido_nome}`;
+    return `${MODELOS_CORTINA_LABEL[m] ?? m} ${tecidoCurto(cs.tecido_nome)}`;
   }).join(' + ');
   const dim = `${largura.toFixed(2).replace('.', ',')}X${altura.toFixed(2).replace('.', ',')}`;
-  const nomeProduto = `${amb}Cortina ${corpo} ${dim}`.slice(0, 100);
+  const nomeProduto = `${amb}Cortina ${corpo} ${dim}`.slice(0, 120);
 
   return {
     ambiente: c.ambiente?.trim() || '',
