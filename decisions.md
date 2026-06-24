@@ -535,3 +535,13 @@ Victor aprovou quase tudo do roteiro v.4 (instalação por peça, emenda c/ fran
 - **A — Franzido > 3× "joga o cálculo muito acima":** só na cortina COM EMENDA; cresce em degraus (cada faixa = altura inteira). Precisa do caso exato do Victor (medidas + franzido + valor esperado) p/ saber se é correto ou over-count. Fórmula NÃO alterada.
 - **C — Persiana: componentes "têm custo":** hoje a persiana precifica só pelo tecido (RN-03). Decidir com Victor se os componentes devem entrar no preço (mudança grande de regra) ou se o m² do tecido já embute.
 - **Fixação diferente por camada** (ver E acima).
+
+## 18. Retorno da homologação v.5.1 (24/06/2026)
+
+Victor aprovou a v.5 (1.1–1.7 OK, exceto observações abaixo). Implementado nesta rodada:
+- **A RESOLVIDO — nº de faixas na emenda = `ceil(consumo ÷ largura do tecido)`** (removido o mínimo `ceil(franzido)` que inflava). Confirmado pelo exemplo do Victor: cortina 2,00×6,00, tecido 3,00 m, franzido 4 → consumo 8 → **3 faixas** (não 4). O exemplo antigo (22/06, franzido 2,5/3 → 3 faixas) era artefato do mínimo removido; com a regra nova, naquela cortina pequena (tecido largo) franzido até 3 cabe em 2 faixas. `metragemFace` perdeu o param `franzido`. Testes atualizados.
+- **Entretela na cortina COM EMENDA = consumo (largura franzida), não a metragem total** (obs do Victor no 1.4). Mesma regra da fita wave. (`metodo==='emenda' ? consumoFrente : frente.metragem`.)
+- **2.3 fixação por camada → não precisa:** Victor confirmou que trilho = 1 camada basta e varão/varão suíço já tem varão por camada (o sistema já calcula). Encerrado.
+
+### Pendente do Victor / próximo grande passo
+- **2.2 + 1.6 — Persiana: TODOS os itens compõem o preço final** (Victor: "o preço de todos os itens compõe o preço final da persiana"). Hoje a persiana cobra só o tecido (RN-03). Para implementar é preciso **puxar o preço de cada componente do GestãoClick** e somar. Complicação: os códigos dos componentes são do **DecorSoft** e o GC **não** filtra produto por código (testado). Próximo passo: **levantar os grupos de componentes de persiana no GC** (casar por nome/código) OU Victor indicar o mapeamento componente→produto GC. Isso também responde o 1.6 ("de onde puxa os valores").

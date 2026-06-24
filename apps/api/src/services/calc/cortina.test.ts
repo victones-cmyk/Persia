@@ -120,27 +120,42 @@ describe('Cortina — método de emenda (altura > largura do tecido)', () => {
   });
 });
 
-describe('Cortina — emenda respeita o franzido (exemplo do Victor 22/06)', () => {
-  // Parede L2,00 × A4,00, tecido 3,00m, barra 0,10 dupla, prega (folga 0,12 → faixa 4,32).
+describe('Cortina — emenda: nº de faixas = consumo ÷ largura do tecido (Victor v.5.1)', () => {
+  // Exemplo do Victor (v.5.1): cortina 2,00 × 6,00, tecido 3,00 m, franzido 4 →
+  // consumo 8,00 → 3 faixas (8 ÷ 3), NÃO 4 (antes inflava por um mínimo = franzido).
+  it('2,00×6,00, tecido 3,00, franzido 4 → 3 faixas', () => {
+    const r = calcularCortina({
+      modelo: 'franzido', fixacao: 'trilho', config: 'um_tecido',
+      largura: 2.0, altura: 6.0, largura_tecido: 3.0, franzido_frente: 4,
+    });
+    expect(r.metodo).toBe('emenda');
+    expect(r.tiras_frente).toBe(3);
+  });
+
+  // Cortina menor (L2,00 × A4,00, tecido 3,00, faixa 4,32): com tecido largo, franzido
+  // até 3 cabe em 2 faixas (2 larguras de 3 m = 6 m ≥ consumo). Só passa a 3 quando consumo > 6.
   const caso = (franzido: number) =>
     calcularCortina({
       modelo: 'prega', fixacao: 'trilho', config: 'um_tecido',
       largura: 2.0, altura: 4.0, largura_tecido: 3.0,
       franzido_frente: franzido, tamanho_barra: 0.1, tipo_barra: 'dupla',
     });
-  it('franzido 2 → 2 faixas × 4,32 = 8,64 m', () => {
+  it('franzido 2 → 2 faixas × 4,32 = 8,64 m; entretela na emenda = consumo (4,00)', () => {
     const r = caso(2);
     expect(r.metodo).toBe('emenda');
     expect(r.tiras_frente).toBe(2);
     expect(r.metragem_frente).toBe(8.64);
+    // Entretela (Victor v.5.1): na emenda = a largura franzida (consumo 2×2 = 4), não a metragem.
+    const ent = r.itens.find((i) => i.item === 'Entretela (KOS)');
+    expect(ent?.quantidade).toBe(4);
   });
-  it('franzido 2,5 → 3 faixas = 12,96 m (arredonda p/ cima)', () => {
-    const r = caso(2.5);
-    expect(r.tiras_frente).toBe(3);
-    expect(r.metragem_frente).toBe(12.96);
-  });
-  it('franzido 3 → 3 faixas = 12,96 m', () => {
+  it('franzido 3 → ainda 2 faixas (consumo 6 = 2×3) = 8,64 m', () => {
     const r = caso(3);
+    expect(r.tiras_frente).toBe(2);
+    expect(r.metragem_frente).toBe(8.64);
+  });
+  it('franzido 3,5 → 3 faixas (consumo 7 > 6) = 12,96 m', () => {
+    const r = caso(3.5);
     expect(r.tiras_frente).toBe(3);
     expect(r.metragem_frente).toBe(12.96);
   });

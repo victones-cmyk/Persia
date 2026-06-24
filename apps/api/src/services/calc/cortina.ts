@@ -108,14 +108,15 @@ function metragemFace(
   altura: number,
   barraConsumo: number,
   metodo: 'normal' | 'emenda',
-  franzido: number,
 ): { metragem: number; tiras: number | null } {
   if (metodo === 'normal') return { metragem: arredondaTecido(consumo), tiras: null };
-  // Emenda (Victor 22/06): o FRANZIDO define o nº de faixas — no mínimo ceil(franzido),
-  // e nunca menos que o necessário p/ cobrir a largura franzida (parede larga). Cada faixa
-  // = altura + acabamento de topo + barra (valor EXATO, conforme o exemplo do Victor: ex.
-  // A4,00 + 0,12 + 0,20 = 4,32; franzido 2 → 2 faixas = 8,64; 2,5 ou 3 → 3 faixas = 12,96).
-  const tiras = Math.max(Math.ceil(franzido), Math.ceil(consumo / larguraTecido));
+  // Emenda: o nº de faixas = quantas larguras de tecido cobrem a largura FRANZIDA
+  // (consumo ÷ largura do tecido, arredondado p/ cima). Confirmado pelo Victor (v.5.1):
+  // cortina 2,00×6,00 com franzido 4× → consumo 8,00; tecido de 3,00 m → 3 faixas (8÷3),
+  // NÃO 4. (Antes havia um mínimo "= franzido" que inflava.) Cada faixa = altura +
+  // acabamento de topo + barra (exato). Bate também com o exemplo antigo (A4,32: franzido
+  // 2 → 2 faixas = 8,64; 2,5/3 → 3 faixas = 12,96).
+  const tiras = Math.ceil(consumo / larguraTecido);
   return { metragem: roundHalfUp(tiras * (altura + barraConsumo)), tiras };
 }
 
@@ -145,7 +146,7 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   const wave = e.modelo === 'wave' ? dadosWave(e.largura) : null;
   const fatorFrente = wave ? reg.franzido_wave : franzidoFrente;
   const consumoFrente = roundHalfUp(e.largura * fatorFrente);
-  const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo, fatorFrente);
+  const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo);
 
   // ---- Tecido de trás / forro ----
   let metragemTras: number | null = null;
@@ -154,7 +155,7 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   } else if (e.config === 'dois_tecidos_varao_duplo') {
     const consumoTras = roundHalfUp(e.largura * franzidoTras);
     const metodoTras: 'normal' | 'emenda' = e.altura + barraConsumo <= larguraTecidoTras ? 'normal' : 'emenda';
-    metragemTras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras, franzidoTras).metragem;
+    metragemTras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras).metragem;
   }
 
   const varaoDuplo = e.config === 'dois_tecidos_varao_duplo';
@@ -195,9 +196,12 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
     itens.push({ tipo: 'acessorio', item: `${nomeFerragem(e.fixacao)} (traseiro)`, quantidade: arredondaParaMultiplo(Math.ceil(e.largura / espFerragem), multParidade), unidade: 'un', auto: true });
   }
 
-  // ---- Entretela (KOS): só modelos com entretela; qtd = metragem do tecido frente ----
+  // ---- Entretela (KOS): só modelos com entretela. Qtd = largura franzida (Victor v.5.1):
+  // sem emenda = metragem do tecido; COM emenda = o franzido de cima (consumo), não a
+  // metragem total das faixas. Mesma regra da fita wave. ----
   if (reg.tem_entretela[e.modelo]) {
-    itens.push({ tipo: 'acessorio', item: 'Entretela (KOS)', quantidade: frente.metragem, unidade: 'm', auto: true });
+    const entretelaQtd = metodo === 'emenda' ? consumoFrente : frente.metragem;
+    itens.push({ tipo: 'acessorio', item: 'Entretela (KOS)', quantidade: entretelaQtd, unidade: 'm', auto: true });
   }
 
   // ---- Ponteiras: 2 por varão. Trilho NÃO usa ponteira. ----
