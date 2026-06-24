@@ -130,10 +130,21 @@ export function ehWaveFixo(item: string): boolean {
   return item in WAVE_FIXO_KEYWORD;
 }
 
+// Cache SÓ do grupo WAVE (1 grupo, 4 produtos) — leve, para resolver os obrigatórios do
+// wave sem precisar baixar os 12 grupos de acessórios (isso travava o cálculo no cache frio).
+let cacheWave: { itens: AcessorioOpcao[]; expira: number } | null = null;
+async function listarGrupoWave(): Promise<AcessorioOpcao[]> {
+  if (cacheWave && cacheWave.expira > Date.now()) return cacheWave.itens;
+  const produtos = await listarProdutos({ grupo_id: GRUPOS_ACESSORIO_CORTINA.wave, ativo: 1 });
+  const itens = produtos.map((p) => ({ id: p.id, nome: p.nome, preco: precoVarejo(p) })).sort(ordenaPorNome);
+  cacheWave = { itens, expira: Date.now() + TTL_MS };
+  return itens;
+}
+
 /** Resolve o produto fixo do GestãoClick para um item obrigatório do Wave (ou null). */
 export async function resolverProdutoWaveFixo(item: string): Promise<AcessorioOpcao | null> {
   const re = WAVE_FIXO_KEYWORD[item];
   if (!re) return null;
-  const { acessorios } = await listarAcessoriosCortina();
-  return acessorios.wave?.find((p) => re.test(p.nome)) ?? null;
+  const itens = await listarGrupoWave();
+  return itens.find((p) => re.test(p.nome)) ?? null;
 }

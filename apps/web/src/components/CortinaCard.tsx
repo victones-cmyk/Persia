@@ -194,10 +194,12 @@ export function CortinaCard({
       const qtd = qtdDe(a.item, a.auto, a.quantidade);
       if (!a.auto && qtd <= 0) continue;
       if (a.auto_produto) {
-        // Wave obrigatório: produto resolvido na tela a partir dos acessórios já carregados.
+        // Wave obrigatório: usa o produto/preço que o servidor já resolveu; se não vier
+        // (ex.: JS novo + resposta antiga), cai para a resolução local pelos acessórios.
         const prodW = resolveWave(a.item);
-        total += (prodW?.preco ?? 0) * qtd;
-        acessoriosPayload.push({ item: a.item, categoria: a.categoria, produto_id: prodW?.id ?? '', quantidade: qtd, preco: prodW?.preco ?? 0 });
+        const preco = a.preco ?? prodW?.preco ?? 0;
+        total += preco * qtd;
+        acessoriosPayload.push({ item: a.item, categoria: a.categoria, produto_id: a.produto_id || prodW?.id || '', quantidade: qtd, preco });
         continue;
       }
       const sel = acessorioSel[a.item];
@@ -387,12 +389,14 @@ export function CortinaCard({
               // Item obrigatório do wave: produto resolvido pelo servidor (sem seletor).
               if (a.auto_produto) {
                 const prodW = resolveWave(a.item);
+                const nomeW = a.produto_nome || prodW?.nome;
+                const precoW = a.preco ?? prodW?.preco ?? 0;
                 return (
                   <div key={a.item} className="grid grid-cols-12 gap-2 items-center">
                     <div className="col-span-4 text-xs-ui text-neutral-700">{a.item}</div>
                     <div className="col-span-2 text-xs-ui font-mono tabular-nums text-neutral-600 text-right pr-1">{formatNum(qtd, a.unidade === 'un' ? 0 : 2)} {a.unidade}</div>
-                    <div className="col-span-4 text-xs-ui text-neutral-500 italic truncate" title={prodW?.nome}>{prodW?.nome || (opcoes ? 'automático' : 'carregando…')}</div>
-                    <div className="col-span-2 text-xs-ui font-mono tabular-nums text-right text-neutral-800">{formatBRL((prodW?.preco ?? 0) * qtd)}</div>
+                    <div className="col-span-4 text-xs-ui text-neutral-500 italic truncate" title={nomeW}>{nomeW || 'automático'}</div>
+                    <div className="col-span-2 text-xs-ui font-mono tabular-nums text-right text-neutral-800">{formatBRL(precoW * qtd)}</div>
                   </div>
                 );
               }
