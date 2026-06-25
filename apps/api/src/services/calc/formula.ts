@@ -45,3 +45,59 @@ export function evalFormula(formula: string, vars: VarsFormula): number {
   }
   return acc;
 }
+
+// ---------------------------------------------------------------------------
+// Avaliador das fórmulas de QUANTIDADE das receitas de persiana (planilhas do
+// Victor). Diferente do evalFormula acima, este RESPEITA PARÊNTESES — necessário
+// para "(LARGURA-0.025)*2", "LARGURA*(ALTURA+0.2)*1.2" etc. Sem eval/Function:
+// parser recursivo (expr → term → factor). Variáveis: LARGURA, ALTURA, TC.
+// ---------------------------------------------------------------------------
+export interface VarsQtd { largura: number; altura: number; tc: number; }
+
+export function evalQuantidade(formula: string, vars: VarsQtd): number {
+  const subst = formula
+    .replace(/LARGURA/g, `(${vars.largura})`)
+    .replace(/ALTURA/g, `(${vars.altura})`)
+    .replace(/\bTC\b/g, `(${vars.tc})`)
+    .replace(/\s/g, '');
+  // Só dígitos, ponto, operadores e parênteses são permitidos após a substituição.
+  if (!/^[-+*/().\d]+$/.test(subst)) throw new Error(`Fórmula de quantidade inválida: ${formula}`);
+
+  let i = 0;
+  const peek = () => subst[i];
+  function parseExpr(): number {
+    let v = parseTerm();
+    while (peek() === '+' || peek() === '-') {
+      const op = subst[i++];
+      const r = parseTerm();
+      v = op === '+' ? v + r : v - r;
+    }
+    return v;
+  }
+  function parseTerm(): number {
+    let v = parseFactor();
+    while (peek() === '*' || peek() === '/') {
+      const op = subst[i++];
+      const r = parseFactor();
+      v = op === '*' ? v * r : v / r;
+    }
+    return v;
+  }
+  function parseFactor(): number {
+    if (peek() === '(') {
+      i++; // consome '('
+      const v = parseExpr();
+      if (peek() !== ')') throw new Error(`Parêntese não fechado: ${formula}`);
+      i++; // consome ')'
+      return v;
+    }
+    if (peek() === '-') { i++; return -parseFactor(); } // unário
+    const start = i;
+    while (i < subst.length && /[\d.]/.test(subst[i])) i++;
+    if (i === start) throw new Error(`Número esperado em: ${formula}`);
+    return Number(subst.slice(start, i));
+  }
+  const resultado = parseExpr();
+  if (i !== subst.length) throw new Error(`Sobra de tokens em: ${formula}`);
+  return resultado;
+}
