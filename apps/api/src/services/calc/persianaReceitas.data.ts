@@ -4,7 +4,7 @@
 // qtd = fórmula de QUANTIDADE (sem preço); custo = qtd × preço (GC, pelo codigo_interno).
 // Preço final da persiana = soma de tudo, a VAREJO (Victor v.5.1). Romana: pendente.
 
-export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana';
+export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana' | 'romana_tela_solar';
 // Manual (KIT COMANDO) e motorizada (KIT MOTOR), cada uma com/sem bandô.
 // Motor cobre rolo_bk_translucido e double_vision (planilhas v.2, 26/06/2026).
 // tela_solar e romana motor: pendentes do Victor.
@@ -333,5 +333,19 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<V
       ],
       tecido_qtd: '(ALTURA+HASTES*0.025+0.05)',
     },
+  },
+};
+
+// ROMANA TELA SOLAR (persiana_romana_screen) — planilha ROMANA v.3 (26/06/2026):
+// MESMOS componentes da romana; só o tecido muda — cobra por m² (× LARGURA), sem o
+// fator 1,2 do rolo. Reaproveita as listas de componentes da romana por referência.
+RECEITAS_PERSIANA.romana_tela_solar = {
+  com_bando: {
+    componentes: RECEITAS_PERSIANA.romana!.com_bando!.componentes,
+    tecido_qtd: '(ALTURA+HASTES*0.025+0.05)*LARGURA',
+  },
+  sem_bando: {
+    componentes: RECEITAS_PERSIANA.romana!.sem_bando!.componentes,
+    tecido_qtd: '(ALTURA+HASTES*0.025+0.05)*LARGURA',
   },
 };

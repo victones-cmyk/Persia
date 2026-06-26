@@ -13,8 +13,14 @@ import type { TipoPersiana, Acionamento } from './tipos';
 export function familiaDoTipo(tipo: TipoPersiana): FamiliaPersiana {
   if (tipo === 'persiana_rolo_double_vision') return 'double_vision';
   if (tipo === 'persiana_rolo_screen') return 'tela_solar';
-  if (tipo.startsWith('persiana_romana')) return 'romana';
+  if (tipo === 'persiana_romana_screen') return 'romana_tela_solar';
+  if (tipo.startsWith('persiana_romana')) return 'romana'; // blackout + translúcido
   return 'rolo_bk_translucido'; // blackout + translúcido (mesma receita)
+}
+
+/** Famílias que usam a lógica de cavaletes/hastes (romana e romana tela solar). */
+function ehFamiliaRomana(f: FamiliaPersiana): boolean {
+  return f === 'romana' || f === 'romana_tela_solar';
 }
 
 /** Variante (manual/motor × com/sem bandô) a partir do acionamento. */
@@ -96,8 +102,8 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
   }
 
   const vars: VarsQtd = { largura: e.largura, altura: e.altura, tc: e.tc };
-  if (familia === 'romana') {
-    // Quantidades derivadas da romana (planilha v.2): cavaletes pela largura, hastes por
+  if (ehFamiliaRomana(familia)) {
+    // Quantidades derivadas da romana (planilha v.2/v.3): cavaletes pela largura, hastes por
     // faixa de altura. Demais famílias não usam essas variáveis.
     vars.cavaletes = cavaletesRomana(e.largura);
     vars.hastes = hastesRomana(e.altura);

@@ -91,6 +91,18 @@ describe('calcularPrecoPersiana — ROMANA (planilha v.2, sem motor)', () => {
     const r = calcularPrecoPersiana({ tipo: 'persiana_romana_blackout', acionamento: 'com_barra', largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 132.54, precos });
     expect(r.valor).toBe(566.61);
   });
+  // ROMANA TELA SOLAR (persiana_romana_screen): mesmos componentes, tecido por m² (× LARGURA). Planilha v.3.
+  it('romana tela solar com bandô = R$ 600.26 (tecido por m²)', () => {
+    const precos = new Map<string, number>([['3237927054197',6.4],['2080773633009',9.6],['1105743980119',30],['4599413356039',34],['2048469075809',6.9],['2067932865600',7],['6797020744804',57],['888818154157',7],['3267387682319',1.1],['9811648898558',19.5],['7620761718926',0.9],['6268408018170',3],['7728566453204',7.8],['6008299138556',1.4],['4713039221861',3],['5520965910948',0.5],['2003520573908',4.9],['5752963489736',8],['4366261029463',10],['3211432323511',4],['1069063700105',1.94],['2039898687701',0.5]]);
+    const r = calcularPrecoPersiana({ tipo: 'persiana_romana_screen', acionamento: 'com_bando', largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 35, precos });
+    expect(r.valor).toBe(600.26);
+    expect(r.tecido.quantidade).toBe(3.9); // m²
+  });
+  it('romana tela solar sem bandô = R$ 444.66', () => {
+    const precos = new Map<string, number>([['3237927054197',6.4],['2080773633009',9.6],['1105743980119',30],['4599413356039',34],['2067932865600',7],['3267387682319',1.1],['9811648898558',19.5],['7620761718926',0.9],['6268408018170',3],['7728566453204',7.8],['6008299138556',1.4],['4713039221861',3],['5520965910948',0.5],['2003520573908',4.9],['5752963489736',8],['4366261029463',10],['3211432323511',4],['1069063700105',1.94],['2039898687701',0.5]]);
+    const r = calcularPrecoPersiana({ tipo: 'persiana_romana_screen', acionamento: 'com_barra', largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 35, precos });
+    expect(r.valor).toBe(444.66);
+  });
   it('romana com altura maior usa mais hastes (2.5m → 6 hastes)', () => {
     const precos = new Map<string, number>([['4713039221861',3],['5520965910948',0.5],['2039898687701',0.5]]);
     const r = calcularPrecoPersiana({ tipo: 'persiana_romana_blackout', acionamento: 'com_barra', largura: 2, altura: 2.5, tc: 1.5, preco_tecido: 0, precos });
