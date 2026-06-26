@@ -24,6 +24,8 @@ import {
   tecidosCortina,
   buscarTecidoCortinaGc,
 } from '../services/gc/tecidos';
+import { listarInstalacoes, indiceInstalacoes, type TipoInstalacao } from '../services/gc/instalacao';
+import { linhaInstalacaoBreakdown, componenteInstalacao } from '../services/calc/instalacaoCalc';
 import { listarAcessoriosCortina, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo } from '../services/gc/acessorios';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { AppError } from '../middleware/errorHandler';
@@ -38,13 +40,23 @@ export async function listarTecidos(req: Request, res: Response): Promise<void> 
   res.json({ tecidos });
 }
 
+/** GET /api/calcular/instalacoes — tipos de instalação (grupo INSTALAÇÃO do GestãoClick). */
+export async function listarInstalacoesController(_req: Request, res: Response): Promise<void> {
+  const instalacoes = await listarInstalacoes();
+  res.json({ instalacoes });
+}
+
 /**
  * Resultado no formato que o frontend já consome: mantém `valor_bruto`, `qtd_venda`,
  * `tc`, `largura`, `altura`; `valor_bruto` agora é a SOMA dos componentes + tecido
  * (motor novo do Victor). Inclui também o breakdown novo (`itens` com preço).
  */
-function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: number, altura: number) {
+function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: number, altura: number, inst?: TipoInstalacao | null) {
   const v = item.venda;
+  // Instalação embutida (Victor 26/06/2026): entra como componente e soma no valor.
+  const itens = inst ? [...v.itens, linhaInstalacaoBreakdown(inst)] : v.itens;
+  const valor = inst ? roundHalfUp(item.valor + inst.preco) : item.valor;
+  const componentes = inst ? [...componentesSnapshot(v), componenteInstalacao(inst)] : componentesSnapshot(v);
   return {
     largura,
     altura,
@@ -53,19 +65,19 @@ function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: num
     qtd_venda: v.tecido.quantidade,
     qtd_producao: v.tecido.quantidade,
     preco_tecido: tecido.preco_venda,
-    valor_bruto: item.valor, // SOMA de todos os componentes + tecido (VAREJO)
-    valor: item.valor,
+    valor_bruto: valor, // SOMA de todos os componentes + tecido + instalação (VAREJO)
+    valor,
     familia: v.familia,
     variante: v.variante,
-    itens: v.itens, // breakdown novo: componente × qtd × preço
+    itens, // breakdown novo: componente × qtd × preço (+ instalação)
     tecido: v.tecido,
-    componentes: componentesSnapshot(v), // compat com o formato antigo
+    componentes, // compat com o formato antigo
   };
 }
 
 /** POST /api/calcular/persiana — recebe o formulário, retorna breakdown + valor_bruto. */
 export async function calcularPersianaController(req: Request, res: Response): Promise<void> {
-  const { tipo, largura, altura, acionamento, tc, tecido_id } = req.body ?? {};
+  const { tipo, largura, altura, acionamento, tc, tecido_id, instalacao_id } = req.body ?? {};
 
   if (!isTipoPersiana(tipo)) {
     throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
@@ -96,6 +108,7 @@ export async function calcularPersianaController(req: Request, res: Response): P
   }
 
   const { precos, custos } = await mapasDePrecoComponentes();
+  const inst = instalacao_id ? (await indiceInstalacoes()).get(String(instalacao_id)) ?? null : null;
   try {
     const item = precoPersianaItem({
       tipo,
@@ -109,7 +122,7 @@ export async function calcularPersianaController(req: Request, res: Response): P
       custos,
     });
     res.json({
-      resultado: montarResultado(item, tecido, larguraN, alturaN),
+      resultado: montarResultado(item, tecido, larguraN, alturaN, inst),
       tecido: { id: tecido.id, nome: tecido.nome, dimensao_m: tecido.dimensao_m, preco_venda: tecido.preco_venda },
     });
   } catch (err) {
@@ -126,35 +139,36 @@ export async function calcularPersianaController(req: Request, res: Response): P
  * total bruto do orçamento. Não falha o lote inteiro por causa de um item.
  */
 export async function calcularPersianaLoteController(req: Request, res: Response): Promise<void> {
-  const tipo = req.body?.tipo;
+  // Tipo POR ITEM (Victor 26/06/2026): cada janela escolhe seu produto. `req.body.tipo`
+  // fica só como fallback (rascunhos antigos enviavam um tipo único para o lote).
+  const tipoFallback = isTipoPersiana(req.body?.tipo) ? (req.body.tipo as TipoPersiana) : null;
   const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
 
-  if (!isTipoPersiana(tipo)) {
-    throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
-  }
   if (itens.length === 0) {
     throw new AppError(400, 'SEM_ITENS', 'Adicione ao menos um item.');
   }
 
-  // Tecidos compatíveis (para sugestões RN-01) — carregados sob demanda só se precisar.
-  let compatCache: { id: string; nome: string; dimensao_m: number }[] | null = null;
-  const compatPara = async (larguraN: number) => {
-    if (!compatCache) {
-      compatCache = (await tecidosParaTipo(tipo as TipoPersiana)).map((t) => ({
-        id: t.id,
-        nome: t.nome,
-        dimensao_m: t.dimensao_m,
-      }));
+  // Tecidos compatíveis (para sugestões RN-01) — carregados sob demanda, por tipo.
+  const compatCache = new Map<TipoPersiana, { id: string; nome: string; dimensao_m: number }[]>();
+  const compatPara = async (tipo: TipoPersiana, larguraN: number) => {
+    if (!compatCache.has(tipo)) {
+      compatCache.set(tipo, (await tecidosParaTipo(tipo)).map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m })));
     }
-    return compatCache.filter((t) => t.dimensao_m >= larguraN);
+    return compatCache.get(tipo)!.filter((t) => t.dimensao_m >= larguraN);
   };
 
   const { precos, custos } = await mapasDePrecoComponentes();
+  const idxInst = await indiceInstalacoes();
   const resultados = [];
   let totalBruto = 0;
 
   for (let i = 0; i < itens.length; i++) {
     const it = itens[i] ?? {};
+    const tipo = isTipoPersiana(it.tipo) ? (it.tipo as TipoPersiana) : tipoFallback;
+    if (!tipo) {
+      resultados.push({ ok: false, index: i, error: 'TIPO_INVALIDO', message: 'Selecione o produto sob medida do item.' });
+      continue;
+    }
     const larguraN = Number(it.largura);
     const alturaN = Number(it.altura);
 
@@ -175,13 +189,14 @@ export async function calcularPersianaLoteController(req: Request, res: Response
         error: 'RN01_LARGURA_EXCEDIDA',
         message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2).replace('.', ',')} m.`,
         dimensao_max: tecido.dimensao_m,
-        alternativos: await compatPara(larguraN),
+        alternativos: await compatPara(tipo, larguraN),
       });
       continue;
     }
+    const inst = it.instalacao_id ? idxInst.get(String(it.instalacao_id)) ?? null : null;
     try {
       const item = precoPersianaItem({
-        tipo: tipo as TipoPersiana,
+        tipo,
         acionamento: it.acionamento,
         largura: larguraN,
         altura: alturaN,
@@ -191,11 +206,12 @@ export async function calcularPersianaLoteController(req: Request, res: Response
         precos,
         custos,
       });
-      totalBruto = roundHalfUp(totalBruto + item.valor);
+      const resultado = montarResultado(item, tecido, larguraN, alturaN, inst);
+      totalBruto = roundHalfUp(totalBruto + resultado.valor);
       resultados.push({
         ok: true,
         index: i,
-        resultado: montarResultado(item, tecido, larguraN, alturaN),
+        resultado,
         tecido: { id: tecido.id, nome: tecido.nome, dimensao_m: tecido.dimensao_m, preco_venda: tecido.preco_venda },
       });
     } catch (err) {

@@ -10,6 +10,8 @@ import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { ReceitaPendenteError } from '../services/calc/persianaPreco';
 import { precoPersianaItem, mapasDePrecoComponentes, componentesSnapshot } from '../services/calc/persianaPrecoGc';
+import { componenteInstalacao } from '../services/calc/instalacaoCalc';
+import { indiceInstalacoes } from '../services/gc/instalacao';
 import {
   isTipoPersiana,
   TIPO_LABEL,
@@ -20,17 +22,18 @@ import {
 } from '../services/calc/tipos';
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
-import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc, type LinhaServicoGc } from '../services/gc/orcamentos';
+import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
-import { reenviarCortina, resolverServicoInstalacao } from './orcamentoCortinaController';
+import { reenviarCortina } from './orcamentoCortinaController';
 import { reenviarMisto } from './orcamentoMistoController';
 
 /** Entrada de um item (janela) vinda do frontend. */
 export interface ItemEntrada {
   ambiente?: string;
+  tipo?: TipoPersiana; // produto sob medida POR ITEM (Victor 26/06/2026); cai p/ tipo do orçamento se ausente
   tecido_id: string;
   cor_acessorio: Cor;
   acionamento: Acionamento;
@@ -39,11 +42,13 @@ export interface ItemEntrada {
   tc?: number;
   rolamento?: string | null;
   base?: string | null;
+  instalacao_id?: string | null; // tipo de instalação (grupo INSTALAÇÃO) embutido no produto
 }
 
 /** Item já recalculado no servidor, pronto para enviar/salvar. */
 interface ItemPreparado {
   ambiente: string;
+  tipo: TipoPersiana;
   tecido: TecidoGc;
   cor_acessorio: Cor;
   acionamento: Acionamento;
@@ -57,6 +62,8 @@ interface ItemPreparado {
   valor_bruto: number;
   valor_final: number;
   valor_custo: number;
+  instalacao_id: string | null;
+  instalacao_nome: string | null;
   componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
   nome_produto: string;
 }
@@ -64,6 +71,7 @@ interface ItemPreparado {
 /** Snapshot persistido em itens_json (independe do GC para reenvio/exibição). */
 export interface ItemSnapshot {
   ambiente: string;
+  tipo: TipoPersiana;
   tecido_codigo_gc: string;
   tecido_nome: string;
   dimensao_m: number;
@@ -79,6 +87,8 @@ export interface ItemSnapshot {
   valor_bruto: number;
   valor_final: number;
   valor_custo: number;
+  instalacao_id: string | null;
+  instalacao_nome: string | null;
   gc_produto_id: string | null;
   nome_produto: string;
   componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
@@ -92,18 +102,23 @@ function nomeProdutoGc(tipo: TipoPersiana, it: { ambiente?: string; tecido_nome:
 
 /**
  * Recalcula cada item no servidor com o MOTOR DE COMPONENTES (preços do GestãoClick).
- * valor = soma de todos os componentes + tecido, a VAREJO (Victor). Sem desconto: o
- * valor cheio vai ao GestãoClick. Async porque busca os preços dos componentes no GC.
+ * valor = soma de todos os componentes + tecido + INSTALAÇÃO, a VAREJO (Victor). A
+ * instalação (grupo INSTALAÇÃO) entra embutida no produto. O tipo de persiana é POR
+ * ITEM (`tipoFallback` cobre rascunhos antigos com tipo único). Sem desconto: o valor
+ * cheio vai ao GestãoClick. Async porque busca preços de componentes/instalação no GC.
  */
-export async function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<string, TecidoGc>): Promise<{
+export async function prepararItens(tipoFallback: TipoPersiana | null, itens: ItemEntrada[], tecidos: Map<string, TecidoGc>): Promise<{
   preparados: ItemPreparado[];
   valorBrutoTotal: number;
 }> {
   const { precos, custos } = await mapasDePrecoComponentes();
+  const idxInst = await indiceInstalacoes();
   const preparados: ItemPreparado[] = [];
   let valorBrutoTotal = 0;
 
   for (const it of itens) {
+    const tipo = isTipoPersiana(it.tipo ?? '') ? (it.tipo as TipoPersiana) : tipoFallback;
+    if (!tipo) throw new AppError(400, 'TIPO_INVALIDO', 'Selecione o produto sob medida de todos os itens.');
     const tecido = tecidos.get(String(it.tecido_id));
     if (!tecido) throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido em todos os itens.');
     const largura = Number(it.largura);
@@ -134,12 +149,18 @@ export async function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], te
       throw err;
     }
 
-    const valorBruto = item.valor;
+    // Instalação embutida (Victor 26/06/2026): soma venda no valor e custo no custo.
+    const inst = it.instalacao_id ? idxInst.get(String(it.instalacao_id)) ?? null : null;
+    const valorBruto = roundHalfUp(item.valor + (inst?.preco ?? 0));
+    const valorCusto = roundHalfUp(item.valor_custo + (inst?.custo ?? 0));
     valorBrutoTotal = roundHalfUp(valorBrutoTotal + valorBruto);
+
+    const componentes = [...componentesSnapshot(item.venda), ...(inst ? [componenteInstalacao(inst)] : [])];
 
     const ambiente = it.ambiente?.trim() || '';
     preparados.push({
       ambiente,
+      tipo,
       tecido,
       cor_acessorio: it.cor_acessorio,
       acionamento: it.acionamento,
@@ -152,8 +173,10 @@ export async function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], te
       qtd_producao: item.venda.tecido.quantidade,
       valor_bruto: valorBruto,
       valor_final: valorBruto, // sem desconto: valor cheio vai ao GC
-      valor_custo: item.valor_custo,
-      componentes: componentesSnapshot(item.venda),
+      valor_custo: valorCusto,
+      instalacao_id: inst?.id ?? null,
+      instalacao_nome: inst?.nome ?? null,
+      componentes,
       nome_produto: nomeProdutoGc(tipo, { ambiente, tecido_nome: tecido.nome, largura, altura, cor_acessorio: it.cor_acessorio, acionamento: it.acionamento }),
     });
   }
@@ -168,8 +191,6 @@ export async function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], te
  */
 export async function executarEnvioGc(args: {
   itens: { nome_produto: string; valor_final: number; valor_custo: number }[];
-  instalacao_por_peca?: number; // valor unitário da instalação (por peça/janela)
-  pecas?: number; // nº de peças (= nº de itens) para a instalação
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
@@ -187,21 +208,13 @@ export async function executarEnvioGc(args: {
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
     }
 
-    // Instalação POR PEÇA (Victor v.3.1): 1 linha de serviço com qtd = nº de peças.
-    const servicos: LinhaServicoGc[] = [];
-    const instalacaoPorPeca = Math.max(0, Number(args.instalacao_por_peca) || 0);
-    const pecas = Math.max(0, Number(args.pecas) || 0);
-    if (instalacaoPorPeca > 0 && pecas > 0) {
-      const servicoId = await resolverServicoInstalacao(undefined);
-      if (!servicoId) throw new AppError(400, 'SERVICO_INSTALACAO', 'Nenhum serviço de instalação encontrado no GestãoClick.');
-      servicos.push({ gc_servico_id: servicoId, valor_venda: instalacaoPorPeca, quantidade: pecas });
-    }
-
+    // Instalação (Victor 26/06/2026): NÃO é mais linha de serviço — já está embutida no
+    // valor de cada produto (componente). Por isso o envio não tem mais `servicos`.
     // Não enviamos número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
     const orc = await gcCriarOrcamento({
       cliente_id: args.gc_cliente_id,
       produtos: linhas,
-      servicos,
+      servicos: [],
       data: new Date().toISOString().slice(0, 10),
       usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
       vendedor_id: args.gcVendedorId,
@@ -230,6 +243,7 @@ export async function executarEnvioGc(args: {
 export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[]): ItemSnapshot[] {
   return preparados.map((p, i) => ({
     ambiente: p.ambiente,
+    tipo: p.tipo,
     tecido_codigo_gc: p.tecido.id,
     tecido_nome: p.tecido.nome,
     dimensao_m: p.tecido.dimensao_m,
@@ -245,6 +259,8 @@ export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[])
     valor_bruto: p.valor_bruto,
     valor_final: p.valor_final,
     valor_custo: p.valor_custo,
+    instalacao_id: p.instalacao_id,
+    instalacao_nome: p.instalacao_nome,
     gc_produto_id: gcProdutoIds[i] ?? null,
     nome_produto: p.nome_produto,
     componentes: p.componentes,
@@ -255,10 +271,13 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   const sessao = req.session.usuario!;
   const b = req.body ?? {};
 
-  if (!isTipoPersiana(b.tipo)) throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
-  const tipo = b.tipo as TipoPersiana;
+  // Tipo POR ITEM (Victor 26/06/2026): `b.tipo` é só fallback p/ rascunhos antigos.
+  const tipoFallback = isTipoPersiana(b.tipo) ? (b.tipo as TipoPersiana) : null;
   const itensEntrada: ItemEntrada[] = Array.isArray(b.itens) ? b.itens : [];
   if (itensEntrada.length === 0) throw new AppError(400, 'SEM_ITENS', 'Adicione ao menos um item ao orçamento.');
+  if (!tipoFallback && !itensEntrada.every((it) => isTipoPersiana(it.tipo ?? ''))) {
+    throw new AppError(400, 'TIPO_INVALIDO', 'Selecione o produto sob medida de todos os itens.');
+  }
 
   // apenas_salvar = rascunho local (não envia ao GestãoClick; cliente opcional).
   const apenasSalvar = b.apenas_salvar === true;
@@ -287,18 +306,14 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     }
   }
 
-  const { preparados, valorBrutoTotal } = await prepararItens(tipo, itensEntrada, tecidos);
+  const { preparados, valorBrutoTotal } = await prepararItens(tipoFallback, itensEntrada, tecidos);
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeiro = preparados[0];
+  // Instalação já está embutida no valor de cada item (Victor 26/06/2026) — sem linha à parte.
+  const valorTotal = valorBrutoTotal;
 
-  // Instalação POR PEÇA (Victor v.3.1): valor unitário × nº de peças (= nº de itens).
-  const instalacaoPorPeca = Math.max(0, Number(b.instalacao_valor) || 0);
-  const pecas = preparados.length;
-  const valorInstalacao = roundHalfUp(instalacaoPorPeca * pecas);
-  const valorTotal = roundHalfUp(valorBrutoTotal + valorInstalacao);
-
-  // Entrada bruta — permite reabrir o rascunho na calculadora. instalacao_valor = POR PEÇA.
-  const entradaJson = { tipo, itens: itensEntrada, instalacao_valor: instalacaoPorPeca } as unknown as Prisma.InputJsonValue;
+  // Entrada bruta — permite reabrir o rascunho na calculadora (tipo + instalação por item).
+  const entradaJson = { tipo: primeiro.tipo, itens: itensEntrada } as unknown as Prisma.InputJsonValue;
 
   // Grava: cria novo ou atualiza o rascunho em edição (mesmo registro).
   const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>
@@ -307,8 +322,9 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       : prisma.orcamento.create({ data });
 
   // Campos comuns ao salvar (sucesso ou erro). Colunas single = 1º item (compat).
+  // tipo_produto = tipo do 1º item (representativo; o tipo real de cada item está em itens_json).
   const baseDados = {
-    tipo_produto: tipo,
+    tipo_produto: primeiro.tipo,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
     loja_id: editarOrc?.loja_id ?? loja.id,
     entrada_json: entradaJson,
@@ -325,7 +341,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     rolamento: primeiro.rolamento,
     valor_bruto: valorBrutoTotal,
     desconto_pct: 0, // sem desconto na calculadora (controlado no GestãoClick)
-    valor_final: valorTotal, // itens + instalação
+    valor_final: valorTotal, // itens (com instalação embutida)
     desconto_aprovado_por: null,
   };
 
@@ -346,8 +362,6 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   try {
     const envio = await executarEnvioGc({
       itens: preparados.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
-      instalacao_por_peca: instalacaoPorPeca,
-      pecas,
       gc_cliente_id: String(b.gc_cliente_id),
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
@@ -416,13 +430,10 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
   if (snaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento sem itens para reenviar.');
 
   const loja = await resolverLoja(orc.loja_id);
-  const instalacaoPorPeca = Math.max(0, Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0);
 
   try {
     const envio = await executarEnvioGc({
       itens: preparadosDoSnapshot(snaps),
-      instalacao_por_peca: instalacaoPorPeca,
-      pecas: snaps.length,
       gc_cliente_id: orc.gc_cliente_id,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,

@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import {
   listarTecidos,
+  listarInstalacoesController,
   calcularPersianaController,
   calcularPersianaLoteController,
   listarTecidosCortina,
@@ -15,6 +16,7 @@ const router = Router();
 
 router.use(requireAuth);
 router.get('/tecidos', listarTecidos);
+router.get('/instalacoes', listarInstalacoesController);
 router.post('/persiana', calcularPersianaController);
 router.post('/persiana/lote', calcularPersianaLoteController);
 router.get('/cortina/tecidos', listarTecidosCortina);

@@ -72,7 +72,6 @@ export function OrcamentoNovo() {
   });
   const incluiPersiana = ordem.includes('persiana');
   const incluiCortina = ordem.includes('cortina');
-  const [instalacao, setInstalacao] = useState(rascunhoLocal?.instalacao_valor ?? '');
   const [recuperado] = useState(!!rascunhoLocal);
 
   // Edição de rascunho (do banco).
@@ -92,7 +91,6 @@ export function OrcamentoNovo() {
   const persianaSujoRef = useRef(false);
   const cortinaSujoRef = useRef(false);
   const clienteRef = useRef(cliente); clienteRef.current = cliente;
-  const instalacaoRef = useRef(instalacao); instalacaoRef.current = instalacao;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const agendarSalvar = useCallback(() => {
@@ -106,7 +104,6 @@ export function OrcamentoNovo() {
         cliente: cli ? { id: cli.id, nome: cli.nome } : null,
         persiana: persianaSnapRef.current ?? undefined,
         cortina: cortinaSnapRef.current ?? undefined,
-        instalacao_valor: instalacaoRef.current,
         ts: Date.now(),
       };
       salvarRascunhoLocal(r);
@@ -151,10 +148,9 @@ export function OrcamentoNovo() {
           navigate(`/orcamentos/${editarId}`); return;
         }
         setCliente(o.gc_cliente_id ? { id: o.gc_cliente_id, nome: o.nome_cliente, tipo_pessoa: '', documento: null } : null);
-        const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[]; instalacao_valor?: number } | null;
+        const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[] } | null;
         const ehMisto = o.tipo_produto === 'misto';
         const ehCortina = o.tipo_produto === 'cortina';
-        setInstalacao(entrada?.instalacao_valor ? String(entrada.instalacao_valor) : '');
 
         const novaOrdem: Secao[] = [];
         if (ehMisto) {
@@ -199,10 +195,8 @@ export function OrcamentoNovo() {
   const cortinaCompletas = cortinaEstado.todasCompletas;
 
   const algoPreenchido = temPersiana || temCortina;
-  const pecas = persianaItens.length + cortinaEstado.count;
-  const instalacaoPorPeca = Math.max(0, Number(instalacao) || 0);
-  const valorInstalacao = roundHalfUp(instalacaoPorPeca * pecas);
-  const totalGeral = roundHalfUp(persianaTotal + cortinaTotal + valorInstalacao);
+  // Instalação já está embutida no valor de cada item (Victor 26/06/2026).
+  const totalGeral = roundHalfUp(persianaTotal + cortinaTotal);
 
   // Persiana (se houver) precisa estar completa; cortina (se houver) idem.
   const persianaOk = !temPersiana || !persianaIncompleto;
@@ -228,7 +222,6 @@ export function OrcamentoNovo() {
     if (apenasSalvar) setSalvando(true); else setEnviando(true);
     try {
       const comum = {
-        instalacao_valor: instalacaoPorPeca,
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(editarId ? { editar_id: editarId } : {}),
@@ -381,13 +374,7 @@ export function OrcamentoNovo() {
               </div>
             </div>
 
-            <label className="form-label" htmlFor="instalacao-misto">Instalação por peça (R$)</label>
-            <input id="instalacao-misto" type="number" className="input" min={0} step={0.01} placeholder="0,00"
-              value={instalacao} onChange={(e) => { setInstalacao(e.target.value); agendarSalvar(); }} />
-            {instalacaoPorPeca > 0 && pecas > 0 && (
-              <div className="helper-text mb-3">{formatBRL(instalacaoPorPeca)} × {pecas} {pecas === 1 ? 'peça' : 'peças'} = <strong>{formatBRL(valorInstalacao)}</strong></div>
-            )}
-            {!(instalacaoPorPeca > 0 && pecas > 0) && <div className="mb-3" />}
+            <div className="helper-text mb-3">A instalação é escolhida em cada item e já entra no valor.</div>
 
             <label className="form-label" htmlFor="total-misto">Valor total</label>
             <input id="total-misto" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}

@@ -12,7 +12,7 @@ import { CortinaCard, type CortinaResumo, type CortinaInicial } from './CortinaC
 import { ConfirmModal } from './ConfirmModal';
 import { formatBRL } from '../lib/formatacao';
 import { useToast } from '../hooks/useToast';
-import type { TecidoOpcao, ClienteResumo, OrcamentoSalvo } from '../lib/calcTypes';
+import type { TecidoOpcao, TipoInstalacao, ClienteResumo, OrcamentoSalvo } from '../lib/calcTypes';
 import type { GcStatus } from '../hooks/useGcHealth';
 import type { AcessoriosCortinaResp } from '../lib/cortinaTypes';
 import type { CortinaSnapshot, CortinaCardSnap } from '../lib/rascunhoLocal';
@@ -46,6 +46,7 @@ export function CortinaOrcamento({
   const { showToast } = useToast();
   const [tecidos, setTecidos] = useState<TecidoOpcao[]>([]);
   const [opcoes, setOpcoes] = useState<AcessoriosCortinaResp | null>(null);
+  const [instalacoes, setInstalacoes] = useState<TipoInstalacao[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erroCarga, setErroCarga] = useState(false);
 
@@ -64,7 +65,6 @@ export function CortinaOrcamento({
   const [resumos, setResumos] = useState<Record<string, CortinaResumo>>({});
   const [preenchidos, setPreenchidos] = useState<Record<string, boolean>>({});
   const [snaps, setSnaps] = useState<Record<string, CortinaCardSnap>>({});
-  const [instalacao, setInstalacao] = useState(restauro?.instalacao_valor ?? (inicial?.instalacao_valor ? String(inicial.instalacao_valor) : ''));
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [salvarAberto, setSalvarAberto] = useState(false);
@@ -81,6 +81,9 @@ export function CortinaOrcamento({
     api.get<AcessoriosCortinaResp>('/calcular/cortina/acessorios')
       .then((o) => setOpcoes(o))
       .catch(() => {});
+    api.get<{ instalacoes: TipoInstalacao[] }>('/calcular/instalacoes')
+      .then((r) => setInstalacoes(r.instalacoes))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -94,23 +97,20 @@ export function CortinaOrcamento({
     setSnaps((m) => { const n = { ...m }; delete n[id]; return n; });
   };
 
-  // "Sujo" = instalação preenchida ou alguma cortina tocada (guarda de navegação).
-  const sujo = instalacao.trim() !== '' || ids.some((id) => preenchidos[id]);
+  // "Sujo" = alguma cortina tocada (guarda de navegação).
+  const sujo = ids.some((id) => preenchidos[id]);
   useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
 
-  // Autosave local: agrega os estados brutos das cortinas + instalação.
+  // Autosave local: agrega os estados brutos das cortinas (instalação fica em cada cortina).
   useEffect(() => {
     if (!onSnapshot) return;
     const cortinas = ids.map((id) => snaps[id]).filter(Boolean) as CortinaCardSnap[];
-    onSnapshot({ cortinas, instalacao_valor: instalacao });
-  }, [ids, snaps, instalacao, onSnapshot]);
+    onSnapshot({ cortinas });
+  }, [ids, snaps, onSnapshot]);
 
+  // Instalação já está embutida no total de cada cortina (Victor 26/06/2026).
   const totalCortinas = ids.reduce((s, id) => s + (resumos[id]?.total ?? 0), 0);
-  // Instalação POR PEÇA (Victor v.3.1): valor unitário × nº de cortinas.
-  const instalacaoPorPeca = Math.max(0, Number(instalacao) || 0);
-  const nPecas = ids.length;
-  const valorInstalacao = Math.round(instalacaoPorPeca * nPecas * 100) / 100;
-  const totalGeral = Math.round((totalCortinas + valorInstalacao) * 100) / 100;
+  const totalGeral = Math.round(totalCortinas * 100) / 100;
 
   const todasCompletas = ids.length > 0 && ids.every((id) => resumos[id]?.completo && resumos[id]?.payload);
 
@@ -135,7 +135,6 @@ export function CortinaOrcamento({
       const cortinas = ids.map((id) => resumos[id]?.payload).filter(Boolean);
       const r = await api.post<{ orcamento: OrcamentoSalvo }>('/orcamentos/cortina', {
         cortinas,
-        instalacao_valor: instalacaoPorPeca,
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(editarId ? { editar_id: editarId } : {}),
@@ -168,6 +167,7 @@ export function CortinaOrcamento({
           indice={i}
           tecidos={tecidos}
           opcoes={opcoes}
+          instalacoes={instalacoes}
           inicial={iniciais.current[id] ?? undefined}
           restauro={restauros.current[id]}
           onChange={(r) => setResumo(id, r)}
@@ -223,13 +223,7 @@ export function CortinaOrcamento({
             ))}
           </div>
 
-          <label className="form-label" htmlFor="instalacao">Instalação por peça (R$)</label>
-          <input id="instalacao" type="number" className="input" min={0} step={0.01} placeholder="0,00"
-            value={instalacao} onChange={(e) => setInstalacao(e.target.value)} />
-          {instalacaoPorPeca > 0 && nPecas > 0 && (
-            <div className="helper-text mb-3">{formatBRL(instalacaoPorPeca)} × {nPecas} {nPecas === 1 ? 'cortina' : 'cortinas'} = <strong>{formatBRL(valorInstalacao)}</strong></div>
-          )}
-          {!(instalacaoPorPeca > 0 && nPecas > 0) && <div className="mb-3" />}
+          <div className="helper-text mb-3">A instalação é escolhida em cada cortina e já entra no valor.</div>
 
           <label className="form-label" htmlFor="total-cortina">Valor total</label>
           <input id="total-cortina" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}

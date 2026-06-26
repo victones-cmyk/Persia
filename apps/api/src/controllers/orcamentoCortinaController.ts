@@ -11,9 +11,9 @@ import { env } from '../config/env';
 import { calcularCortinaMultiCamada, type CamadaCortina } from '../services/calc/cortina';
 import { buscarTecidoCortinaGc } from '../services/gc/tecidos';
 import { buscarAcessorioGc, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo, type CategoriaAcessorio } from '../services/gc/acessorios';
-import { listarServicos } from '../services/gc/catalogos';
+import { indiceInstalacoes } from '../services/gc/instalacao';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
-import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc, type LinhaServicoGc } from '../services/gc/orcamentos';
+import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
@@ -42,6 +42,7 @@ export interface CortinaEntrada {
   camadas: CamadaEntrada[];
   acessorios: AcessorioEntrada[];
   ja_possui_varao?: boolean; // cliente já tem o trilho/varão → não inclui
+  instalacao_id?: string | null; // tipo de instalação (grupo INSTALAÇÃO) embutido no produto
 }
 
 export interface CortinaPreparada {
@@ -132,6 +133,17 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     acessoriosSnap.push({ item: a.item, categoria, produto_id: prod.id, produto_nome: prod.nome, quantidade: qtd, preco: prod.preco, subtotal });
   }
 
+  // Instalação embutida (Victor 26/06/2026): tipo escolhido por cortina, do grupo
+  // INSTALAÇÃO; entra como componente no valor do produto (sem linha de serviço).
+  if (c.instalacao_id) {
+    const inst = (await indiceInstalacoes()).get(String(c.instalacao_id));
+    if (inst) {
+      valorTotal = roundHalfUp(valorTotal + inst.preco);
+      valorCusto = roundHalfUp(valorCusto + inst.custo);
+      acessoriosSnap.push({ item: 'Instalação', categoria: 'instalacao', produto_id: inst.id, produto_nome: inst.nome, quantidade: 1, preco: inst.preco, subtotal: inst.preco });
+    }
+  }
+
   // Nome do produto (Victor v.4.1): "AMBIENTE, Cortina MODELO1 TECIDO1 + MODELO2 TECIDO2 LxA".
   // Ambiente na frente; cada camada com seu modelo + tecido; medidas no fim.
   const amb = c.ambiente?.trim() ? `${c.ambiente.trim()}, ` : '';
@@ -154,15 +166,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
   };
 }
 
-/** Resolve o id do serviço de instalação (o informado ou o 1º "INSTALAÇÃO"). */
-export async function resolverServicoInstalacao(servicoId: string | undefined): Promise<string | null> {
-  const servicos = await listarServicos();
-  if (servicoId && servicos.some((s) => s.id === String(servicoId))) return String(servicoId);
-  const inst = servicos.find((s) => /instala/i.test(s.nome));
-  return inst ? inst.id : null;
-}
-
-/** POST /api/orcamentos/cortina — cria o orçamento de cortina (vários ambientes + instalação). */
+/** POST /api/orcamentos/cortina — cria o orçamento de cortina (vários ambientes; instalação embutida). */
 export async function criarOrcamentoCortina(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
   const b = req.body ?? {};
@@ -188,12 +192,8 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   const preparadas: CortinaPreparada[] = [];
   for (const c of cortinasEntrada) preparadas.push(await prepararCortina(c));
 
-  const valorCortinas = roundHalfUp(preparadas.reduce((s, p) => s + p.valor_total, 0));
-  // Instalação POR PEÇA (Victor v.3.1): valor unitário × nº de cortinas.
-  const instalacaoPorPeca = Math.max(0, Number(b.instalacao_valor) || 0);
-  const pecas = preparadas.length;
-  const valorInstalacao = roundHalfUp(instalacaoPorPeca * pecas);
-  const valorTotal = roundHalfUp(valorCortinas + valorInstalacao);
+  // Instalação já está embutida no valor de cada cortina (Victor 26/06/2026).
+  const valorTotal = roundHalfUp(preparadas.reduce((s, p) => s + p.valor_total, 0));
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeira = preparadas[0];
 
@@ -207,7 +207,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     tipo_produto: 'cortina' as const,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
     loja_id: editarOrc?.loja_id ?? loja.id,
-    entrada_json: { cortinas: cortinasEntrada, instalacao_valor: instalacaoPorPeca } as unknown as Prisma.InputJsonValue,
+    entrada_json: { cortinas: cortinasEntrada } as unknown as Prisma.InputJsonValue,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
     tecido_codigo_gc: primeira.tecido_id,
@@ -218,7 +218,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     desconto_pct: 0,
     valor_final: valorTotal,
     desconto_aprovado_por: null,
-    itens_json: { cortinas: preparadas.map((p) => p.snapshot), instalacao: instalacaoPorPeca } as unknown as Prisma.InputJsonValue,
+    itens_json: { cortinas: preparadas.map((p) => p.snapshot) } as unknown as Prisma.InputJsonValue,
   };
 
   // Apenas salvar: rascunho local, sem tocar no GestãoClick.
@@ -239,18 +239,12 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: p.valor_total, valor_custo: p.valor_custo });
     }
 
-    const servicos: LinhaServicoGc[] = [];
-    if (instalacaoPorPeca > 0 && pecas > 0) {
-      const servicoId = await resolverServicoInstalacao(b.instalacao_servico_id);
-      if (!servicoId) throw new AppError(400, 'SERVICO_INSTALACAO', 'Nenhum serviço de instalação encontrado no GestãoClick.');
-      servicos.push({ gc_servico_id: servicoId, valor_venda: instalacaoPorPeca, quantidade: pecas });
-    }
-
+    // Instalação embutida no valor de cada cortina (Victor 26/06/2026) — sem serviço.
     // Sem número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
     const orc = await gcCriarOrcamento({
       cliente_id: String(b.gc_cliente_id),
       produtos: linhas,
-      servicos,
+      servicos: [],
       data: new Date().toISOString().slice(0, 10),
       usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
       vendedor_id: sessao.gc_usuario_id,
@@ -289,12 +283,9 @@ interface CortinaSnapshot { nome_produto?: string; valor_total?: number; valor_c
 
 /** Reenvia um rascunho/erro de CORTINA ao GestãoClick (replay do snapshot salvo). */
 export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
-  const itens = orc.itens_json as { cortinas?: CortinaSnapshot[]; instalacao?: number } | null;
+  const itens = orc.itens_json as { cortinas?: CortinaSnapshot[] } | null;
   const cortinas = itens?.cortinas ?? [];
   if (cortinas.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento de cortina sem itens para enviar.');
-  // Instalação por peça: valor unitário × nº de cortinas.
-  const instalacaoPorPeca = Math.max(0, Number(itens?.instalacao) || 0);
-  const pecasInst = cortinas.length;
   const loja = await resolverLoja(orc.loja_id);
 
   const criados: string[] = [];
@@ -307,16 +298,11 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
       criados.push(produto.gc_produto_id);
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: valor, valor_custo: custo });
     }
-    const servicos: LinhaServicoGc[] = [];
-    if (instalacaoPorPeca > 0 && pecasInst > 0) {
-      const servicoId = await resolverServicoInstalacao(undefined);
-      if (!servicoId) throw new AppError(400, 'SERVICO_INSTALACAO', 'Nenhum serviço de instalação encontrado no GestãoClick.');
-      servicos.push({ gc_servico_id: servicoId, valor_venda: instalacaoPorPeca, quantidade: pecasInst });
-    }
+    // Instalação embutida no valor de cada cortina (Victor 26/06/2026) — sem serviço.
     const gcOrc = await gcCriarOrcamento({
       cliente_id: orc.gc_cliente_id!,
       produtos: linhas,
-      servicos,
+      servicos: [],
       data: new Date().toISOString().slice(0, 10),
       usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
       vendedor_id: sessao.gc_usuario_id,

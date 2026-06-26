@@ -1,8 +1,9 @@
 // apps/web/src/components/PersianaForm.tsx
 // Formulário de persiana MULTI-ITENS (SRD §8 Etapa 2A).
-// Produto Sob Medida é único para o orçamento; cada item (janela) tem sua Coleção
-// (Tecido), Cor, Acionamento, Largura, Altura, TC (75% editável, RN-04), Rolamento e Base.
-// Layout compacto: 2 linhas agrupadas por item. RN-01 por item com chips de alternativos.
+// Victor (26/06/2026): o PRODUTO SOB MEDIDA e a INSTALAÇÃO são POR ITEM — cada janela
+// escolhe seu tipo de persiana (com sua lista de tecidos) e seu tipo de instalação
+// (grupo INSTALAÇÃO), que entra embutida no preço. A instalação é sugerida pelo
+// acionamento (motorizado → MOTORIZADA; senão → MANUAL), mas é editável.
 
 import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -21,6 +22,7 @@ import {
   type Cor,
   type Acionamento,
   type TecidoOpcao,
+  type TipoInstalacao,
   type ItemInput,
   type ItemCalculado,
   type CalcularLoteResposta,
@@ -32,6 +34,7 @@ import type { PersianaSnapshot, PersianaItemSnap } from '../lib/rascunhoLocal';
 interface ItemForm {
   id: string;
   ambiente: string;
+  tipo: TipoPersiana | '';
   tecido_id: string;
   cor: Cor | '';
   acionamento: Acionamento | '';
@@ -41,6 +44,8 @@ interface ItemForm {
   tcManual: boolean;
   rolamento: string;
   base: string;
+  instalacao_id: string;
+  instManual: boolean;
 }
 
 interface ItemErro {
@@ -49,14 +54,27 @@ interface ItemErro {
 }
 
 function itemVazio(): ItemForm {
-  return { id: crypto.randomUUID(), ambiente: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '' };
+  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', instalacao_id: '', instManual: false };
+}
+
+const ehMotorizado = (ac: string) => ac === 'motorizado_com_bando' || ac === 'motorizado_sem_bando';
+
+/** Instalação sugerida pelo acionamento: motorizado → MOTORIZADA; senão → MANUAL (com fallbacks). */
+function sugerirInstalacao(instalacoes: TipoInstalacao[], acionamento: string): string {
+  if (instalacoes.length === 0 || !acionamento) return '';
+  const motor = /motoriz/i;
+  if (ehMotorizado(acionamento)) {
+    return (instalacoes.find((i) => motor.test(i.nome)) ?? instalacoes[0]).id;
+  }
+  return (instalacoes.find((i) => /manual/i.test(i.nome)) ?? instalacoes.find((i) => !motor.test(i.nome)) ?? instalacoes[0]).id;
 }
 
 /** Converte um item salvo (ItemInput) no estado do formulário (para edição de rascunho). */
-function inputParaForm(it: ItemInput): ItemForm {
+function inputParaForm(it: ItemInput, tipoFallback: TipoPersiana | ''): ItemForm {
   return {
     id: crypto.randomUUID(),
     ambiente: it.ambiente ?? '',
+    tipo: it.tipo ?? tipoFallback,
     tecido_id: it.tecido_id,
     cor: it.cor_acessorio,
     acionamento: it.acionamento,
@@ -66,14 +84,17 @@ function inputParaForm(it: ItemInput): ItemForm {
     tcManual: it.tc != null,
     rolamento: it.rolamento ?? '',
     base: it.base ?? '',
+    instalacao_id: it.instalacao_id ?? '',
+    instManual: it.instalacao_id != null && it.instalacao_id !== '',
   };
 }
 
 /** Converte um item bruto salvo (autosave local) no estado do formulário. */
-function snapParaForm(s: PersianaItemSnap): ItemForm {
+function snapParaForm(s: PersianaItemSnap, tipoFallback: TipoPersiana | ''): ItemForm {
   return {
     id: crypto.randomUUID(),
     ambiente: s.ambiente ?? '',
+    tipo: (s.tipo as ItemForm['tipo']) || tipoFallback,
     tecido_id: s.tecido_id,
     cor: s.cor as ItemForm['cor'],
     acionamento: s.acionamento as ItemForm['acionamento'],
@@ -83,14 +104,16 @@ function snapParaForm(s: PersianaItemSnap): ItemForm {
     tcManual: s.tcManual,
     rolamento: s.rolamento,
     base: s.base,
+    instalacao_id: s.instalacao_id ?? '',
+    instManual: s.instManual ?? false,
   };
 }
 
 function formParaSnap(it: ItemForm): PersianaItemSnap {
   return {
-    ambiente: it.ambiente, tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
+    ambiente: it.ambiente, tipo: it.tipo, tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
     largura: it.largura, altura: it.altura, tc: it.tc, tcManual: it.tcManual,
-    rolamento: it.rolamento, base: it.base,
+    rolamento: it.rolamento, base: it.base, instalacao_id: it.instalacao_id, instManual: it.instManual,
   };
 }
 
@@ -107,20 +130,23 @@ export function PersianaForm({
   onDirtyChange?: (sujo: boolean) => void;
   onSnapshot?: (snap: PersianaSnapshot) => void;
 }) {
-  const [tipo, setTipo] = useState<TipoPersiana | ''>((restauro?.tipo as TipoPersiana | '') ?? inicial?.tipo ?? '');
+  const tipoFallback: TipoPersiana | '' = (restauro?.tipo as TipoPersiana | '') || inicial?.tipo || '';
   const [itens, setItens] = useState<ItemForm[]>(
     restauro && restauro.itens.length > 0
-      ? restauro.itens.map(snapParaForm)
+      ? restauro.itens.map((s) => snapParaForm(s, tipoFallback))
       : inicial && inicial.itens.length > 0
-        ? inicial.itens.map(inputParaForm)
+        ? inicial.itens.map((it) => inputParaForm(it, tipoFallback))
         : [itemVazio()],
   );
   const [mesmoAmbiente, setMesmoAmbiente] = useState(false);
-  // Na 1ª carga (edição ou recuperação) o tipo já vem preenchido — não limpar o tecido.
-  const pularResetTecido = useRef(!!(restauro || inicial));
 
-  const [tecidos, setTecidos] = useState<TecidoOpcao[]>([]);
-  const [carregandoTecidos, setCarregandoTecidos] = useState(false);
+  // Tecidos por TIPO (cada item escolhe seu tipo): carregados sob demanda e cacheados.
+  const [tecidosPorTipo, setTecidosPorTipo] = useState<Record<string, TecidoOpcao[]>>({});
+  const [tiposCarregando, setTiposCarregando] = useState<string[]>([]);
+  const emVoo = useRef<Set<string>>(new Set());
+  // Tipos de instalação (grupo INSTALAÇÃO do GestãoClick).
+  const [instalacoes, setInstalacoes] = useState<TipoInstalacao[]>([]);
+
   const [calculando, setCalculando] = useState(false);
   const [erros, setErros] = useState<Record<number, ItemErro>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
@@ -128,31 +154,57 @@ export function PersianaForm({
   // Resultado calculado por item (índice → resultado), para o breakdown "Ver componentes".
   const [resultPorIdx, setResultPorIdx] = useState<Record<number, ResultadoPersiana>>({});
 
-  // Recarrega tecidos quando o tipo muda; limpa a seleção de tecido de todos os itens.
-  useEffect(() => {
-    if (!tipo) {
-      setTecidos([]);
-      return;
-    }
-    setCarregandoTecidos(true);
-    // Troca de tipo invalida os tecidos escolhidos — exceto na 1ª carga de um rascunho em edição.
-    if (pularResetTecido.current) {
-      pularResetTecido.current = false;
-    } else {
-      setItens((prev) => prev.map((it) => ({ ...it, tecido_id: '' })));
-      setErros({});
-      onResult(null);
-    }
+  // Carrega os tecidos de um tipo (uma vez por tipo).
+  function garantirTecidos(tipo: string) {
+    if (!tipo || tecidosPorTipo[tipo] || emVoo.current.has(tipo)) return;
+    emVoo.current.add(tipo);
+    setTiposCarregando((p) => (p.includes(tipo) ? p : [...p, tipo]));
     api
       .get<{ tecidos: TecidoOpcao[] }>(`/calcular/tecidos?tipo=${tipo}`)
-      .then((r) => setTecidos(r.tecidos))
-      .catch(() => setTecidos([]))
-      .finally(() => setCarregandoTecidos(false));
+      .then((r) => setTecidosPorTipo((p) => ({ ...p, [tipo]: r.tecidos })))
+      .catch(() => setTecidosPorTipo((p) => ({ ...p, [tipo]: [] })))
+      .finally(() => {
+        emVoo.current.delete(tipo);
+        setTiposCarregando((p) => p.filter((t) => t !== tipo));
+      });
+  }
+
+  // Carrega tecidos dos tipos já presentes (restauro/edição) e a lista de instalações.
+  useEffect(() => {
+    for (const it of itens) if (it.tipo) garantirTecidos(it.tipo);
+    api.get<{ instalacoes: TipoInstalacao[] }>('/calcular/instalacoes')
+      .then((r) => setInstalacoes(r.instalacoes))
+      .catch(() => setInstalacoes([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tipo]);
+  }, []);
+
+  // Quando a lista de instalações chega, preenche o sugerido nos itens ainda sem escolha.
+  useEffect(() => {
+    if (instalacoes.length === 0) return;
+    setItens((prev) => prev.map((it) =>
+      !it.instManual && !it.instalacao_id && it.acionamento
+        ? { ...it, instalacao_id: sugerirInstalacao(instalacoes, it.acionamento) }
+        : it));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [instalacoes]);
 
   function atualizar(idx: number, patch: Partial<ItemForm>) {
     setItens((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  }
+
+  function onTipoChange(idx: number, novoTipo: TipoPersiana | '') {
+    garantirTecidos(novoTipo);
+    // Trocar de tipo invalida o tecido escolhido (a lista muda).
+    atualizar(idx, { tipo: novoTipo, tecido_id: '' });
+    setErros((p) => { const n = { ...p }; delete n[idx]; return n; });
+  }
+
+  function onAcionamentoChange(idx: number, ac: Acionamento) {
+    const it = itens[idx];
+    const patch: Partial<ItemForm> = { acionamento: ac };
+    // Sugere a instalação pelo acionamento, a menos que o vendedor já tenha escolhido manualmente.
+    if (!it.instManual && instalacoes.length > 0) patch.instalacao_id = sugerirInstalacao(instalacoes, ac);
+    atualizar(idx, patch);
   }
 
   function onAlturaChange(idx: number, v: string) {
@@ -167,28 +219,28 @@ export function PersianaForm({
     setItens((prev) => [...prev, itemVazio()]);
   }
   function executarRemover(idx: number) {
-    // O cálculo automático (efeito abaixo) reavalia sozinho após a mudança.
     setItens((prev) => prev.filter((_, i) => i !== idx));
     setErros({});
     setRemoverIdx(null);
   }
 
   const itemValido = (it: ItemForm) =>
-    it.tecido_id !== '' && it.cor !== '' && it.acionamento !== '' && Number(it.largura) > 0 && Number(it.altura) > 0;
+    it.tipo !== '' && it.tecido_id !== '' && it.cor !== '' && it.acionamento !== '' && Number(it.largura) > 0 && Number(it.altura) > 0;
   // Só os itens completos entram no cálculo; itens incompletos bloqueiam o envio.
   const itensComp = itens.map((it, idx) => ({ it, idx })).filter(({ it }) => itemValido(it));
   const temIncompleto = itens.some((it) => !itemValido(it));
 
   // "Sujo" = começou a preencher algo (guarda de navegação contra perda de dados).
-  const sujo = tipo !== '' || itens.some((it) =>
-    it.ambiente || it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base);
+  const sujo = itens.some((it) =>
+    it.tipo || it.ambiente || it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base);
   useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
-  // Autosave local: emite o estado bruto sempre que muda.
-  useEffect(() => { onSnapshot?.({ tipo, itens: itens.map(formParaSnap) }); }, [tipo, itens, onSnapshot]);
+  // Autosave local: emite o estado bruto sempre que muda (tipo representativo = 1º item).
+  useEffect(() => { onSnapshot?.({ tipo: itens[0]?.tipo ?? '', itens: itens.map(formParaSnap) }); }, [itens, onSnapshot]);
 
   function toInput(it: ItemForm): ItemInput {
     return {
       ambiente: it.ambiente || undefined,
+      tipo: it.tipo as TipoPersiana,
       tecido_id: it.tecido_id,
       cor_acessorio: it.cor as Cor,
       acionamento: it.acionamento as Acionamento,
@@ -197,17 +249,17 @@ export function PersianaForm({
       tc: it.tc === '' ? undefined : Number(it.tc),
       rolamento: it.rolamento || null,
       base: it.base || null,
+      instalacao_id: it.instalacao_id || null,
     };
   }
 
   // Cálculo automático (tempo real): recalcula com debounce a cada mudança. Calcula
   // só os itens completos; itens incompletos não somem o resultado, mas bloqueiam o envio.
   const calcSig = JSON.stringify({
-    tipo,
-    itens: itens.map((it) => ({ t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc })),
+    itens: itens.map((it) => ({ tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, in: it.instalacao_id })),
   });
   useEffect(() => {
-    if (tipo === '' || itensComp.length === 0) { onResult(null); setResultPorIdx({}); return; }
+    if (itensComp.length === 0) { onResult(null); setResultPorIdx({}); return; }
     const comp = itensComp;
     const incompleto = temIncompleto;
     const id = setTimeout(() => { void calcularCom(comp, incompleto); }, 400);
@@ -221,7 +273,6 @@ export function PersianaForm({
     setErroGeral(null);
     try {
       const r = await api.post<CalcularLoteResposta>('/calcular/persiana/lote', {
-        tipo,
         itens: comp.map(({ it }) => toInput(it)),
       });
 
@@ -244,7 +295,7 @@ export function PersianaForm({
         onResult(null);
         return;
       }
-      onResult({ tipo: tipo as TipoPersiana, itens: calculados, total_bruto: r.total_bruto, incompleto });
+      onResult({ tipo: (comp[0].it.tipo || 'persiana_rolo_blackout') as TipoPersiana, itens: calculados, total_bruto: r.total_bruto, incompleto });
     } catch {
       onResult(null);
       setErroGeral('Não foi possível calcular. Tente novamente.');
@@ -258,21 +309,11 @@ export function PersianaForm({
       <h4 className="text-lg-ui font-medium mb-4">Dados da Persiana</h4>
 
       <div className="space-y-4">
-        {/* Produto Sob Medida — único para o orçamento */}
-        <div>
-          <label className="form-label" htmlFor="f-tipo">
-            Produto Sob Medida<span className="label-required">*</span>
-          </label>
-          <select id="f-tipo" className="input" value={tipo} onChange={(e) => setTipo(e.target.value as TipoPersiana)}>
-            <option value="">Selecione…</option>
-            {TIPOS_PERSIANA.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Itens (janelas) */}
-        {itens.map((it, idx) => (
+        {/* Itens (janelas) — cada um com seu Produto Sob Medida + Instalação */}
+        {itens.map((it, idx) => {
+          const tecidosDoItem = it.tipo ? tecidosPorTipo[it.tipo] : undefined;
+          const carregandoTecidos = it.tipo ? tiposCarregando.includes(it.tipo) && !tecidosDoItem : false;
+          return (
           <div key={it.id} className="rounded-sm border border-neutral-300 p-3" style={{ background: 'var(--neutral-50)' }}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs-ui font-bold text-neutral-600">Item {idx + 1}</span>
@@ -288,10 +329,19 @@ export function PersianaForm({
               )}
             </div>
 
-            {/* Ambiente (identifica a janela; aparece no orçamento) */}
-            <div className="mb-3">
-              <label className="form-label">Ambiente</label>
-              <input className="input" value={it.ambiente} onChange={(e) => atualizar(idx, { ambiente: e.target.value })} placeholder="Ex.: Sala, Quarto 1…" />
+            {/* Ambiente + Produto Sob Medida */}
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="form-label">Ambiente</label>
+                <input className="input" value={it.ambiente} onChange={(e) => atualizar(idx, { ambiente: e.target.value })} placeholder="Ex.: Sala, Quarto 1…" />
+              </div>
+              <div>
+                <label className="form-label">Produto Sob Medida<span className="label-required">*</span></label>
+                <select className="input" value={it.tipo} onChange={(e) => onTipoChange(idx, e.target.value as TipoPersiana)}>
+                  <option value="">Selecione…</option>
+                  {TIPOS_PERSIANA.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </div>
             </div>
 
             {/* Linha 1: Coleção (Tecido) · Cor · Acionamento */}
@@ -302,11 +352,11 @@ export function PersianaForm({
                   <div className="skeleton" style={{ height: 38 }} />
                 ) : (
                   <TecidoSearch
-                    tecidos={tecidos}
+                    tecidos={tecidosDoItem ?? []}
                     value={it.tecido_id}
                     onChange={(id) => atualizar(idx, { tecido_id: id })}
-                    disabled={!tipo}
-                    placeholder={tipo ? 'Buscar tecido…' : 'Escolha o produto'}
+                    disabled={!it.tipo}
+                    placeholder={it.tipo ? 'Buscar tecido…' : 'Escolha o produto'}
                   />
                 )}
               </div>
@@ -319,7 +369,7 @@ export function PersianaForm({
               </div>
               <div>
                 <label className="form-label">Acionamento<span className="label-required">*</span></label>
-                <select className="input" value={it.acionamento} onChange={(e) => atualizar(idx, { acionamento: e.target.value as Acionamento })}>
+                <select className="input" value={it.acionamento} onChange={(e) => onAcionamentoChange(idx, e.target.value as Acionamento)}>
                   <option value="">—</option>
                   {ACIONAMENTOS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
@@ -327,7 +377,7 @@ export function PersianaForm({
             </div>
 
             {/* Linha 2: Largura · Altura · TC · Rolamento · Base */}
-            <div className="grid grid-cols-5 gap-3">
+            <div className="grid grid-cols-5 gap-3 mb-3">
               <div>
                 <label className="form-label">Largura (m)<span className="label-required">*</span></label>
                 <MedidaInput className={erros[idx] ? 'input input-error' : 'input'}
@@ -354,6 +404,18 @@ export function PersianaForm({
                 <select className="input" value={it.base} onChange={(e) => atualizar(idx, { base: e.target.value })}>
                   <option value="">—</option>
                   {CORES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Instalação (embutida no preço) — sugerida pelo acionamento, editável */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="form-label">Instalação</label>
+                <select className="input" value={it.instalacao_id}
+                  onChange={(e) => atualizar(idx, { instalacao_id: e.target.value, instManual: true })}>
+                  <option value="">Sem instalação</option>
+                  {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
                 </select>
               </div>
             </div>
@@ -409,9 +471,10 @@ export function PersianaForm({
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
 
-        <button type="button" className="btn btn-default w-full" onClick={adicionarItem} disabled={!tipo}>
+        <button type="button" className="btn btn-default w-full" onClick={adicionarItem}>
           <FontAwesomeIcon icon={faPlus} /> Adicionar item
         </button>
 

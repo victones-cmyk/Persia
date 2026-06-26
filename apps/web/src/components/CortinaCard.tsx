@@ -11,7 +11,7 @@ import { api, ApiError } from '../lib/api';
 import { TecidoSearch } from './TecidoSearch';
 import { MedidaInput } from './MedidaInput';
 import { formatBRL, formatNum } from '../lib/formatacao';
-import type { TecidoOpcao } from '../lib/calcTypes';
+import type { TecidoOpcao, TipoInstalacao } from '../lib/calcTypes';
 import type { CortinaCardSnap } from '../lib/rascunhoLocal';
 import {
   MODELOS_CORTINA, FIXACOES_CORTINA, FIXACOES_POR_MODELO,
@@ -34,6 +34,7 @@ export interface CortinaResumo {
     acessorios: { item: string; categoria: CategoriaAcessorio | null; produto_id: string; quantidade: number; preco: number }[];
     nome_produto: string;
     ja_possui_varao?: boolean;
+    instalacao_id?: string | null;
   } | null;
 }
 
@@ -68,11 +69,12 @@ function fixacoesComuns(modelos: ModeloCortina[]): FixacaoCortina[] {
 }
 
 export function CortinaCard({
-  indice, tecidos, opcoes, inicial, restauro, onChange, onRemover, podeRemover, onPreenchidoChange, onSnapshot,
+  indice, tecidos, opcoes, instalacoes, inicial, restauro, onChange, onRemover, podeRemover, onPreenchidoChange, onSnapshot,
 }: {
   indice: number;
   tecidos: TecidoOpcao[];
   opcoes: AcessoriosCortinaResp | null;
+  instalacoes: TipoInstalacao[];
   inicial?: CortinaInicial;
   restauro?: CortinaCardSnap;
   onChange: (resumo: CortinaResumo) => void;
@@ -112,6 +114,7 @@ export function CortinaCard({
   const [qtdManual, setQtdManual] = useState<Record<string, string>>(
     restauro?.qtdManual ?? (inicial ? Object.fromEntries(inicial.acessorios.map((a) => [a.item, String(a.quantidade)])) : {}),
   );
+  const [instalacaoId, setInstalacaoId] = useState<string>(restauro?.instalacaoId ?? inicial?.instalacao_id ?? '');
 
   const [calc, setCalc] = useState<CalcCortinaCompletaResp | null>(null);
   const [calculando, setCalculando] = useState(false);
@@ -208,6 +211,10 @@ export function CortinaCard({
       total += preco * qtd;
       acessoriosPayload.push({ item: a.item, categoria: a.categoria, produto_id: sel ?? '', quantidade: qtd, preco });
     }
+    // Instalação embutida (Victor 26/06/2026): soma no total e vai no payload (o servidor recalcula).
+    const instSel = instalacoes.find((i) => i.id === instalacaoId);
+    if (instSel) total += instSel.preco;
+
     // Nome (display): "AMBIENTE, Cortina MODELO1 TECIDO1 + MODELO2 TECIDO2 LxA". O servidor recalcula.
     const amb = ambiente.trim() ? `${ambiente.trim()}, ` : '';
     const corpo = calc.camadas.map((cam, i) => {
@@ -224,10 +231,11 @@ export function CortinaCard({
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, modelo: (c.modelo || 'franzido') as ModeloCortina, franzido: franzidoDe(c) })),
         acessorios: acessoriosPayload, nome_produto: nomeProduto, ja_possui_varao: jaPossuiVarao,
+        instalacao_id: instalacaoId || null,
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, largura, altura, jaPossuiVarao, nomeBarra, JSON.stringify(camadas.map((c) => c.modelo))]);
+  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, largura, altura, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, JSON.stringify(camadas.map((c) => c.modelo))]);
 
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
 
@@ -242,9 +250,9 @@ export function CortinaCard({
     onSnapshotRef.current?.({
       ambiente, modelo: modeloPrincipal, fixacao, largura, altura, tamanhoBarra, tipoBarra, jaPossuiVarao,
       camadas: camadas.map((c) => ({ tecidoId: c.tecidoId, franzido: c.franzido, modelo: c.modelo })),
-      acessorioSel, qtdManual,
+      acessorioSel, qtdManual, instalacaoId,
     });
-  }, [ambiente, modeloPrincipal, fixacao, largura, altura, tamanhoBarra, tipoBarra, jaPossuiVarao, camadas, acessorioSel, qtdManual]);
+  }, [ambiente, modeloPrincipal, fixacao, largura, altura, tamanhoBarra, tipoBarra, jaPossuiVarao, camadas, acessorioSel, qtdManual, instalacaoId]);
 
   const setCamada = (id: string, patch: Partial<CamadaState>) =>
     setCamadas((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -305,6 +313,15 @@ export function CortinaCard({
         <input type="checkbox" checked={jaPossuiVarao} onChange={(e) => setJaPossuiVarao(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
         Cliente já possui o {nomeBarra.toLowerCase()} (não incluir no orçamento)
       </label>
+
+      {/* Instalação embutida no preço (Victor 26/06/2026): tipo por cortina */}
+      <div className="mb-3">
+        <label className="form-label">Instalação</label>
+        <select className="input" value={instalacaoId} onChange={(e) => setInstalacaoId(e.target.value)}>
+          <option value="">Sem instalação</option>
+          {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
+        </select>
+      </div>
 
       {/* Camadas (cada uma com MODELO + tecido + franzido próprios) */}
       <div className="mb-3">

@@ -243,6 +243,7 @@ export function OrcamentoDetalhe() {
                       <span>Cor: {it.cor_acessorio || '—'}</span>
                       {it.rolamento && <span>Rolamento: {it.rolamento}</span>}
                       {it.base && <span>Base: {it.base}</span>}
+                      {it.instalacao_nome && <span>Instalação: {it.instalacao_nome}</span>}
                     </div>
                   </div>
                 ))}

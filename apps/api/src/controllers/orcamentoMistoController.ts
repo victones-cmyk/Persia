@@ -69,11 +69,8 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   for (const c of cortinasEntrada) cortPrep.push(await prepararCortina(c));
   const valorCortinas = roundHalfUp(cortPrep.reduce((s, p) => s + p.valor_total, 0));
 
-  // --- Instalação por peça × nº total de peças (persianas + cortinas) ---
-  const instalacaoPorPeca = Math.max(0, Number(b.instalacao_valor) || 0);
-  const pecas = persPrep.length + cortPrep.length;
-  const valorInstalacao = roundHalfUp(instalacaoPorPeca * pecas);
-  const valorTotal = roundHalfUp(persBruto + valorCortinas + valorInstalacao);
+  // Instalação já embutida no valor de cada produto (persiana e cortina) — Victor 26/06/2026.
+  const valorTotal = roundHalfUp(persBruto + valorCortinas);
 
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
 
@@ -83,7 +80,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
     ...cortPrep.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
   ];
 
-  const entradaJson = { tipo, itens: itensEntrada, cortinas: cortinasEntrada, instalacao_valor: instalacaoPorPeca } as unknown as Prisma.InputJsonValue;
+  const entradaJson = { tipo: persPrep[0].tipo, itens: itensEntrada, cortinas: cortinasEntrada } as unknown as Prisma.InputJsonValue;
   const primeiro = persPrep[0];
   const baseDados = {
     tipo_produto: 'misto' as const,
@@ -107,12 +104,11 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
     desconto_aprovado_por: null,
   };
 
-  // itens_json: persianas (com snapshot) + cortinas (snapshot) + instalação (por peça).
+  // itens_json: persianas (com snapshot) + cortinas (snapshot). Instalação embutida nos valores.
   const itensJson = (persProdIds: string[]) =>
     ({
-      persiana: { tipo, itens: snapshotsDe(persPrep, persProdIds) },
+      persiana: { tipo: persPrep[0].tipo, itens: snapshotsDe(persPrep, persProdIds) },
       cortinas: cortPrep.map((p) => p.snapshot),
-      instalacao: instalacaoPorPeca,
     }) as unknown as Prisma.InputJsonValue;
 
   const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>
@@ -131,8 +127,6 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   try {
     const envio = await executarEnvioGc({
       itens: produtosEnvio,
-      instalacao_por_peca: instalacaoPorPeca,
-      pecas,
       gc_cliente_id: String(b.gc_cliente_id),
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
@@ -175,8 +169,6 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
   const persSnaps = itens?.persiana?.itens ?? [];
   const cortSnaps = itens?.cortinas ?? [];
   if (persSnaps.length === 0 && cortSnaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento misto sem itens para reenviar.');
-  const instalacaoPorPeca = Math.max(0, Number(itens?.instalacao) || 0);
-  const pecas = persSnaps.length + cortSnaps.length;
   const loja = await resolverLoja(orc.loja_id);
 
   const produtos: LinhaProduto[] = [
@@ -187,8 +179,6 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
   try {
     const envio = await executarEnvioGc({
       itens: produtos,
-      instalacao_por_peca: instalacaoPorPeca,
-      pecas,
       gc_cliente_id: orc.gc_cliente_id!,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,

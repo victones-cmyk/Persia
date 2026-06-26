@@ -24,6 +24,13 @@ export interface TecidoOpcao {
   preco_venda: number;
 }
 
+/** Tipo de instalação (grupo INSTALAÇÃO do GestãoClick) — embutido no preço do produto. */
+export interface TipoInstalacao {
+  id: string;
+  nome: string;
+  preco: number;
+}
+
 export interface ComponenteCalculado {
   grupo: string;
   descricao: string;
@@ -69,6 +76,7 @@ export interface CalcularResposta {
 /** Campos de UM item (janela) enviados ao backend (cálculo em lote / orçamento). */
 export interface ItemInput {
   ambiente?: string;
+  tipo?: TipoPersiana; // produto sob medida POR ITEM (Victor 26/06/2026)
   tecido_id: string;
   cor_acessorio: Cor;
   acionamento: Acionamento;
@@ -77,6 +85,7 @@ export interface ItemInput {
   tc?: number;
   rolamento?: string | null;
   base?: string | null;
+  instalacao_id?: string | null; // tipo de instalação embutido no produto
 }
 
 /** Resultado por item do cálculo em lote. */

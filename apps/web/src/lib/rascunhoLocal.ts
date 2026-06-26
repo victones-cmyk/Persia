@@ -6,6 +6,7 @@
 /** Snapshot bruto de um item (janela) de persiana — strings (estado parcial do form). */
 export interface PersianaItemSnap {
   ambiente: string;
+  tipo: string; // produto sob medida POR ITEM (Victor 26/06/2026)
   tecido_id: string;
   cor: string;
   acionamento: string;
@@ -15,9 +16,11 @@ export interface PersianaItemSnap {
   tcManual: boolean;
   rolamento: string;
   base: string;
+  instalacao_id: string;
+  instManual: boolean;
 }
 export interface PersianaSnapshot {
-  tipo: string;
+  tipo: string; // legado: tipo representativo (cada item tem o seu)
   itens: PersianaItemSnap[];
 }
 
@@ -34,10 +37,11 @@ export interface CortinaCardSnap {
   camadas: { tecidoId: string; franzido: string; modelo?: string }[];
   acessorioSel: Record<string, string>;
   qtdManual: Record<string, string>;
+  instalacaoId?: string; // tipo de instalação por cortina (Victor 26/06/2026)
 }
 export interface CortinaSnapshot {
   cortinas: CortinaCardSnap[];
-  instalacao_valor: string;
+  instalacao_valor?: string; // legado (instalação agora é por cortina)
 }
 
 export interface RascunhoLocal {
