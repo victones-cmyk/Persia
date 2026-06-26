@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnifyingGlass, faXmark } from '@fortawesome/free-solid-svg-icons';
 import type { TecidoOpcao } from '../lib/calcTypes';
+import { formatNum } from '../lib/formatacao';
 
 const MAX_VISIVEL = 100;
 
@@ -106,6 +107,8 @@ export function TecidoSearch({
       <div className="relative">
         <input
           className="input"
+          name="busca-tecido"
+          aria-label="Buscar tecido"
           disabled={disabled}
           placeholder={placeholder}
           value={termo}
@@ -162,7 +165,7 @@ export function TecidoSearch({
                 style={{ background: i === destaque ? 'var(--neutral-100)' : undefined }}
               >
                 <span className="text-neutral-800">{t.nome}</span>
-                <span className="text-xs-ui text-neutral-500"> — {t.dimensao_m.toFixed(2)}m</span>
+                <span className="text-xs-ui text-neutral-500"> — {formatNum(t.dimensao_m)} m</span>
               </button>
             ))
           )}

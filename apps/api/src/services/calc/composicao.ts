@@ -14,7 +14,8 @@
 // mapeia cada item para o grupo do GC), então acompanha mudanças de regra sem drift.
 
 import { META, type TipoPersiana } from './tipos';
-import { COND_DATA } from './componentes.data';
+import { RECEITAS_PERSIANA } from './persianaReceitas.data';
+import { familiaDoTipo } from './persianaPreco';
 import { calcularCortinaMultiCamada, type ModeloCortina } from './cortina';
 import { categoriaDoItem, GRUPOS_ACESSORIO_CORTINA, type CategoriaAcessorio } from '../gc/acessorios';
 import { SUBGRUPO_PERSIANA, GRUPO_TECIDO_CORTINA } from '../gc/tecidos';
@@ -46,42 +47,32 @@ function materialDoTipo(tipo: TipoPersiana): { id: string; nome: string } {
 }
 
 function composicaoPersiana(tipo: TipoPersiana): ComposicaoTipo {
-  const meta = META[tipo];
   const mat = materialDoTipo(tipo);
-  const ehDV = tipo === 'persiana_rolo_double_vision';
 
+  // Modelo novo (Victor): o valor da persiana = soma de TODOS os componentes + tecido,
+  // a VAREJO, com cada preço puxado do GestãoClick pelo código. Logo, todos os
+  // componentes da receita AFETAM o preço (não há mais "lista técnica" que não conta).
   const afeta_preco: ItemComposicao[] = [
     {
       rotulo: `Tecido — ${mat.nome}`,
       grupo_gc: `TECIDOS PARA PERSIANA › ${mat.nome}`,
       grupo_gc_id: mat.id,
-      obs: 'o valor do cálculo é o preço por m² do tecido escolhido',
+      obs: 'preço do tecido escolhido (a tela solar é por m²)',
     },
   ];
 
-  // Componentes fixos + base/tampa: nomes do motor (sem código GC); não afetam o preço.
-  const lista_tecnica: ItemComposicao[] = [
-    { rotulo: 'FITA DUPLA FACE' },
-    { rotulo: 'FITA COLANTE 15MM' },
-    { rotulo: 'EMBALAGEM DE PERSIANA' },
-    { rotulo: meta.maoDeObra },
-    { rotulo: 'PARAFUSO E BUCHA PARA PERSIANA' },
-    { rotulo: ehDV ? 'BASE DOUBLE VISION (cor do acessório)' : 'BASE CÔNICA (cor do acessório)' },
-    { rotulo: ehDV ? 'TAMPA DA BASE DOUBLE VISION (cor do acessório)' : 'TAMPA DA BASE CÔNICA (cor do acessório)' },
-  ];
-
-  // Componentes condicionais: variam por cor/acionamento/medida. NÃO exibimos código:
-  // os códigos da planilha são do DecorSoft (não do GestãoClick) e, na persiana, os
-  // componentes não entram no preço do cálculo (só o tecido). Mostramos só o nome.
+  // Receita representativa (com bandô; cai p/ sem bandô se não houver). Os componentes
+  // variam um pouco conforme o acionamento (com/sem bandô, motor), mas todos entram no preço.
+  const familia = familiaDoTipo(tipo);
+  const receita = RECEITAS_PERSIANA[familia]?.com_bando ?? RECEITAS_PERSIANA[familia]?.sem_bando;
   const vistos = new Set<string>();
-  for (const r of COND_DATA) {
-    if (r.tipo !== tipo) continue;
-    if (vistos.has(r.descricao)) continue;
-    vistos.add(r.descricao);
-    lista_tecnica.push({ rotulo: r.descricao, obs: 'condicional (cor/acionamento/medida)' });
+  for (const c of receita?.componentes ?? []) {
+    if (vistos.has(c.descricao)) continue;
+    vistos.add(c.descricao);
+    afeta_preco.push({ rotulo: c.descricao, obs: 'componente — preço VAREJO do GestãoClick' });
   }
 
-  return { afeta_preco, lista_tecnica };
+  return { afeta_preco, lista_tecnica: [] };
 }
 
 // --- Cortina --------------------------------------------------------------

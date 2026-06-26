@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { api } from '../lib/api';
-import { roundHalfUp } from '../lib/formatacao';
+import { roundHalfUp, formatBRL, formatNum } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
 import { MedidaInput } from './MedidaInput';
 import { ConfirmModal } from './ConfirmModal';
@@ -25,6 +25,7 @@ import {
   type ItemCalculado,
   type CalcularLoteResposta,
   type OrcamentoCalculado,
+  type ResultadoPersiana,
 } from '../lib/calcTypes';
 import type { PersianaSnapshot, PersianaItemSnap } from '../lib/rascunhoLocal';
 
@@ -124,6 +125,8 @@ export function PersianaForm({
   const [erros, setErros] = useState<Record<number, ItemErro>>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [removerIdx, setRemoverIdx] = useState<number | null>(null);
+  // Resultado calculado por item (índice → resultado), para o breakdown "Ver componentes".
+  const [resultPorIdx, setResultPorIdx] = useState<Record<number, ResultadoPersiana>>({});
 
   // Recarrega tecidos quando o tipo muda; limpa a seleção de tecido de todos os itens.
   useEffect(() => {
@@ -204,7 +207,7 @@ export function PersianaForm({
     itens: itens.map((it) => ({ t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc })),
   });
   useEffect(() => {
-    if (tipo === '' || itensComp.length === 0) { onResult(null); return; }
+    if (tipo === '' || itensComp.length === 0) { onResult(null); setResultPorIdx({}); return; }
     const comp = itensComp;
     const incompleto = temIncompleto;
     const id = setTimeout(() => { void calcularCom(comp, incompleto); }, 400);
@@ -224,14 +227,17 @@ export function PersianaForm({
 
       const novosErros: Record<number, ItemErro> = {};
       const calculados: ItemCalculado[] = [];
+      const novosResultados: Record<number, ResultadoPersiana> = {};
       for (const res of r.itens) {
         const origIdx = comp[res.index]?.idx ?? res.index;
         if (res.ok) {
           calculados.push({ input: toInput(comp[res.index].it), resultado: res.resultado, tecido: res.tecido });
+          novosResultados[origIdx] = res.resultado;
         } else {
           novosErros[origIdx] = { message: res.message, alternativos: res.alternativos };
         }
       }
+      setResultPorIdx(novosResultados);
 
       if (Object.keys(novosErros).length > 0) {
         setErros(novosErros);
@@ -363,10 +369,42 @@ export function PersianaForm({
                       <button key={a.id} type="button"
                         onClick={() => { atualizar(idx, { tecido_id: a.id }); setErros((p) => { const n = { ...p }; delete n[idx]; return n; }); }}
                         style={{ padding: '4px 10px', border: '1px solid var(--action-add)', borderRadius: 3, fontSize: 12, color: 'var(--action-add)', background: 'transparent' }}>
-                        {a.nome} ({a.dimensao_m.toFixed(2)}m)
+                        {a.nome} ({formatNum(a.dimensao_m)} m)
                       </button>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+            {/* Resultado do item: valor + breakdown por componente (motor novo) */}
+            {resultPorIdx[idx] && resultPorIdx[idx].valor_bruto != null && (
+              <div className="mt-3 pt-2 border-t border-neutral-200">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs-ui text-neutral-500">Subtotal do item</span>
+                  <span className="font-mono font-semibold tabular-nums text-sm-ui">{formatBRL(resultPorIdx[idx].valor_bruto)}</span>
+                </div>
+                {resultPorIdx[idx].itens && resultPorIdx[idx].itens!.length > 0 && (
+                  <details className="mt-1">
+                    <summary className="text-2xs-ui text-neutral-500 cursor-pointer select-none hover:text-neutral-700">Ver componentes</summary>
+                    <table className="w-full text-2xs-ui mt-1 tabular-nums">
+                      <tbody>
+                        {resultPorIdx[idx].itens!.map((c, j) => (
+                          <tr key={j} className="text-neutral-600">
+                            <td className="pr-1 py-0.5">{c.descricao}</td>
+                            <td className="px-1 py-0.5 text-right whitespace-nowrap text-neutral-400">{formatNum(c.quantidade)} × {formatBRL(c.preco)}</td>
+                            <td className="pl-1 py-0.5 text-right font-mono whitespace-nowrap">{formatBRL(c.subtotal)}</td>
+                          </tr>
+                        ))}
+                        {resultPorIdx[idx].tecido && (
+                          <tr className="text-neutral-700 font-medium border-t border-neutral-200">
+                            <td className="pr-1 py-0.5">Tecido</td>
+                            <td className="px-1 py-0.5 text-right whitespace-nowrap text-neutral-400">{formatNum(resultPorIdx[idx].tecido!.quantidade)} × {formatBRL(resultPorIdx[idx].tecido!.preco)}</td>
+                            <td className="pl-1 py-0.5 text-right font-mono whitespace-nowrap">{formatBRL(resultPorIdx[idx].tecido!.subtotal)}</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </details>
                 )}
               </div>
             )}

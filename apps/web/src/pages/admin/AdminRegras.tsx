@@ -121,6 +121,15 @@ export function AdminRegras() {
 
       {/* ---------- PERSIANA ---------- */}
       <Secao titulo="Persiana — Geral">
+        <div className="alert alert-info mb-4 text-sm-ui">
+          <span>
+            O preço da persiana passou a ser a <strong>soma de todos os componentes + tecido</strong>,
+            com os valores puxados do GestãoClick pelo código de cada componente (receitas das planilhas do Victor).
+            Apenas o <strong>TC (fator da altura)</strong> abaixo ainda afeta o cálculo. Os demais campos desta seção
+            e da seção "Por tipo" (margem, fator de venda, base de venda, dobrar altura, descontos e passos) são
+            <strong> legado</strong> e <strong>não influenciam mais o preço</strong> — as quantidades agora estão nas receitas.
+          </span>
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <Num label="TC (fator da altura)" hint="TC = altura × fator (ex.: 0,75)" value={p.tc_fator} step={0.01} ro={ro} onChange={(v) => up((r) => { r.persiana.tc_fator = v; })} />
           <Num label="Desconto fita dupla (rolo)" hint="Largura − X (m)" value={p.fita_dupla_desconto_rolo} step={0.005} ro={ro} onChange={(v) => up((r) => { r.persiana.fita_dupla_desconto_rolo = v; })} />

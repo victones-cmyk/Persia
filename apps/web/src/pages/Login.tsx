@@ -68,6 +68,7 @@ export function Login() {
             </label>
             <input
               id="email"
+              name="username"
               type="text"
               className="input"
               autoComplete="username"
@@ -87,6 +88,7 @@ export function Login() {
             </label>
             <input
               id="senha"
+              name="password"
               type="password"
               className={erro ? 'input input-error' : 'input'}
               autoComplete="current-password"

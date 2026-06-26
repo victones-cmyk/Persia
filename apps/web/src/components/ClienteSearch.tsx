@@ -73,6 +73,8 @@ export function ClienteSearch({
       <div className="relative">
         <input
           className="input"
+          name="busca-cliente"
+          aria-label="Buscar cliente"
           placeholder="Buscar cliente por nome ou documento…"
           value={termo}
           onChange={(e) => setTermo(e.target.value)}

@@ -88,7 +88,7 @@ export async function calcularPersianaController(req: Request, res: Response): P
       .map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m }));
     res.status(422).json({
       error: 'RN01_LARGURA_EXCEDIDA',
-      message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2)}m.`,
+      message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2).replace('.', ',')} m.`,
       dimensao_max: tecido.dimensao_m,
       alternativos,
     });
@@ -173,7 +173,7 @@ export async function calcularPersianaLoteController(req: Request, res: Response
         ok: false,
         index: i,
         error: 'RN01_LARGURA_EXCEDIDA',
-        message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2)}m.`,
+        message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2).replace('.', ',')} m.`,
         dimensao_max: tecido.dimensao_m,
         alternativos: await compatPara(larguraN),
       });

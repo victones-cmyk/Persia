@@ -113,7 +113,7 @@ export async function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], te
     }
     // RN-01: largura não pode exceder a largura do rolo do tecido.
     if (largura > tecido.dimensao_m) {
-      throw new AppError(400, 'RN01_LARGURA_EXCEDIDA', `O tecido ${tecido.nome} suporta até ${tecido.dimensao_m.toFixed(2)}m.`);
+      throw new AppError(400, 'RN01_LARGURA_EXCEDIDA', `O tecido ${tecido.nome} suporta até ${tecido.dimensao_m.toFixed(2).replace('.', ',')} m.`);
     }
 
     let item;
