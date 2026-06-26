@@ -15,9 +15,16 @@
 //   DATABASE_URL="postgresql://persia:persia@localhost:5433/persia_db"
 
 const path = require('node:path');
+const os = require('node:os');
 const EmbeddedPostgres = require('embedded-postgres').default || require('embedded-postgres');
 
-const DATA_DIR = path.resolve(__dirname, '../.pgdata');
+// IMPORTANTE: o data dir do cluster NÃO pode ficar dentro do OneDrive. O projeto
+// vive em ~/Library/CloudStorage/OneDrive-Personal/..., e o OneDrive "evacua"
+// arquivos frios do cluster para online-only (placeholders). Quando o Postgres
+// tenta lê-los, o fetch sob demanda estoura o timeout de I/O e o banco quebra
+// ("could not read blocks ... Operation timed out"). Por isso mantemos o cluster
+// fora do OneDrive (igual ao projeto demand-flow). Override opcional via env.
+const DATA_DIR = process.env.PERSIA_PGDATA || path.join(os.homedir(), '.persia-localdb');
 const PORT = 5433;
 const USER = 'persia';
 const PASSWORD = 'persia';
