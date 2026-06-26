@@ -2,7 +2,13 @@
 // Cálculo de persiana (Fase 3) com tecidos REAIS do GestãoClick (Fase 4).
 
 import type { Request, Response } from 'express';
-import { calcularPersiana, RN01Error } from '../services/calc/persiana';
+import { ReceitaPendenteError } from '../services/calc/persianaPreco';
+import {
+  precoPersianaItem,
+  mapasDePrecoComponentes,
+  componentesSnapshot,
+  type PrecoPersianaItem,
+} from '../services/calc/persianaPrecoGc';
 import {
   calcularCortina,
   calcularCortinaMultiCamada,
@@ -11,6 +17,7 @@ import {
   type CamadaCortina,
 } from '../services/calc/cortina';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
+import type { TecidoGc } from '../services/gc/tecidos';
 import {
   tecidosParaTipo,
   buscarTecidoGc,
@@ -31,9 +38,34 @@ export async function listarTecidos(req: Request, res: Response): Promise<void> 
   res.json({ tecidos });
 }
 
+/**
+ * Resultado no formato que o frontend já consome: mantém `valor_bruto`, `qtd_venda`,
+ * `tc`, `largura`, `altura`; `valor_bruto` agora é a SOMA dos componentes + tecido
+ * (motor novo do Victor). Inclui também o breakdown novo (`itens` com preço).
+ */
+function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: number, altura: number) {
+  const v = item.venda;
+  return {
+    largura,
+    altura,
+    dimensao: tecido.dimensao_m,
+    tc: item.tc,
+    qtd_venda: v.tecido.quantidade,
+    qtd_producao: v.tecido.quantidade,
+    preco_tecido: tecido.preco_venda,
+    valor_bruto: item.valor, // SOMA de todos os componentes + tecido (VAREJO)
+    valor: item.valor,
+    familia: v.familia,
+    variante: v.variante,
+    itens: v.itens, // breakdown novo: componente × qtd × preço
+    tecido: v.tecido,
+    componentes: componentesSnapshot(v), // compat com o formato antigo
+  };
+}
+
 /** POST /api/calcular/persiana — recebe o formulário, retorna breakdown + valor_bruto. */
 export async function calcularPersianaController(req: Request, res: Response): Promise<void> {
-  const { tipo, largura, altura, cor_acessorio, acionamento, tc, tecido_id } = req.body ?? {};
+  const { tipo, largura, altura, acionamento, tc, tecido_id } = req.body ?? {};
 
   if (!isTipoPersiana(tipo)) {
     throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
@@ -49,38 +81,40 @@ export async function calcularPersianaController(req: Request, res: Response): P
     throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido.');
   }
 
+  // RN-01: a largura não pode exceder a largura do rolo do tecido.
+  if (larguraN > tecido.dimensao_m) {
+    const alternativos = (await tecidosParaTipo(tipo))
+      .filter((t) => t.dimensao_m >= larguraN)
+      .map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m }));
+    res.status(422).json({
+      error: 'RN01_LARGURA_EXCEDIDA',
+      message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2)}m.`,
+      dimensao_max: tecido.dimensao_m,
+      alternativos,
+    });
+    return;
+  }
+
+  const { precos, custos } = await mapasDePrecoComponentes();
   try {
-    const resultado = calcularPersiana({
+    const item = precoPersianaItem({
       tipo,
+      acionamento,
       largura: larguraN,
       altura: alturaN,
-      dimensao: tecido.dimensao_m,
-      cor_acessorio,
-      acionamento,
       tc: tc !== undefined && tc !== null && tc !== '' ? Number(tc) : undefined,
       preco_tecido: tecido.preco_venda,
+      preco_tecido_custo: tecido.preco_custo,
+      precos,
+      custos,
     });
     res.json({
-      resultado,
-      tecido: {
-        id: tecido.id,
-        nome: tecido.nome,
-        dimensao_m: tecido.dimensao_m,
-        preco_venda: tecido.preco_venda,
-      },
+      resultado: montarResultado(item, tecido, larguraN, alturaN),
+      tecido: { id: tecido.id, nome: tecido.nome, dimensao_m: tecido.dimensao_m, preco_venda: tecido.preco_venda },
     });
   } catch (err) {
-    if (err instanceof RN01Error) {
-      const alternativos = (await tecidosParaTipo(tipo))
-        .filter((t) => t.dimensao_m >= larguraN)
-        .map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m }));
-      res.status(422).json({
-        error: 'RN01_LARGURA_EXCEDIDA',
-        message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2)}m.`,
-        dimensao_max: tecido.dimensao_m,
-        alternativos,
-      });
-      return;
+    if (err instanceof ReceitaPendenteError) {
+      throw new AppError(400, 'RECEITA_PENDENTE', err.message);
     }
     throw err;
   }
@@ -115,6 +149,7 @@ export async function calcularPersianaLoteController(req: Request, res: Response
     return compatCache.filter((t) => t.dimensao_m >= larguraN);
   };
 
+  const { precos, custos } = await mapasDePrecoComponentes();
   const resultados = [];
   let totalBruto = 0;
 
@@ -132,34 +167,40 @@ export async function calcularPersianaLoteController(req: Request, res: Response
       resultados.push({ ok: false, index: i, error: 'TECIDO_INVALIDO', message: 'Selecione um tecido válido.' });
       continue;
     }
+    // RN-01: largura não pode exceder a largura do rolo do tecido.
+    if (larguraN > tecido.dimensao_m) {
+      resultados.push({
+        ok: false,
+        index: i,
+        error: 'RN01_LARGURA_EXCEDIDA',
+        message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2)}m.`,
+        dimensao_max: tecido.dimensao_m,
+        alternativos: await compatPara(larguraN),
+      });
+      continue;
+    }
     try {
-      const resultado = calcularPersiana({
+      const item = precoPersianaItem({
         tipo: tipo as TipoPersiana,
+        acionamento: it.acionamento,
         largura: larguraN,
         altura: alturaN,
-        dimensao: tecido.dimensao_m,
-        cor_acessorio: it.cor_acessorio,
-        acionamento: it.acionamento,
         tc: it.tc !== undefined && it.tc !== null && it.tc !== '' ? Number(it.tc) : undefined,
         preco_tecido: tecido.preco_venda,
+        preco_tecido_custo: tecido.preco_custo,
+        precos,
+        custos,
       });
-      totalBruto = roundHalfUp(totalBruto + (resultado.valor_bruto ?? 0));
+      totalBruto = roundHalfUp(totalBruto + item.valor);
       resultados.push({
         ok: true,
         index: i,
-        resultado,
+        resultado: montarResultado(item, tecido, larguraN, alturaN),
         tecido: { id: tecido.id, nome: tecido.nome, dimensao_m: tecido.dimensao_m, preco_venda: tecido.preco_venda },
       });
     } catch (err) {
-      if (err instanceof RN01Error) {
-        resultados.push({
-          ok: false,
-          index: i,
-          error: 'RN01_LARGURA_EXCEDIDA',
-          message: `Este tecido suporta até ${tecido.dimensao_m.toFixed(2)}m.`,
-          dimensao_max: tecido.dimensao_m,
-          alternativos: await compatPara(larguraN),
-        });
+      if (err instanceof ReceitaPendenteError) {
+        resultados.push({ ok: false, index: i, error: 'RECEITA_PENDENTE', message: err.message });
       } else {
         throw err;
       }

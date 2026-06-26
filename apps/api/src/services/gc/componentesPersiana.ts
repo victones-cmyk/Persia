@@ -11,17 +11,25 @@ const GRUPOS_COMPONENTES = ['190128', '76945']; // ACESSÓRIOS DE PERSIANAS + AC
 const VAREJO_TIPO_ID = '10969';
 const TTL_MS = 5 * 60 * 1000; // 5 min — preço de componente muda raramente
 
-function precoVarejo(p: GcProduto): number {
-  const v = (p.valores ?? []).find((x) => x.tipo_id === VAREJO_TIPO_ID || x.nome_tipo === 'VAREJO');
-  const n = Number((v ? v.valor_venda : p.valor_venda) ?? 0);
+function num(v: unknown): number {
+  const n = Number(v ?? 0);
   return Number.isFinite(n) ? n : 0;
 }
 
-export interface PrecoComponente { nome: string; preco: number }
+/** Preço de VENDA e CUSTO no tier VAREJO (com fallbacks). */
+function precoCustoVarejo(p: GcProduto): { preco: number; custo: number } {
+  const v = (p.valores ?? []).find((x) => x.tipo_id === VAREJO_TIPO_ID || x.nome_tipo === 'VAREJO');
+  return {
+    preco: num(v ? v.valor_venda : p.valor_venda),
+    custo: num(v?.valor_custo),
+  };
+}
+
+export interface PrecoComponente { nome: string; preco: number; custo: number }
 
 let cache: { idx: Map<string, PrecoComponente>; expira: number } | null = null;
 
-/** Índice codigo_interno → { nome, preço VAREJO } dos componentes de persiana (cacheado). */
+/** Índice codigo_interno → { nome, preço e custo VAREJO } dos componentes de persiana (cacheado). */
 export async function indicePrecosComponentes(): Promise<Map<string, PrecoComponente>> {
   if (cache && cache.expira > Date.now()) return cache.idx;
   const idx = new Map<string, PrecoComponente>();
@@ -29,7 +37,10 @@ export async function indicePrecosComponentes(): Promise<Map<string, PrecoCompon
     const produtos = await listarProdutos({ grupo_id: grupo, ativo: 1 });
     for (const p of produtos) {
       const ci = String(p.codigo_interno ?? '').trim();
-      if (ci && !idx.has(ci)) idx.set(ci, { nome: p.nome, preco: precoVarejo(p) });
+      if (ci && !idx.has(ci)) {
+        const { preco, custo } = precoCustoVarejo(p);
+        idx.set(ci, { nome: p.nome, preco, custo });
+      }
     }
   }
   cache = { idx, expira: Date.now() + TTL_MS };

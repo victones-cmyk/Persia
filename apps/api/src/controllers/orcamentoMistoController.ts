@@ -62,7 +62,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       tecidos.set(id, t);
     }
   }
-  const { preparados: persPrep, valorBrutoTotal: persBruto } = prepararItens(tipo, itensEntrada, tecidos);
+  const { preparados: persPrep, valorBrutoTotal: persBruto } = await prepararItens(tipo, itensEntrada, tecidos);
 
   // --- Cortinas: recalcula cada uma ---
   const cortPrep: CortinaPreparada[] = [];

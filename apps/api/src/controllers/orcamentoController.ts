@@ -8,7 +8,8 @@ import type { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
-import { calcularPersiana } from '../services/calc/persiana';
+import { ReceitaPendenteError } from '../services/calc/persianaPreco';
+import { precoPersianaItem, mapasDePrecoComponentes, componentesSnapshot } from '../services/calc/persianaPrecoGc';
 import {
   isTipoPersiana,
   TIPO_LABEL,
@@ -89,11 +90,16 @@ function nomeProdutoGc(tipo: TipoPersiana, it: { ambiente?: string; tecido_nome:
   return `${amb}${TIPO_LABEL[tipo]} - ${it.tecido_nome} - ${it.largura.toFixed(2)}x${it.altura.toFixed(2)} - ${it.cor_acessorio} - ${ACIONAMENTO_LABEL[it.acionamento]}`.slice(0, 120);
 }
 
-/** Recalcula cada item no servidor. Sem desconto: o valor cheio vai ao GestãoClick. */
-export function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<string, TecidoGc>): {
+/**
+ * Recalcula cada item no servidor com o MOTOR DE COMPONENTES (preços do GestãoClick).
+ * valor = soma de todos os componentes + tecido, a VAREJO (Victor). Sem desconto: o
+ * valor cheio vai ao GestãoClick. Async porque busca os preços dos componentes no GC.
+ */
+export async function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos: Map<string, TecidoGc>): Promise<{
   preparados: ItemPreparado[];
   valorBrutoTotal: number;
-} {
+}> {
+  const { precos, custos } = await mapasDePrecoComponentes();
   const preparados: ItemPreparado[] = [];
   let valorBrutoTotal = 0;
 
@@ -105,20 +111,30 @@ export function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos:
     if (!(largura > 0) || !(altura > 0)) {
       throw new AppError(400, 'MEDIDAS_INVALIDAS', 'Largura e altura devem ser positivas em todos os itens.');
     }
+    // RN-01: largura não pode exceder a largura do rolo do tecido.
+    if (largura > tecido.dimensao_m) {
+      throw new AppError(400, 'RN01_LARGURA_EXCEDIDA', `O tecido ${tecido.nome} suporta até ${tecido.dimensao_m.toFixed(2)}m.`);
+    }
 
-    const calc = calcularPersiana({
-      tipo,
-      largura,
-      altura,
-      dimensao: tecido.dimensao_m,
-      cor_acessorio: it.cor_acessorio,
-      acionamento: it.acionamento,
-      tc: it.tc !== undefined && it.tc !== null ? Number(it.tc) : undefined,
-      preco_tecido: tecido.preco_venda,
-    });
+    let item;
+    try {
+      item = precoPersianaItem({
+        tipo,
+        acionamento: it.acionamento,
+        largura,
+        altura,
+        tc: it.tc !== undefined && it.tc !== null ? Number(it.tc) : undefined,
+        preco_tecido: tecido.preco_venda,
+        preco_tecido_custo: tecido.preco_custo,
+        precos,
+        custos,
+      });
+    } catch (err) {
+      if (err instanceof ReceitaPendenteError) throw new AppError(400, 'RECEITA_PENDENTE', err.message);
+      throw err;
+    }
 
-    const valorBruto = calc.valor_bruto!;
-    const valorCusto = roundHalfUp(calc.qtd_venda * tecido.preco_custo);
+    const valorBruto = item.valor;
     valorBrutoTotal = roundHalfUp(valorBrutoTotal + valorBruto);
 
     const ambiente = it.ambiente?.trim() || '';
@@ -129,15 +145,15 @@ export function prepararItens(tipo: TipoPersiana, itens: ItemEntrada[], tecidos:
       acionamento: it.acionamento,
       largura,
       altura,
-      tc: calc.tc,
+      tc: item.tc,
       rolamento: it.rolamento ?? null,
       base: it.base ?? null,
-      qtd_venda: calc.qtd_venda,
-      qtd_producao: calc.qtd_producao,
+      qtd_venda: item.venda.tecido.quantidade,
+      qtd_producao: item.venda.tecido.quantidade,
       valor_bruto: valorBruto,
       valor_final: valorBruto, // sem desconto: valor cheio vai ao GC
-      valor_custo: valorCusto,
-      componentes: calc.componentes,
+      valor_custo: item.valor_custo,
+      componentes: componentesSnapshot(item.venda),
       nome_produto: nomeProdutoGc(tipo, { ambiente, tecido_nome: tecido.nome, largura, altura, cor_acessorio: it.cor_acessorio, acionamento: it.acionamento }),
     });
   }
@@ -271,7 +287,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     }
   }
 
-  const { preparados, valorBrutoTotal } = prepararItens(tipo, itensEntrada, tecidos);
+  const { preparados, valorBrutoTotal } = await prepararItens(tipo, itensEntrada, tecidos);
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeiro = preparados[0];
 
