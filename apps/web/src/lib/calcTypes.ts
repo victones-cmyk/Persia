@@ -25,27 +25,40 @@ export interface TecidoOpcao {
 }
 
 export interface ComponenteCalculado {
-  grupo: 'fixo' | 'condicional' | 'base';
+  grupo: string;
   descricao: string;
   quantidade: number;
   unidade: string;
 }
 
+/** Linha do breakdown de preço (motor de componentes): qtd × preço = subtotal. */
+export interface LinhaCustoPersiana {
+  codigo_interno: string;
+  descricao: string;
+  quantidade: number;
+  preco: number;
+  subtotal: number;
+}
+
 export interface ResultadoPersiana {
-  tipo: TipoPersiana;
-  codigo_gc: string;
-  familia: 'rolo' | 'romana';
+  tipo?: TipoPersiana;
+  codigo_gc?: string;
+  familia?: 'rolo' | 'romana';
   largura: number;
   altura: number;
   dimensao: number;
-  altura_efetiva: number;
-  margem: number;
+  altura_efetiva?: number;
+  margem?: number;
   tc: number;
   qtd_producao: number;
   qtd_venda: number;
   preco_tecido: number | null;
   valor_bruto: number | null;
   componentes: ComponenteCalculado[];
+  /** Breakdown novo (motor de componentes): cada componente com preço do GestãoClick. */
+  itens?: LinhaCustoPersiana[];
+  tecido?: LinhaCustoPersiana;
+  variante?: string;
 }
 
 export interface CalcularResposta {

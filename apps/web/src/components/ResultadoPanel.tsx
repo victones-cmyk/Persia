@@ -123,9 +123,34 @@ export function ResultadoPanel({
               </span>
             </div>
             <div className="flex justify-between text-2xs-ui text-neutral-500 mt-0.5">
-              <span>{formatNum(it.resultado.largura)} × {formatNum(it.resultado.altura)} m · {formatNum(it.resultado.qtd_venda)} m²</span>
+              <span>{formatNum(it.resultado.largura)} × {formatNum(it.resultado.altura)} m</span>
               <span>TC {formatNum(it.resultado.tc)} m</span>
             </div>
+            {it.resultado.itens && it.resultado.itens.length > 0 && (
+              <details className="mt-1">
+                <summary className="text-2xs-ui text-neutral-500 cursor-pointer select-none hover:text-neutral-700">
+                  Ver componentes
+                </summary>
+                <table className="w-full text-2xs-ui mt-1 tabular-nums">
+                  <tbody>
+                    {it.resultado.itens.map((c, j) => (
+                      <tr key={j} className="text-neutral-600">
+                        <td className="pr-1 py-0.5">{c.descricao}</td>
+                        <td className="px-1 py-0.5 text-right whitespace-nowrap text-neutral-400">{formatNum(c.quantidade)} × {formatBRL(c.preco)}</td>
+                        <td className="pl-1 py-0.5 text-right font-mono whitespace-nowrap">{formatBRL(c.subtotal)}</td>
+                      </tr>
+                    ))}
+                    {it.resultado.tecido && (
+                      <tr className="text-neutral-700 font-medium border-t border-neutral-200">
+                        <td className="pr-1 py-0.5">Tecido</td>
+                        <td className="px-1 py-0.5 text-right whitespace-nowrap text-neutral-400">{formatNum(it.resultado.tecido.quantidade)} × {formatBRL(it.resultado.tecido.preco)}</td>
+                        <td className="pl-1 py-0.5 text-right font-mono whitespace-nowrap">{formatBRL(it.resultado.tecido.subtotal)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </details>
+            )}
           </div>
         )) : (
           <div className="text-xs-ui text-neutral-500 py-2">Preencha os dados ao lado — o orçamento é calculado automaticamente.</div>
