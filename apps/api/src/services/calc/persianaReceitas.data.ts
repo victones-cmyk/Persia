@@ -236,4 +236,64 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<V
       tecido_qtd: 'LARGURA*(ALTURA+0.2)*1.2',
     },
   },
+  // ROMANA — planilha CÁLCULO PERSIANA ROMANA v.2 (26/06/2026). Não tem motorizada.
+  // CAVALETES = arredonda-pra-cima(LARGURA/0.5); HASTES = faixa por altura (calculadas
+  // em persianaPreco.ts). Pontos confirmados pelo Victor (26/06/2026): cavalete TEM custo
+  // (qtd = CAVALETES); GUIA DE CORDA = HASTES×CAVALETES (a planilha trazia cavaletes²);
+  // KIT COMANDO = 1 (a célula de custo da planilha apontava por engano ao preço da mão de
+  // obra). Todos os preços vêm do GestãoClick pelo codigo_interno.
+  romana: {
+    com_bando: {
+      componentes: [
+        { codigo_interno: '3237927054197', descricao: 'EIXO SEXTAVADO ROMANA COR NATURAL', qtd: '(LARGURA-0.06)' },
+        { codigo_interno: '2080773633009', descricao: 'CABECEIRA ROMANA COR BRANCO', qtd: '(LARGURA-0.06)' },
+        { codigo_interno: '1105743980119', descricao: 'MÃO DE OBRA PERSIANA ROMANA', qtd: '1' },
+        { codigo_interno: '4599413356039', descricao: 'KIT COMANDO ROMANA COM REDUÇÃO COR BRANCO', qtd: '1' },
+        { codigo_interno: '2048469075809', descricao: 'PRESILHA AM1 GRANDE BANDO', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '2067932865600', descricao: 'SUPORTE L SEMI CORTE PARA PERSIANA CURTO', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '6797020744804', descricao: 'BANDO 4297 BRANCO', qtd: 'LARGURA' },
+        { codigo_interno: '888818154157', descricao: 'TAMPA BANDO COR BRANCO', qtd: '2' },
+        { codigo_interno: '3267387682319', descricao: 'FITA DUPLA FACE', qtd: '(LARGURA-0.02)' },
+        { codigo_interno: '9811648898558', descricao: 'BASE CONICA COR BRANCO', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '7620761718926', descricao: 'TAMPA DA BASE CONICA COR BRANCO', qtd: '2' },
+        { codigo_interno: '6268408018170', descricao: 'FITA COLANTE 25MM', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '7728566453204', descricao: 'CAVALETE ROMANA COM ENROLADOR', qtd: 'CAVALETES' },
+        { codigo_interno: '6008299138556', descricao: 'CORDA 1MM PARA ROMANA', qtd: 'CAVALETES*ALTURA' },
+        { codigo_interno: '4713039221861', descricao: 'HASTE ROMANA COR BRANCO', qtd: 'HASTES*LARGURA' },
+        { codigo_interno: '5520965910948', descricao: 'GUIA DE CORDA PERSIANA ROMANA', qtd: 'HASTES*CAVALETES' },
+        { codigo_interno: '2003520573908', descricao: 'PRESILHA AM1 PEQUENA ROMANA', qtd: 'CAVALETES' },
+        { codigo_interno: '5752963489736', descricao: 'EMBALAGEM DE PERSIANA', qtd: '1' },
+        { codigo_interno: '4366261029463', descricao: 'PENDULO COR BRANCO', qtd: '1' },
+        { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '1069063700105', descricao: 'CORRENTE BOLA 10 COR BRANCO', qtd: 'TC*2' },
+        { codigo_interno: '2039898687701', descricao: 'TAMPA DA HASTE ROMANA', qtd: 'HASTES*2' },
+      ],
+      tecido_qtd: '(ALTURA+HASTES*0.025+0.05)',
+    },
+    sem_bando: {
+      // = com_bando menos os itens de bandô (presilha grande, bandô 4297, tampa bandô).
+      componentes: [
+        { codigo_interno: '3237927054197', descricao: 'EIXO SEXTAVADO ROMANA COR NATURAL', qtd: '(LARGURA-0.06)' },
+        { codigo_interno: '2080773633009', descricao: 'CABECEIRA ROMANA COR BRANCO', qtd: '(LARGURA-0.06)' },
+        { codigo_interno: '1105743980119', descricao: 'MÃO DE OBRA PERSIANA ROMANA', qtd: '1' },
+        { codigo_interno: '4599413356039', descricao: 'KIT COMANDO ROMANA COM REDUÇÃO COR BRANCO', qtd: '1' },
+        { codigo_interno: '2067932865600', descricao: 'SUPORTE L SEMI CORTE PARA PERSIANA CURTO', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '3267387682319', descricao: 'FITA DUPLA FACE', qtd: '(LARGURA-0.02)' },
+        { codigo_interno: '9811648898558', descricao: 'BASE CONICA COR BRANCO', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '7620761718926', descricao: 'TAMPA DA BASE CONICA COR BRANCO', qtd: '2' },
+        { codigo_interno: '6268408018170', descricao: 'FITA COLANTE 25MM', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '7728566453204', descricao: 'CAVALETE ROMANA COM ENROLADOR', qtd: 'CAVALETES' },
+        { codigo_interno: '6008299138556', descricao: 'CORDA 1MM PARA ROMANA', qtd: 'CAVALETES*ALTURA' },
+        { codigo_interno: '4713039221861', descricao: 'HASTE ROMANA COR BRANCO', qtd: 'HASTES*LARGURA' },
+        { codigo_interno: '5520965910948', descricao: 'GUIA DE CORDA PERSIANA ROMANA', qtd: 'HASTES*CAVALETES' },
+        { codigo_interno: '2003520573908', descricao: 'PRESILHA AM1 PEQUENA ROMANA', qtd: 'CAVALETES' },
+        { codigo_interno: '5752963489736', descricao: 'EMBALAGEM DE PERSIANA', qtd: '1' },
+        { codigo_interno: '4366261029463', descricao: 'PENDULO COR BRANCO', qtd: '1' },
+        { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '1069063700105', descricao: 'CORRENTE BOLA 10 COR BRANCO', qtd: 'TC*2' },
+        { codigo_interno: '2039898687701', descricao: 'TAMPA DA HASTE ROMANA', qtd: 'HASTES*2' },
+      ],
+      tecido_qtd: '(ALTURA+HASTES*0.025+0.05)',
+    },
+  },
 };
