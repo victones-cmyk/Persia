@@ -66,6 +66,18 @@ describe('calcularPrecoPersiana — MOTORIZADA (planilhas v.2, 26/06/2026)', () 
     const r = calcularPrecoPersiana({ tipo: 'persiana_rolo_double_vision', acionamento: 'motorizado_sem_bando', largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 100, precos });
     expect(r.valor).toBe(1349.50);
   });
+  // Tela solar motor = mesma receita do rolo motor, só o tecido por m² (Victor 26/06/2026).
+  it('tela_solar motor com bandô = R$ 1182.44 (tecido por m²)', () => {
+    const precos = new Map<string, number>([['8546431434033',31.54],['9001976',640],['4650887475882',25],['2048469075809',6.9],['2067932865600',7],['6797020744804',57],['888818154157',7],['3267387682319',1.1],['9811648898558',19.5],['7620761718926',0.9],['6268408018170',3],['2041749670169',38.98],['3211432323511',4]]);
+    const r = calcularPrecoPersiana({ tipo: 'persiana_rolo_screen', acionamento: 'motorizado_com_bando', largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 35, precos });
+    expect(r.valor).toBe(1182.44);
+    expect(r.tecido.quantidade).toBe(4.8); // m²
+  });
+  it('tela_solar motor sem bandô = R$ 1101.24', () => {
+    const precos = new Map<string, number>([['8546431434033',31.54],['4650887475882',25],['2009102737805',1.1],['2067932865600',7],['9964894129649',24],['888818154157',7],['3267387682319',1.1],['9811648898558',19.5],['7620761718926',0.9],['6268408018170',3],['9001976',640],['2041749670169',38.98],['5752963489736',8],['3211432323511',4]]);
+    const r = calcularPrecoPersiana({ tipo: 'persiana_rolo_screen', acionamento: 'motorizado_sem_bando', largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 35, precos });
+    expect(r.valor).toBe(1101.24);
+  });
 });
 
 describe('calcularPrecoPersiana — ROMANA (planilha v.2, sem motor)', () => {
@@ -91,8 +103,5 @@ describe('calcularPrecoPersiana — receitas pendentes', () => {
   const precos = new Map<string, number>();
   it('romana motorizada lança ReceitaPendenteError (não existe — Victor)', () => {
     expect(() => calcularPrecoPersiana({ tipo: 'persiana_romana_blackout', acionamento: 'motorizado_com_bando', largura: 2, altura: 2, tc: 1.5, preco_tecido: 100, precos })).toThrow(ReceitaPendenteError);
-  });
-  it('tela_solar motorizada lança ReceitaPendenteError (ainda não veio do Victor)', () => {
-    expect(() => calcularPrecoPersiana({ tipo: 'persiana_rolo_screen', acionamento: 'motorizado_com_bando', largura: 2, altura: 2, tc: 1.5, preco_tecido: 100, precos })).toThrow(ReceitaPendenteError);
   });
 });
