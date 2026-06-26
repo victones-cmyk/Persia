@@ -545,3 +545,44 @@ Victor aprovou a v.5 (1.1–1.7 OK, exceto observações abaixo). Implementado n
 
 ### Pendente do Victor / próximo grande passo
 - **2.2 + 1.6 — Persiana: TODOS os itens compõem o preço final** (Victor: "o preço de todos os itens compõe o preço final da persiana"). Hoje a persiana cobra só o tecido (RN-03). Para implementar é preciso **puxar o preço de cada componente do GestãoClick** e somar. Complicação: os códigos dos componentes são do **DecorSoft** e o GC **não** filtra produto por código (testado). Próximo passo: **levantar os grupos de componentes de persiana no GC** (casar por nome/código) OU Victor indicar o mapeamento componente→produto GC. Isso também responde o 1.6 ("de onde puxa os valores").
+
+## 19. NOVO MOTOR DE PREÇO DA PERSIANA por componentes (26/06/2026) — EM PRODUÇÃO
+
+Resolve o §18 (pendência 2.2/1.6). Mudança de paradigma confirmada pelo Victor (v.5.1): o preço da persiana **deixa de ser só o tecido (RN-03 antiga)** e passa a ser a **soma de TODOS os componentes + tecido, tudo a VAREJO**, com **cada preço puxado do GestãoClick pelo `codigo_interno`**. O "código" que o Victor referencia = `codigo_interno` do produto no GC (os produtos do GC **não têm** campo `codigo` preenchido; só `id`, `codigo_interno`, `codigo_barra`). Os componentes vivem nos grupos **190128 (ACESSÓRIOS DE PERSIANAS)** + **76945 (ACESSÓRIOS)** — verificado: todos os códigos das planilhas existem lá com o preço VAREJO.
+
+Receitas extraídas das **planilhas do Victor** (CÁLCULO PERSIANA ROLO/DOUBLE VISION/TELA SOLAR/ROMANA, várias versões) das **células reais** (a coluna de fórmula-texto tinha typos; usamos a fórmula calculada). Arquivos novos:
+- `services/calc/persianaReceitas.data.ts` — `RECEITAS_PERSIANA[familia][variante]` = { componentes [{codigo_interno, descricao, qtd}], tecido_qtd }. Famílias: `rolo_bk_translucido`, `double_vision`, `tela_solar`, `romana`, `romana_tela_solar`. Variantes: `com_bando`, `sem_bando`, `motor_com_bando`, `motor_sem_bando`.
+- `services/calc/formula.ts` → `evalQuantidade()` — avaliador de fórmula de QUANTIDADE que **respeita parênteses** (o `evalFormula` antigo os removia) e aceita as variáveis `LARGURA`, `ALTURA`, `TC` e, na romana, `CAVALETES` e `HASTES` (derivadas). Sem eval/Function (parser recursivo).
+- `services/gc/componentesPersiana.ts` — `indicePrecosComponentes()` = Map `codigo_interno → {nome, preco, custo}` (VAREJO, grupos 190128+76945, cache 5 min).
+- `services/calc/persianaPreco.ts` — `calcularPrecoPersiana()` (função PURA, preços injetados): soma `qtd×preço` de cada componente + tecido, `roundHalfUp` no fim. `familiaDoTipo()`, `varianteDoAcionamento()` (com_bando / com_barra→sem_bando / motorizado_*→motor_*), `cavaletesRomana()`=ceil(largura/0,5), `hastesRomana()`=faixa por altura. `ReceitaPendenteError` p/ combinação sem receita.
+
+**Cobertura (94 testes batendo os totais das planilhas):** manual com/sem bandô de rolo/double_vision/tela_solar/romana; motor (KIT MOTOR) de rolo/double_vision/tela_solar. **Romana NÃO tem motorizada** (Victor). **Tela solar** (rolo e romana) = mesma receita do tipo "cheio", só o **tecido por m²** (`LARGURA*(ALTURA+0.2)*1.2` no rolo; `(ALTURA+HASTES*0.025+0.05)*LARGURA` na romana).
+
+**Regras da Romana confirmadas pelo Victor (26/06):** CAVALETE tem custo (qtd = nº de cavaletes); GUIA DE CORDA = HASTES×CAVALETES (a planilha trazia cavaletes² por engano); KIT COMANDO conta 1 ao preço próprio (a célula apontava ao preço da mão de obra). No ROLO sem bandô motor: TUBO acompanha a largura e KIT INSTALAÇÃO = 1 (eram typos da planilha). Item TAMPA DA HASTE adicionado na v.2.
+
+**Divergências GC × planilha (engine usa o GC, por regra do Victor "tudo puxa do GC"):** MÃO DE OBRA 50 (GC) vs 25 (planilha); FITA DUPLA FACE 2,20 vs 1,10; CABECEIRA ROMANA 18,60 vs 9,60. Não são bug do índice (sem duplicata no GC) — o Victor pode ter errado o cadastro; vale o GC. Isso significa que o **total da calculadora não bate exatamente com o total da planilha** nesses casos — esperado.
+
+## 20. Ligação do motor novo na aplicação + breakdown na tela (26/06/2026) — EM PRODUÇÃO
+
+Bridge `services/calc/persianaPrecoGc.ts`: `mapasDePrecoComponentes()` (venda+custo do GC), `precoPersianaItem()` (roda o motor 2×: venda e custo → `valor` e `valor_custo`), `tcPadrao()` (RN-04: altura×`tc_fator`), `componentesSnapshot()` (breakdown no formato compat). Pontos religados:
+- `calcularController` — `POST /calcular/persiana` e `/persiana/lote` usam o motor novo; mantêm as chaves que o front lia (`valor_bruto`, `qtd_venda`, `tc`) — `valor_bruto` agora = soma componentes+tecido — e incluem o breakdown novo em `resultado.itens[]` (com `preco`/`subtotal`) + `resultado.tecido`. RN-01 preservada (largura > largura do rolo).
+- `orcamentoController.prepararItens` virou **async** e recalcula pelo motor novo (idem `orcamentoMistoController`, com `await`). `valor_custo` do produto no GC = soma dos custos dos componentes + tecido.
+- `componentesPersiana` passou a trazer `custo` (tier VAREJO) p/ o `valor_custo`.
+- **Frontend** `PersianaForm`: cada item mostra "Subtotal do item" + **"Ver componentes"** (tabela componente × qtd × preço + tecido). O `ResultadoPanel.tsx` era **código morto** (não era renderizado) — removido. `composicao.ts` (Admin → Regras) reescrito: na persiana **todos os componentes da receita afetam o preço** (acabou a "lista técnica" que não conta).
+- **Motor antigo `services/calc/persiana.ts`** (cálculo por m²) segue no repo só para testes/composição — **fora do caminho de preço**.
+
+**Verificado e2e com GC real:** Rolo Blackout 2,00×1,80 (LAGUNA CINZA BK) = **R$ 678,43**; Romana Blackout idem = **R$ 738,85** (conferido na tela em produção, com o breakdown). Teste de escrita reversível: produto sintético criado e **apagado** (o GC não apaga ORÇAMENTO por API; PRODUTO sim). Deploy: commits `79c6ef7`, `e484e54`, `311b920`, `554d0b4`, `8971eeb`, `0a28efa`, `084eb14`, `75beb15` (push em 26/06). ⚠ O preço da persiana **muda vs. o modelo antigo (m²)** — avisado o Victor.
+
+**Infra (dev):** o cluster Postgres LOCAL saiu de dentro do OneDrive (`apps/api/scripts/local-db.cjs` → `~/.persia-localdb`, override `PERSIA_PGDATA`). O OneDrive evacuava arquivos do cluster p/ online-only e o Postgres estourava timeout de I/O no restart. Não afeta produção (Railway). Commit `01d3212`.
+
+## 21. QA loop (Chrome real, produção) + correções (26/06/2026) — EM PRODUÇÃO
+
+Rodado o `stratos-chrome-qa-loop` em produção (read-only; nenhum orçamento enviado ao GC). Achados em `qa-findings/2026-06-26/`. Nenhum P0/P1 (preço correto, sem erro de console, segurança OK: cookie de sessão httpOnly, sem segredo no DOM/localStorage). Corrigido (commit `0608751`):
+- **F001 (P2):** o breakdown "Ver componentes" tinha sido posto no `ResultadoPanel` (morto) → movido para o `PersianaForm` (visível de fato).
+- **F002 (P2):** Admin → Regras de Cálculo ganhou aviso de que os parâmetros antigos da persiana (margem, fator de venda, descontos, etc.) são **legado** e não afetam mais o preço (só o TC); tooltip de composição reescrito (todos os componentes entram no preço).
+- **F003 (P3):** mensagem RN-01 e chips em pt-BR ("2,00 m" em vez de "2.00m").
+- **F004 (P3):** a11y — `name`/`aria-label` no login e nas buscas de tecido/cliente (resta a11y dos inputs internos do Admin → Regras).
+Tudo revalidado no navegador em produção após o deploy.
+
+### Homologação v.7 (26/06/2026)
+Gerado `Persia_Roteiro_de_Testes_Homologacao_Victor_v.7.docx` (papel timbrado Stratos) — bateria ampla (~50 casos): persianas (todos os tipos×acionamentos + múltiplas janelas), cortinas (4 modelos, fixações, 1/2 tecidos, emenda, acessórios, envio), orçamento misto, conferências (breakdown/RN-01/TC), fluxos (rascunho/editar/reenviar/cancelar/lista/detalhe), admin e revalidação do v.6. Valores de referência nos casos 2.1 (R$ 678,43) e 2.10 (R$ 738,85).
