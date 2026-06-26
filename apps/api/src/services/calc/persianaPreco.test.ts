@@ -51,10 +51,10 @@ describe('calcularPrecoPersiana — MOTORIZADA (planilhas v.2, 26/06/2026)', () 
     const r = calcularPrecoPersiana({ tipo: 'persiana_rolo_blackout', acionamento: 'motorizado_com_bando', largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 132.54, precos });
     expect(r.valor).toBe(1279.52);
   });
-  it('rolo motor sem bandô = R$ 1206.40 (TUBO qtd 1 + KIT INSTALAÇÃO qtd 2 — fiel à planilha)', () => {
+  it('rolo motor sem bandô = R$ 1198.32 (TUBO acompanha largura + KIT INSTALAÇÃO qtd 1 — engano da planilha corrigido pelo Victor 26/06/2026)', () => {
     const precos = new Map<string, number>([['8546431434033',31.54],['4650887475882',25],['2009102737805',1.1],['2067932865600',7],['9964894129649',24],['888818154157',7],['3267387682319',1.1],['9811648898558',19.5],['7620761718926',0.9],['6268408018170',3],['9001976',640],['2041749670169',38.98],['5752963489736',8],['3211432323511',4]]);
     const r = calcularPrecoPersiana({ tipo: 'persiana_rolo_blackout', acionamento: 'motorizado_sem_bando', largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 132.54, precos });
-    expect(r.valor).toBe(1206.40);
+    expect(r.valor).toBe(1198.32);
   });
   it('double_vision motor com bandô = R$ 1443.23', () => {
     const precos = new Map<string, number>([['8546431434033',31.54],['9001976',640],['4650887475882',25],['2048469075809',6.9],['2067932865600',7],['6797020744804',57],['888818154157',7],['1813672176852',11.6],['8312865953308',12.6],['306266001647',3.2],['6268408018170',3],['4301597855822',1.6],['2041749670169',38.98],['5752963489736',8],['3211432323511',4]]);

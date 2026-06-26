@@ -80,10 +80,10 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<V
     },
     motor_sem_bando: {
       componentes: [
-        // NOTA: na planilha v.2 (aba ROLO SEM BANDO E MOTOR) o TUBO 41MM está com
-        // quantidade FIXA 1 (=E5), diferente de todas as outras abas motor onde escala
-        // com a largura (LARGURA-0.02). Mantido fiel à planilha; confirmar com o Victor.
-        { codigo_interno: '8546431434033', descricao: 'TUBO 41MM COR NATURAL', qtd: '1' },
+        // A planilha v.2 trazia TUBO 41MM qtd 1 e KIT INSTALAÇÃO MOTOR qtd 2 nesta aba;
+        // o Victor confirmou (26/06/2026) que foram enganos — TUBO acompanha a largura e
+        // o kit é um só, como nas demais abas motor.
+        { codigo_interno: '8546431434033', descricao: 'TUBO 41MM COR NATURAL', qtd: '(LARGURA-0.02)' },
         { codigo_interno: '4650887475882', descricao: 'MÃO DE OBRA PERSIANA ROLO', qtd: '1' },
         { codigo_interno: '2009102737805', descricao: 'PRESILHA AM1 40MM BARRA', qtd: 'LARGURA/0.5' },
         { codigo_interno: '2067932865600', descricao: 'SUPORTE L SEMI CORTE PARA PERSIANA CURTO', qtd: 'LARGURA/0.5' },
@@ -94,8 +94,7 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<V
         { codigo_interno: '7620761718926', descricao: 'TAMPA DA BASE CONICA COR BRANCO', qtd: '2' },
         { codigo_interno: '6268408018170', descricao: 'FITA COLANTE 25MM', qtd: '(LARGURA-0.025)' },
         { codigo_interno: '9001976', descricao: 'MOTOR ROLLER BLIND UDM35W-9NM/33RPM WI-FI 110V 60HZ', qtd: '1' },
-        // NOTA: KIT INSTALAÇÃO MOTOR aqui sai qtd 2 (=E16*2); nas outras abas motor é 1. Confirmar com o Victor.
-        { codigo_interno: '2041749670169', descricao: 'KIT INSTALAÇÃO MOTOR', qtd: '2' },
+        { codigo_interno: '2041749670169', descricao: 'KIT INSTALAÇÃO MOTOR', qtd: '1' },
         { codigo_interno: '5752963489736', descricao: 'EMBALAGEM DE PERSIANA', qtd: '1' },
         { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
       ],
