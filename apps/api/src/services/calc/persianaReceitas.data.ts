@@ -5,11 +5,14 @@
 // Preço final da persiana = soma de tudo, a VAREJO (Victor v.5.1). Romana: pendente.
 
 export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana';
-export type VariantePersiana = 'com_bando' | 'sem_bando';
+// Manual (KIT COMANDO) e motorizada (KIT MOTOR), cada uma com/sem bandô.
+// Motor cobre rolo_bk_translucido e double_vision (planilhas v.2, 26/06/2026).
+// tela_solar e romana motor: pendentes do Victor.
+export type VariantePersiana = 'com_bando' | 'sem_bando' | 'motor_com_bando' | 'motor_sem_bando';
 export interface ComponenteReceita { codigo_interno: string; descricao: string; qtd: string; }
 export interface ReceitaPersiana { componentes: ComponenteReceita[]; tecido_qtd: string; }
 
-export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Record<VariantePersiana, ReceitaPersiana>>> = {
+export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<VariantePersiana, ReceitaPersiana>>>> = {
   rolo_bk_translucido: {
     com_bando: {
       componentes: [
@@ -52,6 +55,49 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Record<VarianteP
         { codigo_interno: '4366261029463', descricao: 'PENDULO COR BRANCO', qtd: '1' },
         { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
         { codigo_interno: '1069063700105', descricao: 'CORRENTE BOLA 10 COR BRANCO', qtd: 'TC*2' },
+      ],
+      tecido_qtd: '(ALTURA+0.2)',
+    },
+    // MOTORIZADA (KIT MOTOR): troca KIT COMANDO 38MM → TUBO 41MM + MOTOR + KIT INSTALAÇÃO,
+    // e remove a cadeia manual (corrente/freio/emenda/pêndulo). Planilha ROLO v.2 (26/06/2026).
+    motor_com_bando: {
+      componentes: [
+        { codigo_interno: '8546431434033', descricao: 'TUBO 41MM COR NATURAL', qtd: '(LARGURA-0.02)' },
+        { codigo_interno: '9001976', descricao: 'MOTOR ROLLER BLIND UDM35W-9NM/33RPM WI-FI 110V 60HZ', qtd: '1' },
+        { codigo_interno: '4650887475882', descricao: 'MÃO DE OBRA PERSIANA ROLO', qtd: '1' },
+        { codigo_interno: '2048469075809', descricao: 'PRESILHA AM1 GRANDE BANDO', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '2067932865600', descricao: 'SUPORTE L SEMI CORTE PARA PERSIANA CURTO', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '6797020744804', descricao: 'BANDO 4297 BRANCO', qtd: 'LARGURA' },
+        { codigo_interno: '888818154157', descricao: 'TAMPA BANDO COR BRANCO', qtd: '2' },
+        { codigo_interno: '3267387682319', descricao: 'FITA DUPLA FACE', qtd: '(LARGURA-0.02)' },
+        { codigo_interno: '9811648898558', descricao: 'BASE CONICA COR BRANCO', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '7620761718926', descricao: 'TAMPA DA BASE CONICA COR BRANCO', qtd: '2' },
+        { codigo_interno: '6268408018170', descricao: 'FITA COLANTE 25MM', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '2041749670169', descricao: 'KIT INSTALAÇÃO MOTOR', qtd: '1' },
+        { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
+      ],
+      tecido_qtd: '(ALTURA+0.2)',
+    },
+    motor_sem_bando: {
+      componentes: [
+        // NOTA: na planilha v.2 (aba ROLO SEM BANDO E MOTOR) o TUBO 41MM está com
+        // quantidade FIXA 1 (=E5), diferente de todas as outras abas motor onde escala
+        // com a largura (LARGURA-0.02). Mantido fiel à planilha; confirmar com o Victor.
+        { codigo_interno: '8546431434033', descricao: 'TUBO 41MM COR NATURAL', qtd: '1' },
+        { codigo_interno: '4650887475882', descricao: 'MÃO DE OBRA PERSIANA ROLO', qtd: '1' },
+        { codigo_interno: '2009102737805', descricao: 'PRESILHA AM1 40MM BARRA', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '2067932865600', descricao: 'SUPORTE L SEMI CORTE PARA PERSIANA CURTO', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '9964894129649', descricao: 'BARRA ESTABILIZADORA ROLO COR BRANCO', qtd: 'LARGURA' },
+        { codigo_interno: '888818154157', descricao: 'TAMPA BANDO COR BRANCO', qtd: '2' },
+        { codigo_interno: '3267387682319', descricao: 'FITA DUPLA FACE', qtd: '(LARGURA-0.02)' },
+        { codigo_interno: '9811648898558', descricao: 'BASE CONICA COR BRANCO', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '7620761718926', descricao: 'TAMPA DA BASE CONICA COR BRANCO', qtd: '2' },
+        { codigo_interno: '6268408018170', descricao: 'FITA COLANTE 25MM', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '9001976', descricao: 'MOTOR ROLLER BLIND UDM35W-9NM/33RPM WI-FI 110V 60HZ', qtd: '1' },
+        // NOTA: KIT INSTALAÇÃO MOTOR aqui sai qtd 2 (=E16*2); nas outras abas motor é 1. Confirmar com o Victor.
+        { codigo_interno: '2041749670169', descricao: 'KIT INSTALAÇÃO MOTOR', qtd: '2' },
+        { codigo_interno: '5752963489736', descricao: 'EMBALAGEM DE PERSIANA', qtd: '1' },
+        { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
       ],
       tecido_qtd: '(ALTURA+0.2)',
     },
@@ -100,6 +146,47 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Record<VarianteP
         { codigo_interno: '4366261029463', descricao: 'PENDULO COR BRANCO', qtd: '1' },
         { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
         { codigo_interno: '1069063700105', descricao: 'CORRENTE BOLA 10 COR BRANCO', qtd: 'TC*2' },
+      ],
+      tecido_qtd: '(ALTURA+0.2)*2',
+    },
+    // MOTORIZADA (KIT MOTOR). Planilha DOUBLE VISION v.2 (26/06/2026).
+    motor_com_bando: {
+      componentes: [
+        { codigo_interno: '8546431434033', descricao: 'TUBO 41MM COR NATURAL', qtd: '(LARGURA-0.02)' },
+        { codigo_interno: '9001976', descricao: 'MOTOR ROLLER BLIND UDM35W-9NM/33RPM WI-FI 110V 60HZ', qtd: '1' },
+        { codigo_interno: '4650887475882', descricao: 'MÃO DE OBRA PERSIANA ROLO', qtd: '1' },
+        { codigo_interno: '2048469075809', descricao: 'PRESILHA AM1 GRANDE BANDO', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '2067932865600', descricao: 'SUPORTE L SEMI CORTE PARA PERSIANA CURTO', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '6797020744804', descricao: 'BANDO 4297 BRANCO', qtd: 'LARGURA' },
+        { codigo_interno: '888818154157', descricao: 'TAMPA BANDO COR BRANCO', qtd: '2' },
+        { codigo_interno: '1813672176852', descricao: 'BASE DOUBLE VISION COR BEGE', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '8312865953308', descricao: 'EIXO DOUBLE VISION COR BRANCO', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '306266001647', descricao: 'TAMPA DA BASE DOUBLE VISION COR BRANCO', qtd: '2' },
+        { codigo_interno: '6268408018170', descricao: 'FITA COLANTE 25MM', qtd: '(LARGURA-0.025)*2' },
+        { codigo_interno: '4301597855822', descricao: 'MACARRÃO 4.0MM', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '2041749670169', descricao: 'KIT INSTALAÇÃO MOTOR', qtd: '1' },
+        { codigo_interno: '5752963489736', descricao: 'EMBALAGEM DE PERSIANA', qtd: '1' },
+        { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
+      ],
+      tecido_qtd: '(ALTURA+0.2)*2',
+    },
+    motor_sem_bando: {
+      componentes: [
+        { codigo_interno: '8546431434033', descricao: 'TUBO 41MM COR NATURAL', qtd: '(LARGURA-0.02)' },
+        { codigo_interno: '9001976', descricao: 'MOTOR ROLLER BLIND UDM35W-9NM/33RPM WI-FI 110V 60HZ', qtd: '1' },
+        { codigo_interno: '4650887475882', descricao: 'MÃO DE OBRA PERSIANA ROLO', qtd: '1' },
+        { codigo_interno: '2009102737805', descricao: 'PRESILHA AM1 40MM BARRA', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '2067932865600', descricao: 'SUPORTE L SEMI CORTE PARA PERSIANA CURTO', qtd: 'LARGURA/0.5' },
+        { codigo_interno: '9964894129649', descricao: 'BARRA ESTABILIZADORA ROLO COR BRANCO', qtd: 'LARGURA' },
+        { codigo_interno: '888818154157', descricao: 'TAMPA BANDO COR BRANCO', qtd: '2' },
+        { codigo_interno: '4301597855822', descricao: 'MACARRÃO 4.0MM', qtd: '(LARGURA-0.02)' },
+        { codigo_interno: '6493825583669', descricao: 'BASE DOUBLE VISION COR BRANCO', qtd: '(LARGURA-0.02)' },
+        { codigo_interno: '8312865953308', descricao: 'EIXO DOUBLE VISION COR BRANCO', qtd: '(LARGURA-0.025)' },
+        { codigo_interno: '7620761718926', descricao: 'TAMPA DA BASE CONICA COR BRANCO', qtd: '2' },
+        { codigo_interno: '6268408018170', descricao: 'FITA COLANTE 25MM', qtd: '(LARGURA-0.025)*2' },
+        { codigo_interno: '2041749670169', descricao: 'KIT INSTALAÇÃO MOTOR', qtd: '1' },
+        { codigo_interno: '5752963489736', descricao: 'EMBALAGEM DE PERSIANA', qtd: '1' },
+        { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
       ],
       tecido_qtd: '(ALTURA+0.2)*2',
     },

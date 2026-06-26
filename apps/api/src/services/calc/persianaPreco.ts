@@ -17,9 +17,14 @@ export function familiaDoTipo(tipo: TipoPersiana): FamiliaPersiana {
   return 'rolo_bk_translucido'; // blackout + translúcido (mesma receita)
 }
 
-/** Variante (com/sem bandô) a partir do acionamento. */
+/** Variante (manual/motor × com/sem bandô) a partir do acionamento. */
 export function varianteDoAcionamento(ac: Acionamento): VariantePersiana {
-  return ac === 'com_bando' || ac === 'motorizado_com_bando' ? 'com_bando' : 'sem_bando';
+  switch (ac) {
+    case 'com_bando': return 'com_bando';
+    case 'motorizado_com_bando': return 'motor_com_bando';
+    case 'motorizado_sem_bando': return 'motor_sem_bando';
+    default: return 'sem_bando'; // com_barra
+  }
 }
 
 export function ehAcionamentoMotorizado(ac: Acionamento): boolean {
@@ -67,11 +72,14 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
   if (familia === 'romana') {
     throw new ReceitaPendenteError('A regra de cálculo da persiana romana ainda não foi cadastrada.');
   }
-  if (ehAcionamentoMotorizado(e.acionamento)) {
-    throw new ReceitaPendenteError('A regra de cálculo da persiana motorizada ainda não foi cadastrada.');
-  }
   const receita = RECEITAS_PERSIANA[familia]?.[variante];
-  if (!receita) throw new ReceitaPendenteError(`Receita não encontrada: ${familia}/${variante}.`);
+  if (!receita) {
+    // tela_solar motorizada ainda não veio nas planilhas do Victor.
+    const msg = ehAcionamentoMotorizado(e.acionamento)
+      ? `A persiana motorizada de ${familia} ainda não foi cadastrada.`
+      : `Receita não encontrada: ${familia}/${variante}.`;
+    throw new ReceitaPendenteError(msg);
+  }
 
   const vars = { largura: e.largura, altura: e.altura, tc: e.tc };
   let total = 0;
