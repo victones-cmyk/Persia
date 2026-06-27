@@ -49,7 +49,8 @@ export interface RascunhoLocal {
   cliente: { id: string; nome: string } | null;
   persiana?: PersianaSnapshot;
   cortina?: CortinaSnapshot;
-  instalacao_valor?: string; // instalação por peça (tela única/misto)
+  instalacao_valor?: string; // legado (instalação agora é por item)
+  rt_pct?: string; // RT do arquiteto (% do orçamento todo)
   ts: number;
 }
 

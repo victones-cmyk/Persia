@@ -193,6 +193,8 @@ export function OrcamentoDetalhe() {
       : Number((orc.entrada_json as { instalacao_valor?: number } | null)?.instalacao_valor) || 0;
   const pecas = persianaItens.length + cortinaSnaps.length;
   const instalacaoTotal = Math.round(instalacaoPorPeca * pecas * 100) / 100;
+  // RT do arquiteto (Victor 27/06/2026): % embutido no valor; mostramos só o percentual.
+  const rtPct = Number((orc.entrada_json as { rt_pct?: number } | null)?.rt_pct) || 0;
 
   return (
     <div>
@@ -273,6 +275,8 @@ export function OrcamentoDetalhe() {
             {orc.rolamento && <Linha label="Rolamento" valor={orc.rolamento} />}
           </>
         )}
+
+        {rtPct > 0 && <Linha label="RT do arquiteto" valor={`${rtPct}% (embutido no valor)`} />}
 
         <div className="flex justify-between py-3 mt-3" style={{ borderTop: '2px solid #ced4da' }}>
           <span className="font-bold">Valor total</span>

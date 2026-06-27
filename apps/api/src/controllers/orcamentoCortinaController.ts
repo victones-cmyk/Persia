@@ -12,6 +12,7 @@ import { calcularCortinaMultiCamada, type CamadaCortina } from '../services/calc
 import { buscarTecidoCortinaGc } from '../services/gc/tecidos';
 import { buscarAcessorioGc, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo, type CategoriaAcessorio } from '../services/gc/acessorios';
 import { indiceInstalacoes } from '../services/gc/instalacao';
+import { valorComRt } from '../services/calc/rtCalc';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
 import { roundHalfUp } from '../services/calc/arredondamento';
@@ -192,7 +193,16 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   const preparadas: CortinaPreparada[] = [];
   for (const c of cortinasEntrada) preparadas.push(await prepararCortina(c));
 
-  // Instalação já está embutida no valor de cada cortina (Victor 26/06/2026).
+  // RT do arquiteto (Victor 27/06/2026): gross-up embutido no valor de venda de cada
+  // cortina (custo inalterado). % vale para o orçamento todo.
+  const rtPct = Math.max(0, Math.min(99, Number(b.rt_pct) || 0));
+  if (rtPct > 0) {
+    for (const p of preparadas) {
+      p.valor_total = valorComRt(p.valor_total, rtPct);
+      (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
+    }
+  }
+  // Instalação e RT já estão embutidos no valor de cada cortina.
   const valorTotal = roundHalfUp(preparadas.reduce((s, p) => s + p.valor_total, 0));
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeira = preparadas[0];
@@ -207,7 +217,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     tipo_produto: 'cortina' as const,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
     loja_id: editarOrc?.loja_id ?? loja.id,
-    entrada_json: { cortinas: cortinasEntrada } as unknown as Prisma.InputJsonValue,
+    entrada_json: { cortinas: cortinasEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
     tecido_codigo_gc: primeira.tecido_id,

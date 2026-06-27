@@ -27,7 +27,7 @@ import {
   type PersianaSnapshot, type CortinaSnapshot, type RascunhoLocal,
 } from '../lib/rascunhoLocal';
 
-const ESTADO_CORTINA_VAZIO: CortinaOrcamentoEstado = { total: 0, todasCompletas: false, temCortinas: false, count: 0, cortinas: [] };
+const ESTADO_CORTINA_VAZIO: CortinaOrcamentoEstado = { total: 0, todasCompletas: false, temCortinas: false, count: 0, cortinas: [], totais: [] };
 
 type Secao = 'persiana' | 'cortina';
 
@@ -72,6 +72,7 @@ export function OrcamentoNovo() {
   });
   const incluiPersiana = ordem.includes('persiana');
   const incluiCortina = ordem.includes('cortina');
+  const [rt, setRt] = useState(rascunhoLocal?.rt_pct ?? '');
   const [recuperado] = useState(!!rascunhoLocal);
 
   // Edição de rascunho (do banco).
@@ -91,6 +92,7 @@ export function OrcamentoNovo() {
   const persianaSujoRef = useRef(false);
   const cortinaSujoRef = useRef(false);
   const clienteRef = useRef(cliente); clienteRef.current = cliente;
+  const rtRef = useRef(rt); rtRef.current = rt;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const agendarSalvar = useCallback(() => {
@@ -104,6 +106,7 @@ export function OrcamentoNovo() {
         cliente: cli ? { id: cli.id, nome: cli.nome } : null,
         persiana: persianaSnapRef.current ?? undefined,
         cortina: cortinaSnapRef.current ?? undefined,
+        rt_pct: rtRef.current,
         ts: Date.now(),
       };
       salvarRascunhoLocal(r);
@@ -148,9 +151,10 @@ export function OrcamentoNovo() {
           navigate(`/orcamentos/${editarId}`); return;
         }
         setCliente(o.gc_cliente_id ? { id: o.gc_cliente_id, nome: o.nome_cliente, tipo_pessoa: '', documento: null } : null);
-        const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[] } | null;
+        const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[]; rt_pct?: number } | null;
         const ehMisto = o.tipo_produto === 'misto';
         const ehCortina = o.tipo_produto === 'cortina';
+        setRt(entrada?.rt_pct ? String(entrada.rt_pct) : '');
 
         const novaOrdem: Secao[] = [];
         if (ehMisto) {
@@ -196,7 +200,16 @@ export function OrcamentoNovo() {
 
   const algoPreenchido = temPersiana || temCortina;
   // Instalação já está embutida no valor de cada item (Victor 26/06/2026).
-  const totalGeral = roundHalfUp(persianaTotal + cortinaTotal);
+  // RT do arquiteto (Victor 27/06/2026): gross-up por item (10% do valor final), pra
+  // que a soma bata com o GestãoClick (servidor aplica o mesmo fator em cada produto).
+  const rtNum = Math.max(0, Math.min(99, Number(rt) || 0));
+  const fatorRtUi = rtNum > 0 ? 1 / (1 - rtNum / 100) : 1;
+  const grossItem = (v: number) => roundHalfUp(v * fatorRtUi);
+  const persianaTotalRt = resultado ? roundHalfUp(resultado.itens.reduce((s, it) => s + grossItem(it.resultado.valor_bruto ?? 0), 0)) : 0;
+  const cortinaTotalRt = roundHalfUp((cortinaEstado.totais ?? []).reduce((s, t) => s + grossItem(t), 0));
+  const totalBase = roundHalfUp(persianaTotal + cortinaTotal);
+  const totalGeral = roundHalfUp(persianaTotalRt + cortinaTotalRt);
+  const rtValor = roundHalfUp(totalGeral - totalBase);
 
   // Persiana (se houver) precisa estar completa; cortina (se houver) idem.
   const persianaOk = !temPersiana || !persianaIncompleto;
@@ -222,6 +235,7 @@ export function OrcamentoNovo() {
     if (apenasSalvar) setSalvando(true); else setEnviando(true);
     try {
       const comum = {
+        rt_pct: rtNum,
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(editarId ? { editar_id: editarId } : {}),
@@ -374,7 +388,15 @@ export function OrcamentoNovo() {
               </div>
             </div>
 
-            <div className="helper-text mb-3">A instalação é escolhida em cada item e já entra no valor.</div>
+            <div className="helper-text mb-2">A instalação é escolhida em cada item e já entra no valor.</div>
+
+            <label className="form-label" htmlFor="rt-misto">RT do arquiteto (%)</label>
+            <input id="rt-misto" type="number" className="input" min={0} max={99} step={1} placeholder="0"
+              value={rt} onChange={(e) => { setRt(e.target.value); agendarSalvar(); }} />
+            {rtNum > 0 && algoPreenchido && (
+              <div className="helper-text mb-3">RT ({rtNum}%): <strong>{formatBRL(rtValor)}</strong> embutido no total</div>
+            )}
+            {!(rtNum > 0 && algoPreenchido) && <div className="mb-3" />}
 
             <label className="form-label" htmlFor="total-misto">Valor total</label>
             <input id="total-misto" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}

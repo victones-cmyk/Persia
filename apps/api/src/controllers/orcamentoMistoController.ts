@@ -18,6 +18,7 @@ import {
   type ItemEntrada, type ItemSnapshot,
 } from './orcamentoController';
 import { prepararCortina, type CortinaEntrada, type CortinaPreparada } from './orcamentoCortinaController';
+import { valorComRt, componenteRt } from '../services/calc/rtCalc';
 
 interface SessaoUsuario { id: string; perfil: 'vendedor' | 'admin'; gc_usuario_id: string | null; loja_id: string | null }
 
@@ -62,15 +63,30 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       tecidos.set(id, t);
     }
   }
-  const { preparados: persPrep, valorBrutoTotal: persBruto } = await prepararItens(tipo, itensEntrada, tecidos);
+  const { preparados: persPrep } = await prepararItens(tipo, itensEntrada, tecidos);
 
   // --- Cortinas: recalcula cada uma ---
   const cortPrep: CortinaPreparada[] = [];
   for (const c of cortinasEntrada) cortPrep.push(await prepararCortina(c));
-  const valorCortinas = roundHalfUp(cortPrep.reduce((s, p) => s + p.valor_total, 0));
 
-  // Instalação já embutida no valor de cada produto (persiana e cortina) — Victor 26/06/2026.
-  const valorTotal = roundHalfUp(persBruto + valorCortinas);
+  // RT do arquiteto (Victor 27/06/2026): gross-up embutido no valor de venda de cada
+  // produto (persiana e cortina); custo inalterado; % vale para o orçamento todo.
+  const rtPct = Math.max(0, Math.min(99, Number(b.rt_pct) || 0));
+  if (rtPct > 0) {
+    for (const p of persPrep) {
+      p.valor_final = valorComRt(p.valor_final, rtPct);
+      p.componentes = [...p.componentes, componenteRt(rtPct)];
+    }
+    for (const p of cortPrep) {
+      p.valor_total = valorComRt(p.valor_total, rtPct);
+      (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
+    }
+  }
+  const valorCortinas = roundHalfUp(cortPrep.reduce((s, p) => s + p.valor_total, 0));
+  const persTotal = roundHalfUp(persPrep.reduce((s, p) => s + p.valor_final, 0));
+
+  // Instalação e RT já embutidos no valor de cada produto.
+  const valorTotal = roundHalfUp(persTotal + valorCortinas);
 
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
 
@@ -80,7 +96,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
     ...cortPrep.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
   ];
 
-  const entradaJson = { tipo: persPrep[0].tipo, itens: itensEntrada, cortinas: cortinasEntrada } as unknown as Prisma.InputJsonValue;
+  const entradaJson = { tipo: persPrep[0].tipo, itens: itensEntrada, cortinas: cortinasEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue;
   const primeiro = persPrep[0];
   const baseDados = {
     tipo_produto: 'misto' as const,

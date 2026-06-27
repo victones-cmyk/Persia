@@ -19,11 +19,12 @@ import type { CortinaSnapshot, CortinaCardSnap } from '../lib/rascunhoLocal';
 
 /** Estado reportado ao pai quando embutido (tela de orçamento misto). */
 export interface CortinaOrcamentoEstado {
-  total: number; // soma das cortinas (SEM instalação)
+  total: number; // soma das cortinas (instalação embutida)
   todasCompletas: boolean;
   temCortinas: boolean; // ao menos uma cortina com payload
   count: number; // nº de cortinas com payload
   cortinas: NonNullable<CortinaResumo['payload']>[];
+  totais: number[]; // total de cada cortina (alinhado com `cortinas`) — p/ aplicar RT por item
 }
 
 export function CortinaOrcamento({
@@ -118,8 +119,10 @@ export function CortinaOrcamento({
   const onEstadoRef = useRef(onEstado); onEstadoRef.current = onEstado;
   useEffect(() => {
     if (!embutido) return;
-    const cortinas = ids.map((id) => resumos[id]?.payload).filter(Boolean) as NonNullable<CortinaResumo['payload']>[];
-    onEstadoRef.current?.({ total: totalCortinas, todasCompletas, temCortinas: cortinas.length > 0, count: cortinas.length, cortinas });
+    const comPayload = ids.filter((id) => resumos[id]?.payload);
+    const cortinas = comPayload.map((id) => resumos[id]!.payload!) as NonNullable<CortinaResumo['payload']>[];
+    const totais = comPayload.map((id) => resumos[id]!.total);
+    onEstadoRef.current?.({ total: totalCortinas, todasCompletas, temCortinas: cortinas.length > 0, count: cortinas.length, cortinas, totais });
   }, [embutido, totalCortinas, todasCompletas, ids, resumos]);
 
   const gcOffline = gcStatus !== 'online';

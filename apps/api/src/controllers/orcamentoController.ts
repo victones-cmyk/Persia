@@ -11,6 +11,7 @@ import { env } from '../config/env';
 import { ReceitaPendenteError } from '../services/calc/persianaPreco';
 import { precoPersianaItem, mapasDePrecoComponentes, componentesSnapshot } from '../services/calc/persianaPrecoGc';
 import { componenteInstalacao } from '../services/calc/instalacaoCalc';
+import { valorComRt, componenteRt } from '../services/calc/rtCalc';
 import { indiceInstalacoes } from '../services/gc/instalacao';
 import {
   isTipoPersiana,
@@ -307,13 +308,23 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   }
 
   const { preparados, valorBrutoTotal } = await prepararItens(tipoFallback, itensEntrada, tecidos);
+  // RT do arquiteto (Victor 27/06/2026): gross-up embutido no valor de venda de cada
+  // produto (custo inalterado). % vale para o orçamento todo.
+  const rtPct = Math.max(0, Math.min(99, Number(b.rt_pct) || 0));
+  if (rtPct > 0) {
+    for (const p of preparados) {
+      const base = p.valor_final;
+      p.valor_final = valorComRt(base, rtPct);
+      p.componentes = [...p.componentes, componenteRt(rtPct)];
+    }
+  }
   const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
   const primeiro = preparados[0];
-  // Instalação já está embutida no valor de cada item (Victor 26/06/2026) — sem linha à parte.
-  const valorTotal = valorBrutoTotal;
+  // Instalação e RT já estão embutidos no valor de cada item — sem linha à parte.
+  const valorTotal = roundHalfUp(preparados.reduce((s, p) => s + p.valor_final, 0));
 
-  // Entrada bruta — permite reabrir o rascunho na calculadora (tipo + instalação por item).
-  const entradaJson = { tipo: primeiro.tipo, itens: itensEntrada } as unknown as Prisma.InputJsonValue;
+  // Entrada bruta — permite reabrir o rascunho na calculadora (tipo + instalação + RT).
+  const entradaJson = { tipo: primeiro.tipo, itens: itensEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue;
 
   // Grava: cria novo ou atualiza o rascunho em edição (mesmo registro).
   const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>
