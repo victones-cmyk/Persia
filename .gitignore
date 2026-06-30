@@ -46,3 +46,5 @@ coverage/
 # Documentos de referência do projeto (binários grandes — não versionar)
 *.xlsx
 *.png
+*.docx
+*.mp4
