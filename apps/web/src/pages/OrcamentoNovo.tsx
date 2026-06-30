@@ -85,6 +85,7 @@ export function OrcamentoNovo() {
   const [salvando, setSalvando] = useState(false);
   const [salvarAberto, setSalvarAberto] = useState(false);
   const [enviarAberto, setEnviarAberto] = useState(false);
+  const [cancelarAberto, setCancelarAberto] = useState(false);
 
   // Refs para o autosave (sem re-render a cada tecla).
   const persianaSnapRef = useRef<PersianaSnapshot | null>(rascunhoLocal?.persiana ?? null);
@@ -273,6 +274,15 @@ export function OrcamentoNovo() {
     window.location.assign('/orcamentos/novo');
   }
 
+  // Cancelar (intencional): descarta o que está sendo preenchido e sai. Em edição,
+  // volta para o detalhe (o rascunho salvo permanece intacto).
+  function doCancelar() {
+    limparRascunhoLocal();
+    persianaSnapRef.current = null; cortinaSnapRef.current = null;
+    persianaSujoRef.current = false; cortinaSujoRef.current = false; setDirty(false);
+    navigate(editarId ? `/orcamentos/${editarId}` : '/orcamentos');
+  }
+
   useEffect(() => () => { setDirty(false); if (timerRef.current) clearTimeout(timerRef.current); }, [setDirty]);
 
   if (editarId && carregandoEdicao) {
@@ -422,6 +432,9 @@ export function OrcamentoNovo() {
               <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={() => setSalvarAberto(true)} title="Salva sem enviar ao GestãoClick">
                 {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
               </button>
+              <button type="button" className="btn btn-danger flex-1" disabled={ocupado} aria-disabled={ocupado} onClick={() => { if (algoPreenchido) setCancelarAberto(true); else doCancelar(); }} title="Descarta o que está preenchido e sai">
+                <FontAwesomeIcon icon={faXmark} /> Cancelar
+              </button>
               <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={() => { if (podeEnviar) setEnviarAberto(true); }}>
                 {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar</>}
               </button>
@@ -447,6 +460,16 @@ export function OrcamentoNovo() {
         cancelarLabel="Voltar"
         onConfirmar={() => { setEnviarAberto(false); void doSubmit(false); }}
         onCancelar={() => setEnviarAberto(false)}
+      />
+      <ConfirmModal
+        aberto={cancelarAberto}
+        titulo="Cancelar orçamento"
+        mensagem="Deseja cancelar este orçamento? As informações preenchidas serão descartadas e você voltará para a lista."
+        confirmarLabel="Sim, cancelar"
+        cancelarLabel="Voltar"
+        perigo
+        onConfirmar={() => { setCancelarAberto(false); doCancelar(); }}
+        onCancelar={() => setCancelarAberto(false)}
       />
     </div>
   );
