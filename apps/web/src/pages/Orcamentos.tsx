@@ -273,5 +273,5 @@ export function Orcamentos() {
 }
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{children}</th>;
+  return <th style={{ padding: 12, textAlign: 'center', fontWeight: 700 }}>{children}</th>;
 }
