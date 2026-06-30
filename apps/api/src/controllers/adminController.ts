@@ -79,6 +79,7 @@ export async function listarFuncionariosGc(_req: Request, res: Response): Promis
 }
 
 export async function criarUsuario(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
   const b = req.body ?? {};
   if (!b.nome || !b.email || !b.senha) {
     throw new AppError(400, 'CAMPOS_OBRIGATORIOS', 'Nome, email e senha são obrigatórios.');
@@ -103,10 +104,15 @@ export async function criarUsuario(req: Request, res: Response): Promise<void> {
     },
     select: USUARIO_SELECT,
   });
+  // Auditoria: criação de usuário (sem senha/hash no detalhe).
+  await prisma.logAcao.create({
+    data: { usuario_id: sessao.id, acao: 'usuario_criado', detalhe: { usuario_alvo_id: usuario.id, email: usuario.email, perfil: usuario.perfil } },
+  });
   res.status(201).json({ usuario });
 }
 
 export async function editarUsuario(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
   const id = String(req.params.id);
   const b = req.body ?? {};
   const existe = await prisma.usuario.findUnique({ where: { id } });
@@ -137,6 +143,20 @@ export async function editarUsuario(req: Request, res: Response): Promise<void> 
   }
 
   const usuario = await prisma.usuario.update({ where: { id }, data, select: USUARIO_SELECT });
+  // Auditoria: edição de usuário; sinaliza ações sensíveis (mudança de perfil, reset de senha).
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: sessao.id,
+      acao: 'usuario_editado',
+      detalhe: {
+        usuario_alvo_id: id,
+        perfil_alterado: data.perfil !== undefined && data.perfil !== existe.perfil ? String(data.perfil) : undefined,
+        senha_resetada: data.senha_hash !== undefined ? true : undefined,
+        login_alterado: data.email !== undefined ? true : undefined,
+        ativo: b.ativo !== undefined ? Boolean(b.ativo) : undefined,
+      },
+    },
+  });
   res.json({ usuario });
 }
 
@@ -147,6 +167,9 @@ export async function desativarUsuario(req: Request, res: Response): Promise<voi
   const existe = await prisma.usuario.findUnique({ where: { id } });
   if (!existe) throw new AppError(404, 'NAO_ENCONTRADO', 'Usuário não encontrado.');
   const usuario = await prisma.usuario.update({ where: { id }, data: { ativo: false }, select: USUARIO_SELECT });
+  await prisma.logAcao.create({
+    data: { usuario_id: sessao.id, acao: 'usuario_desativado', detalhe: { usuario_alvo_id: id } },
+  });
   res.json({ usuario });
 }
 
@@ -169,6 +192,10 @@ export async function excluirUsuario(req: Request, res: Response): Promise<void>
     prisma.logAcao.deleteMany({ where: { usuario_id: id } }),
     prisma.usuario.delete({ where: { id } }),
   ]);
+  // Auditoria: registrada pelo admin (ator), após excluir o alvo (e seus próprios logs).
+  await prisma.logAcao.create({
+    data: { usuario_id: sessao.id, acao: 'usuario_excluido', detalhe: { usuario_alvo_id: id, email: existe.email } },
+  });
   res.json({ ok: true });
 }
 

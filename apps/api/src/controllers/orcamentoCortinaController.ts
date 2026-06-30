@@ -184,8 +184,10 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   let editarOrc = null as Awaited<ReturnType<typeof prisma.orcamento.findUnique>>;
   if (editarId) {
     editarOrc = await prisma.orcamento.findUnique({ where: { id: editarId } });
-    if (!editarOrc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
-    if (sessao.perfil !== 'admin' && editarOrc.usuario_id !== sessao.id) throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão para editar este orçamento.');
+    // Resposta uniforme p/ inexistente e sem-permissão: não revela orçamento alheio.
+    if (!editarOrc || (sessao.perfil !== 'admin' && editarOrc.usuario_id !== sessao.id)) {
+      throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+    }
     if (editarOrc.status !== 'rascunho') throw new AppError(400, 'NAO_EDITAVEL', 'Só é possível editar orçamentos em rascunho.');
   }
 
@@ -289,22 +291,45 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
 
 interface CortinaSnapshot { nome_produto?: string; valor_total?: number; valor_custo?: number }
 
-/** Reenvia um rascunho/erro de CORTINA ao GestãoClick (replay do snapshot salvo). */
+/**
+ * Recalcula as cortinas a partir da ENTRADA salva (`entrada_json`), sem confiar nos
+ * valores do snapshot. Usado no reenvio para garantir que o valor enviado ao
+ * GestãoClick venha sempre de recálculo no servidor com preços atuais (RN-10).
+ */
+export async function recalcularCortinasDeEntrada(cortinas: CortinaEntrada[], rtPct: number): Promise<CortinaPreparada[]> {
+  const preparadas: CortinaPreparada[] = [];
+  for (const c of cortinas) preparadas.push(await prepararCortina(c));
+  const pct = Math.max(0, Math.min(99, Number(rtPct) || 0));
+  if (pct > 0) {
+    for (const p of preparadas) {
+      p.valor_total = valorComRt(p.valor_total, pct);
+      (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
+    }
+  }
+  return preparadas;
+}
+
+/** Reenvia um rascunho/erro de CORTINA ao GestãoClick (recalcula da entrada; snapshot é fallback legado). */
 export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
-  const itens = orc.itens_json as { cortinas?: CortinaSnapshot[] } | null;
-  const cortinas = itens?.cortinas ?? [];
-  if (cortinas.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento de cortina sem itens para enviar.');
+  const entrada = orc.entrada_json as { cortinas?: CortinaEntrada[]; rt_pct?: number } | null;
+  const recalcular = Array.isArray(entrada?.cortinas) && entrada!.cortinas!.length > 0;
+  const snapCortinas = (orc.itens_json as { cortinas?: CortinaSnapshot[] } | null)?.cortinas ?? [];
+  if (!recalcular && snapCortinas.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento de cortina sem itens para enviar.');
   const loja = await resolverLoja(orc.loja_id);
 
   const criados: string[] = [];
   try {
+    // Recalcula a partir da entrada (preferido); cai para o snapshot só em registros legados.
+    const preparadas = recalcular ? await recalcularCortinasDeEntrada(entrada!.cortinas!, Number(entrada!.rt_pct) || 0) : null;
+    const fonte = preparadas
+      ? preparadas.map((p) => ({ nome_produto: p.nome_produto, valor_total: p.valor_total, valor_custo: p.valor_custo }))
+      : snapCortinas.map((c) => ({ nome_produto: String(c.nome_produto ?? 'Cortina'), valor_total: Number(c.valor_total) || 0, valor_custo: Number(c.valor_custo) || 0 }));
+
     const linhas: LinhaProdutoGc[] = [];
-    for (const c of cortinas) {
-      const valor = Number(c.valor_total) || 0;
-      const custo = Number(c.valor_custo) || 0;
-      const produto = await criarProduto({ nome: String(c.nome_produto ?? 'Cortina'), valor_custo: custo, valor_venda: valor });
+    for (const f of fonte) {
+      const produto = await criarProduto({ nome: f.nome_produto, valor_custo: f.valor_custo, valor_venda: f.valor_total });
       criados.push(produto.gc_produto_id);
-      linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: valor, valor_custo: custo });
+      linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: f.valor_total, valor_custo: f.valor_custo });
     }
     // Instalação embutida no valor de cada cortina (Victor 26/06/2026) — sem serviço.
     const gcOrc = await gcCriarOrcamento({
@@ -316,6 +341,7 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
       vendedor_id: sessao.gc_usuario_id,
       loja_id: loja.gc_loja_id,
     });
+    const novoTotal = preparadas ? roundHalfUp(preparadas.reduce((s, p) => s + p.valor_total, 0)) : null;
     const atualizado = await prisma.orcamento.update({
       where: { id: orc.id },
       data: {
@@ -326,6 +352,8 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
         payload_gc_enviado: gcOrc.payload as Prisma.InputJsonValue,
         resposta_gc: gcOrc.resposta as Prisma.InputJsonValue,
         erro_gc: null,
+        ...(preparadas ? { itens_json: { cortinas: preparadas.map((p) => p.snapshot) } as unknown as Prisma.InputJsonValue } : {}),
+        ...(novoTotal !== null ? { valor_bruto: novoTotal, valor_final: novoTotal } : {}),
       },
     });
     await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_reenviado', detalhe: { orcamento_id: orc.id, tipo: 'cortina' } } });

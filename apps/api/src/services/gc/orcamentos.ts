@@ -94,5 +94,5 @@ export async function criarOrcamento(o: NovoOrcamentoGc): Promise<ResultadoOrcam
 }
 
 export async function deletarOrcamento(id: string): Promise<void> {
-  await gcRequest({ method: 'DELETE', url: `/api/orcamentos/${id}` });
+  await gcRequest({ method: 'DELETE', url: `/api/orcamentos/${encodeURIComponent(id)}` });
 }

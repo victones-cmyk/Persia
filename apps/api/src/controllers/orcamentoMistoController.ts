@@ -14,10 +14,10 @@ import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
 import {
-  prepararItens, executarEnvioGc, snapshotsDe,
+  prepararItens, executarEnvioGc, snapshotsDe, recalcularPersianasDeEntrada,
   type ItemEntrada, type ItemSnapshot,
 } from './orcamentoController';
-import { prepararCortina, type CortinaEntrada, type CortinaPreparada } from './orcamentoCortinaController';
+import { prepararCortina, recalcularCortinasDeEntrada, type CortinaEntrada, type CortinaPreparada } from './orcamentoCortinaController';
 import { valorComRt, componenteRt } from '../services/calc/rtCalc';
 
 interface SessaoUsuario { id: string; perfil: 'vendedor' | 'admin'; gc_usuario_id: string | null; loja_id: string | null }
@@ -48,8 +48,10 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   let editarOrc = null as Orcamento | null;
   if (editarId) {
     editarOrc = await prisma.orcamento.findUnique({ where: { id: editarId } });
-    if (!editarOrc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
-    if (sessao.perfil !== 'admin' && editarOrc.usuario_id !== sessao.id) throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão para editar este orçamento.');
+    // Resposta uniforme p/ inexistente e sem-permissão: não revela orçamento alheio.
+    if (!editarOrc || (sessao.perfil !== 'admin' && editarOrc.usuario_id !== sessao.id)) {
+      throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+    }
     if (editarOrc.status !== 'rascunho') throw new AppError(400, 'NAO_EDITAVEL', 'Só é possível editar orçamentos em rascunho.');
   }
 
@@ -179,16 +181,34 @@ interface MistoItensJson { persiana?: { tipo: string; itens: ItemSnapshot[] }; c
 
 /** Reenvia um orçamento MISTO ao GestãoClick (replay do snapshot salvo). */
 export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
+  const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; cortinas?: CortinaEntrada[]; rt_pct?: number } | null;
+  const recalcular = !!(entrada && ((entrada.itens?.length ?? 0) > 0 || (entrada.cortinas?.length ?? 0) > 0));
+
+  // Snapshot (fallback legado, quando não há entrada_json).
   const itens = orc.itens_json as unknown as MistoItensJson | null;
   const persSnaps = itens?.persiana?.itens ?? [];
   const cortSnaps = itens?.cortinas ?? [];
-  if (persSnaps.length === 0 && cortSnaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento misto sem itens para reenviar.');
+  if (!recalcular && persSnaps.length === 0 && cortSnaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento misto sem itens para reenviar.');
   const loja = await resolverLoja(orc.loja_id);
 
-  const produtos: LinhaProduto[] = [
-    ...persSnaps.map((s) => ({ nome_produto: s.nome_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) })),
-    ...cortSnaps.map((s) => ({ nome_produto: String(s.nome_produto ?? 'Cortina'), valor_final: Number(s.valor_total) || 0, valor_custo: Number(s.valor_custo) || 0 })),
-  ];
+  // Recalcula a partir da entrada (preferido); garante valor derivado do servidor (RN-10).
+  const rtPct = Number(entrada?.rt_pct) || 0;
+  const persPrep = recalcular && (entrada!.itens?.length ?? 0) > 0
+    ? await recalcularPersianasDeEntrada(isTipoPersiana(entrada!.tipo ?? '') ? (entrada!.tipo as TipoPersiana) : null, entrada!.itens!, rtPct)
+    : null;
+  const cortPrep = recalcular && (entrada!.cortinas?.length ?? 0) > 0
+    ? await recalcularCortinasDeEntrada(entrada!.cortinas!, rtPct)
+    : null;
+
+  const produtos: LinhaProduto[] = recalcular
+    ? [
+        ...(persPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+        ...(cortPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
+      ]
+    : [
+        ...persSnaps.map((s) => ({ nome_produto: s.nome_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) })),
+        ...cortSnaps.map((s) => ({ nome_produto: String(s.nome_produto ?? 'Cortina'), valor_final: Number(s.valor_total) || 0, valor_custo: Number(s.valor_custo) || 0 })),
+      ];
 
   try {
     const envio = await executarEnvioGc({
@@ -197,6 +217,14 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
     });
+    // Quando recalculado, regrava o snapshot e o total a partir do que foi enviado.
+    const persProdIds = envio.gc_produto_ids.slice(0, (persPrep ?? []).length);
+    const novoItensJson = recalcular
+      ? ({ persiana: { tipo: persPrep?.[0]?.tipo ?? entrada?.tipo, itens: snapshotsDe(persPrep ?? [], persProdIds) }, cortinas: (cortPrep ?? []).map((p) => p.snapshot) } as unknown as Prisma.InputJsonValue)
+      : undefined;
+    const novoTotal = recalcular
+      ? roundHalfUp([...(persPrep ?? []).map((p) => p.valor_final), ...(cortPrep ?? []).map((p) => p.valor_total)].reduce((s, v) => s + v, 0))
+      : null;
     const atualizado = await prisma.orcamento.update({
       where: { id: orc.id },
       data: {
@@ -207,6 +235,8 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
         resposta_gc: envio.resposta as Prisma.InputJsonValue,
         erro_gc: null,
+        ...(novoItensJson ? { itens_json: novoItensJson } : {}),
+        ...(novoTotal !== null ? { valor_bruto: novoTotal, valor_final: novoTotal } : {}),
       },
     });
     await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_reenviado', detalhe: { orcamento_id: orc.id, tipo: 'misto' } } });

@@ -48,5 +48,5 @@ export async function criarProduto(p: NovoProdutoGc): Promise<ResultadoProduto> 
 }
 
 export async function deletarProduto(id: string): Promise<void> {
-  await gcRequest({ method: 'DELETE', url: `/api/produtos/${id}` });
+  await gcRequest({ method: 'DELETE', url: `/api/produtos/${encodeURIComponent(id)}` });
 }

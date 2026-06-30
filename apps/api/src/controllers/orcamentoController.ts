@@ -291,8 +291,10 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   let editarOrc = null as Awaited<ReturnType<typeof prisma.orcamento.findUnique>>;
   if (editarId) {
     editarOrc = await prisma.orcamento.findUnique({ where: { id: editarId } });
-    if (!editarOrc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
-    if (sessao.perfil !== 'admin' && editarOrc.usuario_id !== sessao.id) throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão para editar este orçamento.');
+    // Resposta uniforme p/ inexistente e sem-permissão: não revela orçamento alheio.
+    if (!editarOrc || (sessao.perfil !== 'admin' && editarOrc.usuario_id !== sessao.id)) {
+      throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+    }
     if (editarOrc.status !== 'rascunho') throw new AppError(400, 'NAO_EDITAVEL', 'Só é possível editar orçamentos em rascunho.');
   }
 
@@ -417,17 +419,46 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   }
 }
 
-/** Reconstrói os itens preparados a partir do snapshot salvo (para reenvio). */
+/** Reconstrói os itens preparados a partir do snapshot salvo (fallback de reenvio legado). */
 function preparadosDoSnapshot(snaps: ItemSnapshot[]): { nome_produto: string; valor_final: number; valor_custo: number }[] {
   return snaps.map((s) => ({ nome_produto: s.nome_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) }));
+}
+
+/**
+ * Recalcula os itens de persiana a partir da ENTRADA salva (`entrada_json`), sem
+ * confiar nos valores do snapshot. Usado no reenvio para garantir que o que vai ao
+ * GestãoClick é sempre derivado de recálculo no servidor com preços atuais (RN-10).
+ */
+export async function recalcularPersianasDeEntrada(
+  tipoFallback: TipoPersiana | null,
+  itens: ItemEntrada[],
+  rtPct: number,
+): Promise<ItemPreparado[]> {
+  const tecidos = new Map<string, TecidoGc>();
+  for (const it of itens) {
+    const id = String(it.tecido_id);
+    if (!tecidos.has(id)) {
+      const t = await buscarTecidoGc(id);
+      if (!t) throw new AppError(400, 'TECIDO_INVALIDO', 'Tecido não encontrado ao recalcular o orçamento.');
+      tecidos.set(id, t);
+    }
+  }
+  const { preparados } = await prepararItens(tipoFallback, itens, tecidos);
+  const pct = Math.max(0, Math.min(99, Number(rtPct) || 0));
+  if (pct > 0) {
+    for (const p of preparados) {
+      p.valor_final = valorComRt(p.valor_final, pct);
+      p.componentes = [...p.componentes, componenteRt(pct)];
+    }
+  }
+  return preparados;
 }
 
 export async function reenviarOrcamento(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
   const orc = await prisma.orcamento.findUnique({ where: { id: String(req.params.id) } });
-  if (!orc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
-  if (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id) {
-    throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão para reenviar este orçamento.');
+  if (!orc || (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id)) {
+    throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
   }
   if (!orc.gc_cliente_id) throw new AppError(400, 'SEM_CLIENTE', 'Orçamento sem cliente vinculado.');
 
@@ -435,20 +466,37 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
   if (orc.tipo_produto === 'cortina') { await reenviarCortina(orc, sessao, res); return; }
   if (orc.tipo_produto === 'misto') { await reenviarMisto(orc, sessao, res); return; }
 
+  const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; rt_pct?: number } | null;
+  const recalcular = Array.isArray(entrada?.itens) && entrada!.itens!.length > 0;
   const snaps = (orc.itens_json as unknown as ItemSnapshot[] | null) ?? [];
-  if (snaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento sem itens para reenviar.');
+  if (!recalcular && snaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento sem itens para reenviar.');
 
   const loja = await resolverLoja(orc.loja_id);
 
   try {
+    // Recalcula a partir da entrada (preferido); cai para o snapshot só em registros legados.
+    const preparados = recalcular
+      ? await recalcularPersianasDeEntrada(
+          isTipoPersiana(entrada!.tipo ?? '') ? (entrada!.tipo as TipoPersiana) : null,
+          entrada!.itens!,
+          Number(entrada!.rt_pct) || 0,
+        )
+      : null;
+
     const envio = await executarEnvioGc({
-      itens: preparadosDoSnapshot(snaps),
+      itens: preparados
+        ? preparados.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo }))
+        : preparadosDoSnapshot(snaps),
       gc_cliente_id: orc.gc_cliente_id,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
     });
 
-    const novosSnaps = snaps.map((s, i) => ({ ...s, gc_produto_id: envio.gc_produto_ids[i] ?? null }));
+    const novosSnaps = preparados
+      ? snapshotsDe(preparados, envio.gc_produto_ids)
+      : snaps.map((s, i) => ({ ...s, gc_produto_id: envio.gc_produto_ids[i] ?? null }));
+    const novoTotal = preparados ? roundHalfUp(preparados.reduce((s, p) => s + p.valor_final, 0)) : null;
+
     const atualizado = await prisma.orcamento.update({
       where: { id: orc.id },
       data: {
@@ -460,6 +508,7 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
         resposta_gc: envio.resposta as Prisma.InputJsonValue,
         erro_gc: null,
+        ...(novoTotal !== null ? { valor_bruto: novoTotal, valor_final: novoTotal } : {}),
       },
     });
     await prisma.logAcao.create({
@@ -515,9 +564,8 @@ export async function listarOrcamentos(req: Request, res: Response): Promise<voi
 export async function cancelarOrcamento(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
   const orc = await prisma.orcamento.findUnique({ where: { id: String(req.params.id) } });
-  if (!orc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
-  if (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id) {
-    throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão.');
+  if (!orc || (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id)) {
+    throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
   }
   const atualizado = await prisma.orcamento.update({
     where: { id: orc.id },
@@ -530,8 +578,9 @@ export async function cancelarOrcamento(req: Request, res: Response): Promise<vo
 export async function atualizarOrcamento(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
   const orc = await prisma.orcamento.findUnique({ where: { id: String(req.params.id) } });
-  if (!orc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
-  if (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id) throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão.');
+  if (!orc || (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id)) {
+    throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+  }
   if (orc.status !== 'rascunho' && orc.status !== 'erro') {
     throw new AppError(400, 'NAO_EDITAVEL', 'Só é possível editar orçamentos em rascunho ou com erro.');
   }
@@ -549,9 +598,8 @@ export async function getOrcamento(req: Request, res: Response): Promise<void> {
     where: { id: String(req.params.id) },
     include: { loja: true },
   });
-  if (!orc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
-  if (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id) {
-    throw new AppError(403, 'ACESSO_NEGADO', 'Sem permissão.');
+  if (!orc || (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id)) {
+    throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
   }
   res.json({ orcamento: orc });
 }

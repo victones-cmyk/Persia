@@ -53,15 +53,24 @@ export async function login(req: Request, res: Response): Promise<void> {
   }
 
   const sessionUser = toSessionUser(usuario);
-  req.session.usuario = sessionUser;
 
-  req.session.save((err) => {
-    if (err) {
-      console.error('[auth] falha ao salvar sessão:', err);
+  // Regenera o id de sessão na autenticação (previne session fixation: um id
+  // de sessão "plantado" antes do login deixa de valer após autenticar).
+  req.session.regenerate((errRegen) => {
+    if (errRegen) {
+      console.error('[auth] falha ao regenerar sessão:', errRegen);
       res.status(500).json({ error: 'ERRO_INTERNO', message: 'Não foi possível iniciar a sessão.' });
       return;
     }
-    res.json({ usuario: sessionUser });
+    req.session.usuario = sessionUser;
+    req.session.save((err) => {
+      if (err) {
+        console.error('[auth] falha ao salvar sessão:', err);
+        res.status(500).json({ error: 'ERRO_INTERNO', message: 'Não foi possível iniciar a sessão.' });
+        return;
+      }
+      res.json({ usuario: sessionUser });
+    });
   });
 }
 
@@ -115,14 +124,22 @@ export async function alterarSenha(req: Request, res: Response): Promise<void> {
   });
 
   const sessionUser = toSessionUser(atualizado);
-  req.session.usuario = sessionUser;
-  req.session.save((err) => {
-    if (err) {
-      console.error('[auth] falha ao salvar sessão após troca de senha:', err);
+  // Regenera o id de sessão após a troca de senha (mesma proteção do login).
+  req.session.regenerate((errRegen) => {
+    if (errRegen) {
+      console.error('[auth] falha ao regenerar sessão após troca de senha:', errRegen);
       res.status(500).json({ error: 'ERRO_INTERNO', message: 'Não foi possível concluir a troca.' });
       return;
     }
-    res.json({ usuario: sessionUser });
+    req.session.usuario = sessionUser;
+    req.session.save((err) => {
+      if (err) {
+        console.error('[auth] falha ao salvar sessão após troca de senha:', err);
+        res.status(500).json({ error: 'ERRO_INTERNO', message: 'Não foi possível concluir a troca.' });
+        return;
+      }
+      res.json({ usuario: sessionUser });
+    });
   });
 }
 
