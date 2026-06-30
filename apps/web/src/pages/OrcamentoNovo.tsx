@@ -392,7 +392,16 @@ export function OrcamentoNovo() {
 
             <label className="form-label" htmlFor="rt-misto">RT do arquiteto (%)</label>
             <input id="rt-misto" type="number" className="input" min={0} max={99} step={1} placeholder="0"
-              value={rt} onChange={(e) => { setRt(e.target.value); agendarSalvar(); }} />
+              value={rt} onChange={(e) => {
+                // Clampa o próprio campo em 0–99 (limite atual): digitar acima de 99 exibe 99.
+                let v = e.target.value;
+                const n = Number(v);
+                if (v !== '' && Number.isFinite(n)) {
+                  if (n > 99) v = '99';
+                  else if (n < 0) v = '0';
+                }
+                setRt(v); agendarSalvar();
+              }} />
             {rtNum > 0 && algoPreenchido && (
               <div className="helper-text mb-3">RT ({rtNum}%): <strong>{formatBRL(rtValor)}</strong> embutido no total</div>
             )}
