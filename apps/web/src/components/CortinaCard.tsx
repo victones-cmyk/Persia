@@ -9,6 +9,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faTrash, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { TecidoSearch } from './TecidoSearch';
+import { BuscaSelect } from './BuscaSelect';
 import { MedidaInput } from './MedidaInput';
 import { formatBRL, formatNum } from '../lib/formatacao';
 import type { TecidoOpcao, TipoInstalacao } from '../lib/calcTypes';
@@ -435,11 +436,15 @@ export function CortinaCard({
                     )}
                   </div>
                   <div className="col-span-4">
-                    <select className="input" style={{ height: 30, fontSize: 12 }} value={sel} disabled={!opcoes}
-                      onChange={(e) => setAcessorioSel((s) => ({ ...s, [a.item]: e.target.value }))}>
-                      <option value="">{opcoes ? '(escolher)' : 'carregando opções…'}</option>
-                      {opts.map((o) => <option key={o.id} value={o.id}>{o.nome} — {formatBRL(o.preco)}</option>)}
-                    </select>
+                    <BuscaSelect
+                      options={opts}
+                      value={sel}
+                      onChange={(id) => setAcessorioSel((s) => ({ ...s, [a.item]: id }))}
+                      disabled={!opcoes}
+                      placeholder={opcoes ? 'Buscar acessório…' : 'carregando opções…'}
+                      ariaLabel={`Buscar acessório ${a.item}`}
+                      compact
+                    />
                   </div>
                   <div className="col-span-2 text-xs-ui font-mono tabular-nums text-right text-neutral-800">
                     {formatBRL(preco * qtd)}
