@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnifyingGlass, faXmark } from '@fortawesome/free-solid-svg-icons';
-import { formatBRL } from '../lib/formatacao';
+import { formatBRL, semAcento } from '../lib/formatacao';
 
 export interface OpcaoBusca {
   id: string;
@@ -72,13 +72,13 @@ export function BuscaSelect({
     onChange(id);
   }
 
-  const termoTrim = termo.trim().toLowerCase();
+  const termoTrim = semAcento(termo.trim().toLowerCase());
   const mostrarTodos = !termoTrim || (selecionado !== null && termo === selecionado.nome);
   const palavras = termoTrim.split(/\s+/).filter(Boolean);
   const matches = mostrarTodos
     ? options
     : options.filter((o) => {
-        const nome = o.nome.toLowerCase();
+        const nome = semAcento(o.nome.toLowerCase());
         return palavras.every((p) => nome.includes(p));
       });
   const filtrados = matches.slice(0, MAX_VISIVEL);

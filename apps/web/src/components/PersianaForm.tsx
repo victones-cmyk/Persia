@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { api } from '../lib/api';
-import { roundHalfUp, formatBRL, formatNum } from '../lib/formatacao';
+import { roundHalfUp, formatBRL, formatNum, formatQtd } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
 import { MedidaInput } from './MedidaInput';
 import { ConfirmModal } from './ConfirmModal';
@@ -453,14 +453,14 @@ export function PersianaForm({
                         {resultPorIdx[idx].itens!.map((c, j) => (
                           <tr key={j} className="text-neutral-600">
                             <td className="pr-1 py-0.5">{c.descricao}</td>
-                            <td className="px-1 py-0.5 text-right whitespace-nowrap text-neutral-400">{formatNum(c.quantidade)} × {formatBRL(c.preco)}</td>
+                            <td className="px-1 py-0.5 text-right whitespace-nowrap text-neutral-400">{formatQtd(c.quantidade)} × {formatBRL(c.preco)}</td>
                             <td className="pl-1 py-0.5 text-right font-mono whitespace-nowrap">{formatBRL(c.subtotal)}</td>
                           </tr>
                         ))}
                         {resultPorIdx[idx].tecido && (
                           <tr className="text-neutral-700 font-medium border-t border-neutral-200">
                             <td className="pr-1 py-0.5">Tecido</td>
-                            <td className="px-1 py-0.5 text-right whitespace-nowrap text-neutral-400">{formatNum(resultPorIdx[idx].tecido!.quantidade)} × {formatBRL(resultPorIdx[idx].tecido!.preco)}</td>
+                            <td className="px-1 py-0.5 text-right whitespace-nowrap text-neutral-400">{formatQtd(resultPorIdx[idx].tecido!.quantidade)} × {formatBRL(resultPorIdx[idx].tecido!.preco)}</td>
                             <td className="pl-1 py-0.5 text-right font-mono whitespace-nowrap">{formatBRL(resultPorIdx[idx].tecido!.subtotal)}</td>
                           </tr>
                         )}

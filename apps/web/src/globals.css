@@ -278,6 +278,27 @@ input[type='number'] {
   .input-error { border-color: var(--color-error); }
   .input-error:focus { box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25); }
 
+  /* Select: seta custom com respiro (a seta nativa ficava colada na borda). Vale
+     para todos os <select className="input"> do app. */
+  select.input {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    padding-right: 34px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23495057' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 8px;
+  }
+  /* O atalho `background` em :disabled/[readonly] limpa a imagem — reaplica a seta. */
+  select.input:disabled {
+    background-color: var(--neutral-200);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%23adb5bd' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px 8px;
+  }
+
   /* Campo monetário calculado (somente leitura) — RN-10 */
   .input-mono {
     font-family: var(--font-mono);

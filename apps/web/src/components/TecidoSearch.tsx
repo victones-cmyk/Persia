@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnifyingGlass, faXmark } from '@fortawesome/free-solid-svg-icons';
 import type { TecidoOpcao } from '../lib/calcTypes';
-import { formatNum } from '../lib/formatacao';
+import { formatNum, semAcento } from '../lib/formatacao';
 
 const MAX_VISIVEL = 100;
 
@@ -62,15 +62,15 @@ export function TecidoSearch({
     onChange(id);
   }
 
-  const termoTrim = termo.trim().toLowerCase();
+  const termoTrim = semAcento(termo.trim().toLowerCase());
   // Quando o texto é exatamente o nome do selecionado, mostra a lista toda (permite rebuscar).
   const mostrarTodos = !termoTrim || (selecionado !== null && termo === selecionado.nome);
-  // Cada palavra digitada precisa aparecer no nome (em qualquer ordem).
+  // Cada palavra digitada precisa aparecer no nome (em qualquer ordem; tolerante a acento).
   const palavras = termoTrim.split(/\s+/).filter(Boolean);
   const matches = mostrarTodos
     ? tecidos
     : tecidos.filter((t) => {
-        const nome = t.nome.toLowerCase();
+        const nome = semAcento(t.nome.toLowerCase());
         return palavras.every((p) => nome.includes(p));
       });
   const filtrados = matches.slice(0, MAX_VISIVEL);
