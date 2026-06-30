@@ -48,3 +48,11 @@ coverage/
 *.png
 *.docx
 *.mp4
+
+# Documentos internos do projeto — não versionar no repositório (ficam só locais)
+CLAUDE.md
+decisions.md
+srd_solution_requirements_document_projeto_persia_v.3.md
+documentacao_projeto_persia_v.3.md
+design_system_projeto_persia_v.4.md
+api_documentation_gestao_click_projeto_persia.md
