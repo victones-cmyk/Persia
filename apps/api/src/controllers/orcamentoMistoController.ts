@@ -115,9 +115,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
     cor_acessorio: primeiro.cor_acessorio,
     rolamento: primeiro.rolamento,
     valor_bruto: valorTotal,
-    desconto_pct: 0,
     valor_final: valorTotal,
-    desconto_aprovado_por: null,
   };
 
   // itens_json: persianas (com snapshot) + cortinas (snapshot). Instalação embutida nos valores.

@@ -164,9 +164,8 @@ export async function excluirUsuario(req: Request, res: Response): Promise<void>
     throw new AppError(409, 'USUARIO_COM_ORCAMENTOS', `Este usuário tem ${orcamentos} orçamento(s) e não pode ser excluído. Desative-o em vez de excluir.`);
   }
 
-  // Sem orçamentos: limpa vínculos residuais (aprovações antigas, log de ações) e exclui.
+  // Sem orçamentos: limpa vínculos residuais (log de ações) e exclui.
   await prisma.$transaction([
-    prisma.orcamento.updateMany({ where: { desconto_aprovado_por: id }, data: { desconto_aprovado_por: null } }),
     prisma.logAcao.deleteMany({ where: { usuario_id: id } }),
     prisma.usuario.delete({ where: { id } }),
   ]);

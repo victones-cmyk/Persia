@@ -54,14 +54,12 @@ model Usuario {
   loja_id          String?     @db.Uuid
   loja             Loja?       @relation(fields: [loja_id], references: [id])
   gc_usuario_id    String?     @db.VarChar(50)
-  desconto_max_pct Decimal     @default(10.00) @db.Decimal(5, 2)
   ativo            Boolean     @default(true)
   // true → senha definida pelo admin (provisória); usuário deve trocá-la no próximo login.
   senha_provisoria Boolean     @default(false)
   criado_em        DateTime    @default(now()) @db.Timestamptz
   atualizado_em    DateTime    @updatedAt @db.Timestamptz
   orcamentos       Orcamento[] @relation("OrcamentosVendedor")
-  aprovacoes       Orcamento[] @relation("OrcamentosAprovados")
   log_acoes        LogAcao[]
 
   @@map("usuarios")
@@ -90,40 +88,24 @@ model Orcamento {
   cor_acessorio         String?         @db.VarChar(20)
   rolamento             String?         @db.VarChar(20)
   valor_bruto           Decimal         @db.Decimal(10, 2)
-  desconto_pct          Decimal         @default(0.00) @db.Decimal(5, 2)
   valor_final           Decimal         @db.Decimal(10, 2)
   // Snapshot dos itens (janelas) do orçamento — orçamento pode ter vários.
   // As colunas single acima guardam o 1º item (compat); a verdade dos N itens vive aqui.
   itens_json            Json?
   // Entrada bruta do formulário (inputs do vendedor) — permite reabrir um rascunho
-  // na calculadora para edição. Persiana: { tipo, itens:[ItemInput] }. Cortina: { cortinas:[...], instalacao_valor }.
+  // na calculadora para edição. Persiana: { tipo, itens:[ItemInput], rt_pct }.
+  // Cortina: { cortinas:[...], rt_pct }. Instalação e RT são por item.
   entrada_json          Json?
-  desconto_aprovado_por String?         @db.Uuid
-  aprovador             Usuario?        @relation("OrcamentosAprovados", fields: [desconto_aprovado_por], references: [id])
   payload_gc_enviado    Json?
   resposta_gc           Json?
   erro_gc               String?
   criado_em             DateTime        @default(now()) @db.Timestamptz
   atualizado_em         DateTime        @updatedAt @db.Timestamptz
-  itens                 ItemOrcamento[]
 
   @@index([usuario_id, criado_em(sort: Desc)])
   @@index([status])
   @@index([gc_orcamento_id])
   @@map("orcamentos")
-}
-
-model ItemOrcamento {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  orcamento_id   String    @db.Uuid
-  orcamento      Orcamento @relation(fields: [orcamento_id], references: [id])
-  descricao      String    @db.VarChar(150)
-  quantidade     Decimal   @db.Decimal(10, 4)
-  unidade        String    @db.VarChar(20)
-  preco_unitario Decimal   @db.Decimal(10, 2)
-  valor_total    Decimal   @db.Decimal(10, 2)
-
-  @@map("itens_orcamento")
 }
 
 model Configuracao {

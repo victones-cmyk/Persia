@@ -49,7 +49,6 @@ async function main() {
       perfil: 'admin',
       loja_id: null, // admin acessa todas as lojas
       gc_usuario_id: '10512', // Victor — RESOLVIDO 11/06/2026
-      desconto_max_pct: 30.0, // PLACEHOLDER-03
     },
     create: {
       nome: 'Victor Nogueira Pavoni',
@@ -58,7 +57,6 @@ async function main() {
       perfil: 'admin',
       loja_id: null,
       gc_usuario_id: '10512',
-      desconto_max_pct: 30.0,
       // Senha inicial é provisória — o admin é obrigado a trocá-la no 1º acesso.
       senha_provisoria: true,
     },
@@ -71,7 +69,6 @@ async function main() {
       nome: 'Vendedor SP Teste',
       perfil: 'vendedor',
       loja_id: lojaSP.id,
-      desconto_max_pct: 10.0, // PLACEHOLDER-03
     },
     create: {
       nome: 'Vendedor SP Teste',
@@ -80,7 +77,6 @@ async function main() {
       perfil: 'vendedor',
       loja_id: lojaSP.id,
       gc_usuario_id: null, // PLACEHOLDER-02
-      desconto_max_pct: 10.0,
       senha_provisoria: true,
     },
   });
@@ -92,7 +88,6 @@ async function main() {
       nome: 'Vendedor SBC Teste',
       perfil: 'vendedor',
       loja_id: lojaSBC.id,
-      desconto_max_pct: 10.0,
     },
     create: {
       nome: 'Vendedor SBC Teste',
@@ -101,7 +96,6 @@ async function main() {
       perfil: 'vendedor',
       loja_id: lojaSBC.id,
       gc_usuario_id: null, // PLACEHOLDER-02
-      desconto_max_pct: 10.0,
       senha_provisoria: true,
     },
   });

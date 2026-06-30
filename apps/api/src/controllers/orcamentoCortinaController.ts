@@ -225,9 +225,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     largura_m: primeira.largura,
     altura_m: primeira.altura,
     valor_bruto: valorTotal,
-    desconto_pct: 0,
     valor_final: valorTotal,
-    desconto_aprovado_por: null,
     itens_json: { cortinas: preparadas.map((p) => p.snapshot) } as unknown as Prisma.InputJsonValue,
   };
 

@@ -351,9 +351,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     cor_acessorio: primeiro.cor_acessorio,
     rolamento: primeiro.rolamento,
     valor_bruto: valorBrutoTotal,
-    desconto_pct: 0, // sem desconto na calculadora (controlado no GestãoClick)
     valor_final: valorTotal, // itens (com instalação embutida)
-    desconto_aprovado_por: null,
   };
 
   // Apenas salvar: grava rascunho local, sem tocar no GestãoClick.
@@ -549,7 +547,7 @@ export async function getOrcamento(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
   const orc = await prisma.orcamento.findUnique({
     where: { id: String(req.params.id) },
-    include: { itens: true, loja: true },
+    include: { loja: true },
   });
   if (!orc) throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
   if (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id) {

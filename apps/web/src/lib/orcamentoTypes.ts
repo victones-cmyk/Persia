@@ -15,15 +15,6 @@ export interface OrcamentoListItem {
   loja?: { nome: string } | null;
 }
 
-export interface ItemOrcamento {
-  id: string;
-  descricao: string;
-  quantidade: string;
-  unidade: string;
-  preco_unitario: string;
-  valor_total: string;
-}
-
 /** Snapshot de um item (janela) salvo em itens_json. */
 export interface ItemSnapshot {
   ambiente?: string;
@@ -66,7 +57,6 @@ export interface OrcamentoDetalhe extends OrcamentoListItem {
   gc_produto_id: string | null;
   erro_gc: string | null;
   itens_json: ItemSnapshot[] | null;
-  itens: ItemOrcamento[];
 }
 
 export interface Paginacao {
