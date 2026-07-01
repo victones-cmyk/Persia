@@ -29,11 +29,66 @@ function dataBR(iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(iso));
 }
 
+// --- Filtro de data (calculado no fuso local do usuário) ---
+type Periodo = 'todos' | 'hoje' | 'este_mes' | 'mes_passado' | 'custom';
+
+const PERIODOS: { valor: Periodo; label: string }[] = [
+  { valor: 'todos', label: 'Todo o período' },
+  { valor: 'hoje', label: 'Hoje' },
+  { valor: 'este_mes', label: 'Este mês' },
+  { valor: 'mes_passado', label: 'Mês passado' },
+  { valor: 'custom', label: 'Escolha o período…' },
+];
+
+function inicioDoDia(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function fimDoDia(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+/** 'YYYY-MM-DD' (input type=date) → Date no fuso LOCAL (evita parse UTC). */
+function parseLocal(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+/** Resolve o período escolhido em instantes {inicio, fim} (ou null quando não filtra). */
+function intervaloDoPeriodo(p: Periodo, de: string, ate: string): { inicio: Date | null; fim: Date | null } {
+  const agora = new Date();
+  switch (p) {
+    case 'hoje':
+      return { inicio: inicioDoDia(agora), fim: fimDoDia(agora) };
+    case 'este_mes':
+      return {
+        inicio: new Date(agora.getFullYear(), agora.getMonth(), 1),
+        fim: fimDoDia(new Date(agora.getFullYear(), agora.getMonth() + 1, 0)),
+      };
+    case 'mes_passado':
+      return {
+        inicio: new Date(agora.getFullYear(), agora.getMonth() - 1, 1),
+        fim: fimDoDia(new Date(agora.getFullYear(), agora.getMonth(), 0)),
+      };
+    case 'custom':
+      return {
+        inicio: de ? inicioDoDia(parseLocal(de)) : null,
+        fim: ate ? fimDoDia(parseLocal(ate)) : null,
+      };
+    default:
+      return { inicio: null, fim: null };
+  }
+}
+
 export function Orcamentos() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [status, setStatus] = useState<'' | StatusOrcamento>('');
   const [cliente, setCliente] = useState('');
+  const [periodo, setPeriodo] = useState<Periodo>('todos');
+  const [dataDe, setDataDe] = useState('');
+  const [dataAte, setDataAte] = useState('');
   const [pagina, setPagina] = useState(1);
   const [orcamentos, setOrcamentos] = useState<OrcamentoListItem[]>([]);
   const [pag, setPag] = useState<Paginacao | null>(null);
@@ -48,6 +103,9 @@ export function Orcamentos() {
       const params = new URLSearchParams({ pagina: String(pagina) });
       if (status) params.set('status', status);
       if (cliente.trim()) params.set('cliente', cliente.trim());
+      const { inicio, fim } = intervaloDoPeriodo(periodo, dataDe, dataAte);
+      if (inicio) params.set('data_inicio', inicio.toISOString());
+      if (fim) params.set('data_fim', fim.toISOString());
       const r = await api.get<{ orcamentos: OrcamentoListItem[]; paginacao: Paginacao }>(
         `/orcamentos?${params.toString()}`,
       );
@@ -58,7 +116,7 @@ export function Orcamentos() {
     } finally {
       setCarregando(false);
     }
-  }, [pagina, status, cliente]);
+  }, [pagina, status, cliente, periodo, dataDe, dataAte]);
 
   // Debounce 300ms na busca por cliente; status/página recarregam na hora.
   useEffect(() => {
@@ -137,16 +195,65 @@ export function Orcamentos() {
               );
             })}
           </div>
-          <input
-            className="input"
-            style={{ maxWidth: 260 }}
-            placeholder="Buscar por cliente…"
-            value={cliente}
-            onChange={(e) => {
-              setCliente(e.target.value);
-              setPagina(1);
-            }}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Filtro de data (por data de criação) */}
+            <select
+              className="input"
+              style={{ maxWidth: 180 }}
+              value={periodo}
+              onChange={(e) => {
+                setPeriodo(e.target.value as Periodo);
+                setPagina(1);
+              }}
+              aria-label="Filtrar por período"
+              title="Filtrar por data de criação"
+            >
+              {PERIODOS.map((p) => (
+                <option key={p.valor} value={p.valor}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            {periodo === 'custom' && (
+              <>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ maxWidth: 150 }}
+                  value={dataDe}
+                  max={dataAte || undefined}
+                  onChange={(e) => {
+                    setDataDe(e.target.value);
+                    setPagina(1);
+                  }}
+                  aria-label="Data inicial"
+                />
+                <span className="text-sm-ui text-neutral-500">até</span>
+                <input
+                  type="date"
+                  className="input"
+                  style={{ maxWidth: 150 }}
+                  value={dataAte}
+                  min={dataDe || undefined}
+                  onChange={(e) => {
+                    setDataAte(e.target.value);
+                    setPagina(1);
+                  }}
+                  aria-label="Data final"
+                />
+              </>
+            )}
+            <input
+              className="input"
+              style={{ maxWidth: 260 }}
+              placeholder="Buscar por cliente…"
+              value={cliente}
+              onChange={(e) => {
+                setCliente(e.target.value);
+                setPagina(1);
+              }}
+            />
+          </div>
         </div>
       </div>
 

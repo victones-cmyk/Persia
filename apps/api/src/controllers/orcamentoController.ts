@@ -543,6 +543,17 @@ export async function listarOrcamentos(req: Request, res: Response): Promise<voi
   }
   if (cliente) where.nome_cliente = { contains: cliente, mode: 'insensitive' };
 
+  // Filtro por data de criação. O frontend manda instantes ISO já calculados no
+  // fuso do usuário (início/fim do período), então aqui só aplicamos gte/lte.
+  const dataInicio = typeof req.query.data_inicio === 'string' ? req.query.data_inicio : '';
+  const dataFim = typeof req.query.data_fim === 'string' ? req.query.data_fim : '';
+  const criadoEm: Prisma.DateTimeFilter = {};
+  const di = dataInicio ? new Date(dataInicio) : null;
+  const df = dataFim ? new Date(dataFim) : null;
+  if (di && !Number.isNaN(di.getTime())) criadoEm.gte = di;
+  if (df && !Number.isNaN(df.getTime())) criadoEm.lte = df;
+  if (criadoEm.gte || criadoEm.lte) where.criado_em = criadoEm;
+
   const [total, orcamentos] = await Promise.all([
     prisma.orcamento.count({ where }),
     prisma.orcamento.findMany({
