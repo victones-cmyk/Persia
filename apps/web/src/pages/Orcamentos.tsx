@@ -282,7 +282,9 @@ export function Orcamentos() {
             </tr>
           </thead>
           <tbody>
-            {carregando ? (
+            {/* Esqueleto só no 1º carregamento (sem dados). Em recargas de filtro,
+                mantém a lista atual até a nova chegar — evita o "pisca" da tela/paginação. */}
+            {carregando && orcamentos.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} style={{ borderTop: '1px solid #dee2e6' }}>
                   <td colSpan={7} style={{ padding: 12 }}>
