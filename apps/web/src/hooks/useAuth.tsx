@@ -5,6 +5,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api, ApiError, setUnauthorizedHandler } from '../lib/api';
 import { limparRascunhoLocal } from '../lib/rascunhoLocal';
+import { limparFiltrosOrcamento } from '../lib/filtrosSessao';
 
 export type Perfil = 'vendedor' | 'admin';
 
@@ -55,6 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(email: string, senha: string): Promise<void> {
     const r = await api.post<{ usuario: Usuario }>('/auth/login', { email, senha });
+    // Cada login começa limpo: filtros da lista não vazam entre sessões/usuários.
+    limparFiltrosOrcamento();
     setUsuario(r.usuario);
     setSessaoExpirada(false);
   }
@@ -67,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     // Não deixar dados de cliente (rascunho em preenchimento) na estação após sair.
     limparRascunhoLocal();
+    limparFiltrosOrcamento();
     setUsuario(null);
   }
 

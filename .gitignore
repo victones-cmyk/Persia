@@ -48,6 +48,8 @@ coverage/
 *.png
 *.docx
 *.mp4
+# Exceção: o favicon precisa ir ao repositório/deploy
+!apps/web/public/favicon.png
 
 # Documentos internos do projeto — não versionar no repositório (ficam só locais)
 CLAUDE.md

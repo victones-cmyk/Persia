@@ -12,6 +12,9 @@ import { formatBRL } from '../lib/formatacao';
 import { StatusBadge } from '../components/StatusBadge';
 import { ConfirmModal } from '../components/ConfirmModal';
 import type { OrcamentoListItem, Paginacao, StatusOrcamento } from '../lib/orcamentoTypes';
+import { lerFiltrosOrcamento, salvarFiltrosOrcamento } from '../lib/filtrosSessao';
+import { parseBR } from '../lib/dataBR';
+import { PeriodoRange } from '../components/PeriodoRange';
 
 const FILTROS: { valor: '' | StatusOrcamento; label: string }[] = [
   { valor: '', label: 'Todos' },
@@ -50,11 +53,6 @@ function fimDoDia(d: Date): Date {
   x.setHours(23, 59, 59, 999);
   return x;
 }
-/** 'YYYY-MM-DD' (input type=date) → Date no fuso LOCAL (evita parse UTC). */
-function parseLocal(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1);
-}
 /** Resolve o período escolhido em instantes {inicio, fim} (ou null quando não filtra). */
 function intervaloDoPeriodo(p: Periodo, de: string, ate: string): { inicio: Date | null; fim: Date | null } {
   const agora = new Date();
@@ -71,25 +69,39 @@ function intervaloDoPeriodo(p: Periodo, de: string, ate: string): { inicio: Date
         inicio: new Date(agora.getFullYear(), agora.getMonth() - 1, 1),
         fim: fimDoDia(new Date(agora.getFullYear(), agora.getMonth(), 0)),
       };
-    case 'custom':
-      return {
-        inicio: de ? inicioDoDia(parseLocal(de)) : null,
-        fim: ate ? fimDoDia(parseLocal(ate)) : null,
-      };
+    case 'custom': {
+      // Só filtra quando AMBAS as datas estiverem completas e válidas (De e Até).
+      const di = parseBR(de);
+      const df = parseBR(ate);
+      if (!di || !df) return { inicio: null, fim: null };
+      return { inicio: inicioDoDia(di), fim: fimDoDia(df) };
+    }
     default:
       return { inicio: null, fim: null };
   }
 }
 
+// Validação dos filtros lidos da URL (persistência ao atualizar a página).
+function periodoValido(v: string | null): Periodo {
+  return PERIODOS.some((p) => p.valor === v) ? (v as Periodo) : 'todos';
+}
+function statusValido(v: string | null): '' | StatusOrcamento {
+  const s = v ?? '';
+  return FILTROS.some((f) => f.valor === s) ? (s as '' | StatusOrcamento) : '';
+}
+
 export function Orcamentos() {
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const [status, setStatus] = useState<'' | StatusOrcamento>('');
-  const [cliente, setCliente] = useState('');
-  const [periodo, setPeriodo] = useState<Periodo>('todos');
-  const [dataDe, setDataDe] = useState('');
-  const [dataAte, setDataAte] = useState('');
-  const [pagina, setPagina] = useState(1);
+  // Filtros persistidos na SESSÃO (sessionStorage): mantêm-se ao atualizar a página,
+  // mas zeram no login/logout (limpos por limparFiltrosOrcamento em useAuth).
+  const salvos = lerFiltrosOrcamento();
+  const [status, setStatus] = useState<'' | StatusOrcamento>(() => statusValido(salvos?.status ?? null));
+  const [cliente, setCliente] = useState(() => salvos?.cliente ?? '');
+  const [periodo, setPeriodo] = useState<Periodo>(() => periodoValido(salvos?.periodo ?? null));
+  const [dataDe, setDataDe] = useState(() => salvos?.dataDe ?? '');
+  const [dataAte, setDataAte] = useState(() => salvos?.dataAte ?? '');
+  const [pagina, setPagina] = useState(() => Math.max(1, Number(salvos?.pagina) || 1));
   const [orcamentos, setOrcamentos] = useState<OrcamentoListItem[]>([]);
   const [pag, setPag] = useState<Paginacao | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -126,6 +138,11 @@ export function Orcamentos() {
       if (timer.current) clearTimeout(timer.current);
     };
   }, [carregar, cliente]);
+
+  // Persiste os filtros na sessão do navegador (some no login/logout).
+  useEffect(() => {
+    salvarFiltrosOrcamento({ status, cliente, periodo, dataDe, dataAte, pagina });
+  }, [status, cliente, periodo, dataDe, dataAte, pagina]);
 
   async function reenviar(id: string) {
     setAcaoEmId(id);
@@ -179,10 +196,10 @@ export function Orcamentos() {
                     setStatus(f.valor);
                     setPagina(1);
                   }}
-                  className="text-xs-ui"
+                  className="text-sm-ui"
                   style={{
-                    height: 28,
-                    padding: '0 12px',
+                    height: 30,
+                    padding: '0 14px',
                     border: '1px solid ' + (ativo ? '#008d4c' : '#dee2e6'),
                     background: ativo ? '#00a65a' : '#fff',
                     color: ativo ? '#fff' : '#6c757d',
@@ -196,10 +213,23 @@ export function Orcamentos() {
             })}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {/* Filtro de data (por data de criação) */}
+            {/* Filtro por data de criação: campos De/Até (dd/mm/aaaa) à esquerda do
+                seletor de período; o filtro só é aplicado com AMBAS preenchidas. */}
+            {periodo === 'custom' && (
+              <PeriodoRange
+                de={dataDe}
+                ate={dataAte}
+                onAplicar={(d, a) => {
+                  setDataDe(d);
+                  setDataAte(a);
+                  setPagina(1);
+                }}
+              />
+            )}
+            {/* Seletor de período — imediatamente à esquerda da busca por cliente */}
             <select
               className="input"
-              style={{ maxWidth: 180 }}
+              style={{ width: 180, flexShrink: 0 }}
               value={periodo}
               onChange={(e) => {
                 setPeriodo(e.target.value as Periodo);
@@ -214,38 +244,9 @@ export function Orcamentos() {
                 </option>
               ))}
             </select>
-            {periodo === 'custom' && (
-              <>
-                <input
-                  type="date"
-                  className="input"
-                  style={{ maxWidth: 150 }}
-                  value={dataDe}
-                  max={dataAte || undefined}
-                  onChange={(e) => {
-                    setDataDe(e.target.value);
-                    setPagina(1);
-                  }}
-                  aria-label="Data inicial"
-                />
-                <span className="text-sm-ui text-neutral-500">até</span>
-                <input
-                  type="date"
-                  className="input"
-                  style={{ maxWidth: 150 }}
-                  value={dataAte}
-                  min={dataDe || undefined}
-                  onChange={(e) => {
-                    setDataAte(e.target.value);
-                    setPagina(1);
-                  }}
-                  aria-label="Data final"
-                />
-              </>
-            )}
             <input
               className="input"
-              style={{ maxWidth: 260 }}
+              style={{ width: 260, flexShrink: 0 }}
               placeholder="Buscar por cliente…"
               value={cliente}
               onChange={(e) => {
