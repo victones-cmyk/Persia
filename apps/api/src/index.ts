@@ -9,6 +9,7 @@ import express, { type Request, type Response } from 'express';
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import helmet from 'helmet';
+import compression from 'compression';
 import cors from 'cors';
 import pg from 'pg';
 
@@ -27,6 +28,10 @@ const app = express();
 
 // Railway/Proxy: necessário para cookies secure atrás de proxy TLS.
 app.set('trust proxy', 1);
+
+// Compressão gzip de todas as respostas (HTML, CSS, JS estático e JSON da API).
+// Transparente para o cliente; reduz muito o tráfego do bundle (~365KB → ~110KB).
+app.use(compression());
 
 // Cabeçalhos de segurança HTTP (HSTS, X-Content-Type-Options, frameguard, CSP...).
 // CSP liberando apenas o necessário: recursos próprios + Google Fonts (DS v4).
