@@ -194,6 +194,13 @@ export function PeriodoRange({ de, ate, onAplicar }: {
   // Se o valor aplicado mudar de fora (ex.: reset no login), reflete no pendente.
   useEffect(() => { setDeP(de); setAteP(ate); }, [de, ate]);
 
+  // Limpar a data inicial (De) também limpa a final (Até): sem De, o Até fica
+  // desabilitado, então não pode sobrar um valor "preso" e sem como editar.
+  function mudarDe(v: string) {
+    setDeP(v);
+    if (v === '') setAteP('');
+  }
+
   // Aplica o filtro só quando o clique sai do range inteiro.
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -211,8 +218,8 @@ export function PeriodoRange({ de, ate, onAplicar }: {
     <div ref={ref} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
       <CampoData
         value={deP}
-        onChange={setDeP}
-        onCommit={(v) => onAplicar(v, atePRef.current)}
+        onChange={mudarDe}
+        onCommit={(v) => onAplicar(v, v === '' ? '' : atePRef.current)}
         max={parseBR(ateP)}
         ariaLabel="Data inicial (De)"
       />
