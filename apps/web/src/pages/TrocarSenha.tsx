@@ -1,6 +1,6 @@
 // apps/web/src/pages/TrocarSenha.tsx
 // Troca de senha do próprio usuário. Dois modos:
-//  • Obrigatório (senha_provisoria): tela cheia, sem como sair a não ser trocando.
+//  • Obrigatório (senha_provisoria): tela cheia; troca a senha OU "Sair e voltar ao login".
 //  • Voluntário ("alterar minha senha"): acessível pela navbar, com botão Voltar.
 
 import { useState, type FormEvent } from 'react';
@@ -12,9 +12,14 @@ import { api, ApiError } from '../lib/api';
 import { senhaValida } from '../lib/validacao';
 
 export function TrocarSenha() {
-  const { usuario, atualizarUsuario } = useAuth();
+  const { usuario, atualizarUsuario, logout } = useAuth();
   const navigate = useNavigate();
   const obrigatorio = !!usuario?.senha_provisoria;
+
+  async function sair() {
+    await logout();
+    navigate('/login', { replace: true });
+  }
 
   const [atual, setAtual] = useState('');
   const [nova, setNova] = useState('');
@@ -104,6 +109,17 @@ export function TrocarSenha() {
             </button>
           </div>
         </form>
+
+        {obrigatorio && (
+          <button
+            type="button"
+            onClick={sair}
+            className="text-sm-ui text-neutral-500"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', marginTop: 12, textDecoration: 'underline' }}
+          >
+            Sair e voltar ao login
+          </button>
+        )}
       </div>
     </div>
   );
