@@ -6,9 +6,10 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faScissors, faSpinner, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons';
+import { faScissors, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../hooks/useAuth';
 import { ApiError } from '../lib/api';
+import { CampoSenha } from '../components/CampoSenha';
 
 export function Login() {
   const { usuario, carregando, login, sessaoExpirada, limparSessaoExpirada } = useAuth();
@@ -16,7 +17,6 @@ export function Login() {
 
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
-  const [mostrarSenha, setMostrarSenha] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -87,35 +87,17 @@ export function Login() {
             <label htmlFor="senha" className="form-label">
               Senha
             </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                id="senha"
-                name="password"
-                type={mostrarSenha ? 'text' : 'password'}
-                className={erro ? 'input input-error' : 'input'}
-                style={{ paddingRight: 38 }}
-                autoComplete="current-password"
-                value={senha}
-                onChange={(e) => {
-                  setSenha(e.target.value);
-                  setErro(null);
-                }}
-              />
-              <button
-                type="button"
-                tabIndex={-1}
-                aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
-                title={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}
-                onClick={() => setMostrarSenha((v) => !v)}
-                style={{
-                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', padding: 0, lineHeight: 0,
-                  color: '#6c757d', cursor: 'pointer',
-                }}
-              >
-                <FontAwesomeIcon icon={mostrarSenha ? faEyeSlash : faEye} />
-              </button>
-            </div>
+            <CampoSenha
+              id="senha"
+              name="password"
+              className={erro ? 'input input-error' : 'input'}
+              autoComplete="current-password"
+              value={senha}
+              onChange={(e) => {
+                setSenha(e.target.value);
+                setErro(null);
+              }}
+            />
             {erro && <div className="helper-error">{erro}</div>}
           </div>
 

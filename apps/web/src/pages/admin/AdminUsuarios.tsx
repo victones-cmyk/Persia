@@ -7,6 +7,7 @@ import { faPlus, faPen, faUserSlash, faUserCheck, faTrash, faSpinner } from '@fo
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { CampoSenha } from '../../components/CampoSenha';
 import { senhaValida } from '../../lib/validacao';
 
 interface Loja {
@@ -287,7 +288,7 @@ function ModalUsuario({
           </div>
           <div>
             <label className="form-label">Senha {novo ? <span className="label-required">*</span> : <span className="label-optional">(deixe em branco p/ manter)</span>}</label>
-            <input className="input" type="password" value={senha} onChange={(e) => setSenha(e.target.value)} required={novo} />
+            <CampoSenha value={senha} onChange={(e) => setSenha(e.target.value)} required={novo} autoComplete="new-password" />
             <div className="helper-text">{novo ? 'Senha provisória (mín. 8, com letra e número) — o usuário definirá a sua no primeiro acesso.' : 'Se preenchida (mín. 8, com letra e número), vira provisória e o usuário troca no próximo login.'}</div>
           </div>
           <div className="grid grid-cols-2 gap-3">

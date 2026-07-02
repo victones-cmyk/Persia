@@ -10,6 +10,7 @@ import { faKey, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { useAuth, type Usuario } from '../hooks/useAuth';
 import { api, ApiError } from '../lib/api';
 import { senhaValida } from '../lib/validacao';
+import { CampoSenha } from '../components/CampoSenha';
 
 export function TrocarSenha() {
   const { usuario, atualizarUsuario, logout } = useAuth();
@@ -73,12 +74,12 @@ export function TrocarSenha() {
         <form onSubmit={onSubmit} noValidate className="space-y-3">
           <div>
             <label htmlFor="atual" className="form-label">Senha atual</label>
-            <input id="atual" type="password" className="input" autoComplete="current-password"
+            <CampoSenha id="atual" autoComplete="current-password"
               value={atual} onChange={(e) => { setAtual(e.target.value); setErro(null); }} autoFocus />
           </div>
           <div>
             <label htmlFor="nova" className="form-label">Nova senha <span className="label-optional">(mín. 8, com letra e número)</span></label>
-            <input id="nova" type="password" className="input" autoComplete="new-password"
+            <CampoSenha id="nova" autoComplete="new-password"
               value={nova} onChange={(e) => { setNova(e.target.value); setErro(null); }} />
             {nova.length > 0 && !senhaValida(nova) && (
               <div className="helper-error">A senha deve ter ao menos 8 caracteres, com uma letra e um número.</div>
@@ -86,7 +87,7 @@ export function TrocarSenha() {
           </div>
           <div>
             <label htmlFor="confirma" className="form-label">Confirmar nova senha</label>
-            <input id="confirma" type="password" className="input" autoComplete="new-password"
+            <CampoSenha id="confirma" autoComplete="new-password"
               value={confirma} onChange={(e) => { setConfirma(e.target.value); setErro(null); }} />
             {confirma.length > 0 && nova !== confirma && (
               <div className="helper-error">As senhas não conferem.</div>
