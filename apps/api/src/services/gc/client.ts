@@ -64,7 +64,7 @@ async function executar<T>(config: AxiosRequestConfig, tentativa = 0): Promise<T
       return executar<T>(config, tentativa + 1);
     }
 
-    // Log obrigatório com payload completo antes de relançar (CLAUDE.md).
+    // Log obrigatório com payload completo antes de relançar.
     console.error(
       `[gc] ERRO ${status} em ${config.method?.toUpperCase()} ${config.url}:`,
       JSON.stringify(ax.response?.data ?? ax.message),

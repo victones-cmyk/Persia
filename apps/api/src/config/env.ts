@@ -6,7 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import dotenv from 'dotenv';
 
-// O .env vive na raiz do monorepo (persia/.env), conforme estrutura do CLAUDE.md.
+// O .env vive na raiz do monorepo (persia/.env), conforme a estrutura do projeto.
 // Em produção (Railway) as variáveis vêm do ambiente — o arquivo pode não existir.
 const rootEnvPath = path.resolve(__dirname, '../../../../.env');
 const localEnvPath = path.resolve(__dirname, '../../.env');

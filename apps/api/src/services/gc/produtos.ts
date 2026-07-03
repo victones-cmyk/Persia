@@ -1,7 +1,7 @@
 // apps/api/src/services/gc/produtos.ts
 // Escrita de produtos no GestãoClick (SRD §11, Fase 5).
 // Cada orçamento cria um produto que representa a persiana configurada, com o
-// valor já calculado. codigo_interno = "PERSIA-{timestamp}" (CLAUDE.md).
+// valor já calculado. codigo_interno = "PERSIA-{timestamp}".
 
 import { gcRequest, type GcEnvelope } from './client';
 

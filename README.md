@@ -3,7 +3,7 @@
 Plataforma web interna B2B de orçamento de persianas e cortinas para a **Rainha das Cortinas**, com integração ao ERP **GestãoClick**. Substitui o DecorSoft.
 
 > Critério central: *"O que sai da calculadora é o que está no GestãoClick."*
-> Documentação completa: ver `CLAUDE.md` (memória do projeto) e o SRD em `srd_solution_requirements_document_projeto_persia_v.3.md`.
+> Documentação de produto, SRD e design system são mantidos internamente pela Stratos Lab.
 
 ## Stack
 
@@ -22,7 +22,6 @@ Plataforma web interna B2B de orçamento de persianas e cortinas para a **Rainha
 ├── apps/
 │   ├── api/        # Express 5 + Prisma (porta 3001)
 │   └── web/        # React 18 + Vite (porta 5173)
-├── CLAUDE.md       # memória persistente do projeto
 ├── .env.example    # modelo de variáveis (commitar)
 ├── .env            # variáveis reais (NUNCA commitar)
 └── railway.json    # configuração de deploy

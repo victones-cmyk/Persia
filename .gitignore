@@ -51,7 +51,11 @@ coverage/
 # Exceção: o favicon precisa ir ao repositório/deploy
 !apps/web/public/favicon.png
 
+# Configuração local de ferramentas de desenvolvimento (não versionar)
+.claude/
+
 # Documentos internos do projeto — não versionar no repositório (ficam só locais)
+_material_projeto/
 CLAUDE.md
 decisions.md
 srd_solution_requirements_document_projeto_persia_v.3.md
