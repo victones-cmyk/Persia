@@ -161,6 +161,36 @@ describe('Cortina — emenda: nº de faixas = consumo ÷ largura do tecido (Vict
   });
 });
 
+describe('Cortina — método barra postiça', () => {
+  it('quando abertura é central, soma metade da metragem normal arredondada', () => {
+    const r = calcularCortina({
+      modelo: 'franzido', fixacao: 'trilho', config: 'um_tecido',
+      largura: 1.27, altura: 4.0, largura_tecido: 3.0,
+      franzido_frente: 3, tamanho_barra: 0.1, tipo_barra: 'dupla',
+      aberturas: 2, metodo_altura: 'barra_postica',
+    });
+    expect(r.metodo).toBe('barra_postica');
+    expect(r.altura_excede_tecido).toBe(true);
+    expect(r.barra_postica_base).toBe(3.85);
+    expect(r.barra_postica_acrescimo).toBe(1.95);
+    expect(r.metragem_frente).toBe(5.8);
+    expect(r.tiras_frente).toBeNull();
+  });
+
+  it('quando é sem abertura, soma outra metragem normal completa', () => {
+    const r = calcularCortina({
+      modelo: 'franzido', fixacao: 'trilho', config: 'um_tecido',
+      largura: 3, altura: 4.0, largura_tecido: 3.0,
+      franzido_frente: 3, tamanho_barra: 0.1, tipo_barra: 'dupla',
+      aberturas: 1, metodo_altura: 'barra_postica',
+    });
+    expect(r.metodo).toBe('barra_postica');
+    expect(r.barra_postica_base).toBe(9);
+    expect(r.barra_postica_acrescimo).toBe(9);
+    expect(r.metragem_frente).toBe(18);
+  });
+});
+
 describe('Cortina Wave (fator de tecido medido pelo Victor + acessórios deduzidos)', () => {
   it('trilho 3 m → tecido/entretela 8,10 m (fator 2,7), 64 botões, cordão 3,15 m', () => {
     const r = calcularCortina({ ...BASE, modelo: 'wave', fixacao: 'trilho', largura: 3, largura_tecido: 3.0 });

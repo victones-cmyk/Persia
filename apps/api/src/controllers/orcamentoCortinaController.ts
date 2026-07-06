@@ -21,7 +21,7 @@ import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
 import { descricaoProdutoCortina, nomeProdutoCortina } from '../services/calc/cortinaProduto';
 
-interface CamadaEntrada { tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave' }
+interface CamadaEntrada { tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave'; metodo_altura?: 'emenda' | 'barra_postica' }
 interface AcessorioEntrada { item: string; produto_id?: string; quantidade?: number }
 export interface CortinaEntrada {
   ambiente?: string;
@@ -73,6 +73,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     largura_tecido: tecidos[i]!.dimensao_m,
     franzido: cam.franzido !== undefined && cam.franzido !== '' ? Number(cam.franzido) : undefined,
     modelo: cam.modelo, // modelo PRÓPRIO da camada (Victor v.4.1: frente wave + fundo franzido)
+    metodo_altura: cam.metodo_altura,
   }));
 
   const r = calcularCortinaMultiCamada({
@@ -96,8 +97,11 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
       metragem: cam.metragem, 
       valor_tecido: vt, 
       metodo: cam.metodo, 
+      altura_excede_tecido: cam.altura_excede_tecido,
       tiras: cam.tiras, 
       barra_consumo: cam.barra_consumo,
+      barra_postica_base: cam.barra_postica_base,
+      barra_postica_acrescimo: cam.barra_postica_acrescimo,
       consumo: cam.consumo
     };
   });

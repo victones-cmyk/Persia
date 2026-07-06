@@ -6,6 +6,8 @@ import type { TecidoOpcao } from './calcTypes';
 export type ModeloCortina = 'ilhos' | 'prega' | 'franzido' | 'wave';
 export type ModeloCortinaOpcao = ModeloCortina | 'prega_americana' | 'prega_macho' | 'prega_femea';
 export type FixacaoCortina = 'varao' | 'trilho' | 'varao_suico';
+export type MetodoCortina = 'normal' | 'emenda' | 'barra_postica';
+export type MetodoAlturaCortina = 'emenda' | 'barra_postica';
 export type ConfigTecidoCortina = 'um_tecido' | 'dois_tecidos_mesmo_varao' | 'dois_tecidos_varao_duplo';
 
 export interface ItemCortina {
@@ -19,12 +21,15 @@ export interface ItemCortina {
 export interface ResultadoCortina {
   modelo: ModeloCortina;
   fixacao: FixacaoCortina;
-  metodo: 'normal' | 'emenda';
+  metodo: MetodoCortina;
+  altura_excede_tecido: boolean;
   barra_consumo: number;
   consumo_frente: number;
   metragem_frente: number;
   metragem_tras: number | null;
   tiras_frente: number | null;
+  barra_postica_base: number | null;
+  barra_postica_acrescimo: number | null;
   itens: ItemCortina[];
 }
 
@@ -107,12 +112,15 @@ export const TIPO_POR_CAMADAS: Record<number, string> = { 1: 'Simples', 2: 'Dupl
 
 export interface CamadaCalc {
   tecido: TecidoOpcao;
-  metodo: 'normal' | 'emenda';
+  metodo: MetodoCortina;
+  altura_excede_tecido: boolean;
   metragem: number;
   valor_tecido: number;
   tiras: number | null;
   barra_consumo: number;
   consumo: number;
+  barra_postica_base: number | null;
+  barra_postica_acrescimo: number | null;
 }
 export interface AcessorioCalc {
   item: string;

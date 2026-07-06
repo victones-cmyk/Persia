@@ -18,7 +18,7 @@ import {
   MODELOS_CORTINA, FIXACOES_CORTINA, FIXACOES_POR_MODELO,
   modeloCortinaParaOpcao, normalizarModeloCortina,
   type ModeloCortina, type ModeloCortinaOpcao, type FixacaoCortina, type AcessoriosCortinaResp,
-  type CalcCortinaCompletaResp, type CategoriaAcessorio,
+  type CalcCortinaCompletaResp, type CategoriaAcessorio, type MetodoAlturaCortina,
 } from '../lib/cortinaTypes';
 
 export interface CortinaResumo {
@@ -34,7 +34,7 @@ export interface CortinaResumo {
     tamanho_barra?: number;
     tipo_barra?: 'simples' | 'dupla';
     aberturas?: number;
-    camadas: { tecido_id: string; modelo: ModeloCortina; franzido?: number }[];
+    camadas: { tecido_id: string; modelo: ModeloCortina; franzido?: number; metodo_altura?: MetodoAlturaCortina }[];
     acessorios: { item: string; categoria: CategoriaAcessorio | null; produto_id: string; quantidade: number; preco: number }[];
     nome_produto: string;
     ja_possui_varao?: boolean;
@@ -42,9 +42,9 @@ export interface CortinaResumo {
   } | null;
 }
 
-interface CamadaState { id: string; tecidoId: string; modelo: ModeloCortinaOpcao | ''; franzido: string; }
+interface CamadaState { id: string; tecidoId: string; modelo: ModeloCortinaOpcao | ''; franzido: string; metodoAltura: MetodoAlturaCortina; }
 
-const novaCamada = (modelo: ModeloCortinaOpcao | '' = ''): CamadaState => ({ id: crypto.randomUUID(), tecidoId: '', modelo, franzido: '' });
+const novaCamada = (modelo: ModeloCortinaOpcao | '' = ''): CamadaState => ({ id: crypto.randomUUID(), tecidoId: '', modelo, franzido: '', metodoAltura: 'emenda' });
 
 // Itens obrigatórios do wave: o produto é resolvido na tela (sem seletor), casando pelo
 // nome dentro do grupo WAVE já carregado. Espelha o WAVE_FIXO_KEYWORD do backend.
@@ -104,6 +104,7 @@ export function CortinaCard({
         tecidoId: (c as { tecidoId?: string; tecido_id?: string }).tecidoId ?? (c as { tecido_id?: string }).tecido_id ?? '',
         modelo: modeloCamadaInicial(i),
         franzido: (c as { franzido?: number | string }).franzido != null ? String((c as { franzido?: number | string }).franzido) : '',
+        metodoAltura: ((c as { metodoAltura?: MetodoAlturaCortina; metodo_altura?: MetodoAlturaCortina }).metodoAltura ?? (c as { metodo_altura?: MetodoAlturaCortina }).metodo_altura ?? 'emenda'),
       }));
     }
     return [novaCamada()];
@@ -138,6 +139,7 @@ export function CortinaCard({
       tecidoId: '',
       modelo: modeloCortinaParaOpcao(cam.modelo_default),
       franzido: cam.franzido_default != null ? String(cam.franzido_default) : '',
+      metodoAltura: 'emenda' as MetodoAlturaCortina,
     }));
     setCamadas(novasCamadas);
   };
@@ -194,6 +196,9 @@ export function CortinaCard({
       if (metodo === 'emenda') {
         return `Largura franzida (consumo): ${formatNum(consumoFrente, 2)} m`;
       }
+      if (metodo === 'barra_postica') {
+        return `Barra postiça, igual à metragem do tecido: ${formatNum(metragemFrente, 2)} m`;
+      }
       return `Sem emenda, igual à metragem do tecido: ${formatNum(metragemFrente, 2)} m`;
     }
     if (item === 'Ilhoses') {
@@ -216,7 +221,7 @@ export function CortinaCard({
 
   const assinatura = JSON.stringify({
     fixacao, largura, altura, tamanhoBarra, tipoBarra, aberturas,
-    camadas: camadas.map((c) => ({ t: c.tecidoId, m: c.modelo, f: c.modelo === 'wave' ? '' : c.franzido })),
+    camadas: camadas.map((c) => ({ t: c.tecidoId, m: c.modelo, f: c.modelo === 'wave' ? '' : c.franzido, ma: c.metodoAltura })),
   });
 
   const podeCalcular = Number(largura) > 0 && Number(altura) > 0 && camadas.length > 0
@@ -237,7 +242,7 @@ export function CortinaCard({
           modelo: camadas[0]?.modelo ? normalizarModeloCortina(camadas[0].modelo) : undefined, fixacao, largura: Number(largura), altura: Number(altura),
           tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
           aberturas: aberturas === '' ? undefined : Number(aberturas),
-          camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : undefined, franzido: franzidoDe(c) })),
+          camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : undefined, franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
         });
         setCalc(r);
       } catch (e) {
@@ -304,13 +309,13 @@ export function CortinaCard({
         modelo_cortina_nome: modeloCortinaNome || undefined,
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
-        camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : 'franzido', franzido: franzidoDe(c) })),
+        camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : 'franzido', franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
         acessorios: acessoriosPayload, nome_produto: nomeProduto, ja_possui_varao: jaPossuiVarao,
         instalacao_id: instalacaoId || null,
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, modeloCortinaNome, JSON.stringify(camadas.map((c) => c.modelo))]);
+  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, modeloCortinaNome, JSON.stringify(camadas.map((c) => ({ modelo: c.modelo, metodoAltura: c.metodoAltura })))]);
 
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
 
@@ -325,7 +330,7 @@ export function CortinaCard({
     onSnapshotRef.current?.({
       ambiente, modelo: modeloPrincipal, fixacao, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao,
       modeloCortinaNome,
-      camadas: camadas.map((c) => ({ tecidoId: c.tecidoId, franzido: c.franzido, modelo: c.modelo })),
+      camadas: camadas.map((c) => ({ tecidoId: c.tecidoId, franzido: c.franzido, modelo: c.modelo, metodoAltura: c.metodoAltura })),
       acessorioSel, qtdManual, instalacaoId,
     });
   }, [ambiente, modeloPrincipal, fixacao, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, modeloCortinaNome, camadas, acessorioSel, qtdManual, instalacaoId]);
@@ -427,37 +432,50 @@ export function CortinaCard({
           )}
         </div>
         <div className="space-y-2">
-          {camadas.map((c, i) => (
-            <div key={c.id} className="rounded-sm border border-neutral-300 p-2" style={{ background: 'var(--neutral-50)' }}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-2xs-ui font-bold text-neutral-600">{i === 0 ? 'Frente' : `Camada ${i + 1}`}</span>
-                {camadas.length > 1 && (
-                  <button type="button" className="text-error hover:opacity-80 text-2xs-ui flex items-center gap-1" onClick={() => setCamadas((cs) => cs.filter((x) => x.id !== c.id))} title="Remover tecido">
-                    <FontAwesomeIcon icon={faTrash} /> Remover
-                  </button>
-                )}
-              </div>
-              <div className="grid grid-cols-12 gap-2">
-                <div className="col-span-4">
-                  <span className="text-2xs-ui text-neutral-500">Tipo de Confecção<span className="label-required">*</span></span>
-                  <select className="input" value={c.modelo} onChange={(e) => setCamada(c.id, { modelo: e.target.value as ModeloCortinaOpcao | '' })}>
-                    <option value="">Selecione…</option>
-                    {MODELOS_CORTINA.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                  </select>
+          {camadas.map((c, i) => {
+            const calcCamada = calc?.camadas[i];
+            const pedeMetodoAltura = calcCamada?.altura_excede_tecido === true;
+            return (
+              <div key={c.id} className="rounded-sm border border-neutral-300 p-2" style={{ background: 'var(--neutral-50)' }}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-2xs-ui font-bold text-neutral-600">{i === 0 ? 'Frente' : `Camada ${i + 1}`}</span>
+                  {camadas.length > 1 && (
+                    <button type="button" className="text-error hover:opacity-80 text-2xs-ui flex items-center gap-1" onClick={() => setCamadas((cs) => cs.filter((x) => x.id !== c.id))} title="Remover tecido">
+                      <FontAwesomeIcon icon={faTrash} /> Remover
+                    </button>
+                  )}
                 </div>
-                <div className={isWaveCamada(c) ? 'col-span-8' : 'col-span-5'}>
-                  <span className="text-2xs-ui text-neutral-500">Tecido<span className="label-required">*</span></span>
-                  <TecidoSearch tecidos={tecidos} value={c.tecidoId} onChange={(v) => setCamada(c.id, { tecidoId: v })} placeholder="Buscar tecido…" />
-                </div>
-                {!isWaveCamada(c) && (
-                  <div className="col-span-3">
-                    <span className="text-2xs-ui text-neutral-500">Franzido</span>
-                    <input type="number" className="input" min={1} step={0.1} value={c.franzido} placeholder="" onChange={(e) => setCamada(c.id, { franzido: e.target.value })} />
+                <div className="grid grid-cols-12 gap-2">
+                  <div className="col-span-4">
+                    <span className="text-2xs-ui text-neutral-500">Tipo de Confecção<span className="label-required">*</span></span>
+                    <select className="input" value={c.modelo} onChange={(e) => setCamada(c.id, { modelo: e.target.value as ModeloCortinaOpcao | '' })}>
+                      <option value="">Selecione…</option>
+                      {MODELOS_CORTINA.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                    </select>
                   </div>
-                )}
+                  <div className={isWaveCamada(c) ? 'col-span-8' : 'col-span-5'}>
+                    <span className="text-2xs-ui text-neutral-500">Tecido<span className="label-required">*</span></span>
+                    <TecidoSearch tecidos={tecidos} value={c.tecidoId} onChange={(v) => setCamada(c.id, { tecidoId: v })} placeholder="Buscar tecido…" />
+                  </div>
+                  {!isWaveCamada(c) && (
+                    <div className="col-span-3">
+                      <span className="text-2xs-ui text-neutral-500">Franzido</span>
+                      <input type="number" className="input" min={1} step={0.1} value={c.franzido} placeholder="" onChange={(e) => setCamada(c.id, { franzido: e.target.value })} />
+                    </div>
+                  )}
+                  {pedeMetodoAltura && (
+                    <div className="col-span-12 md:col-span-4">
+                      <span className="text-2xs-ui text-neutral-500">Método de cálculo</span>
+                      <select className="input" value={c.metodoAltura} onChange={(e) => setCamada(c.id, { metodoAltura: e.target.value as MetodoAlturaCortina })}>
+                        <option value="emenda">Emenda</option>
+                        <option value="barra_postica">Barra postiça</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -472,7 +490,7 @@ export function CortinaCard({
               <div key={i} className="grid grid-cols-12 gap-2 items-center text-xs-ui border-b border-neutral-100 py-1 last:border-b-0">
                 <div className="col-span-6 text-neutral-700">{i === 0 ? 'Frente' : `Camada ${i + 1}`}: {cam.tecido.nome}</div>
                 <div className="col-span-3 font-mono tabular-nums text-right text-neutral-600">
-                  {formatNum(cam.metragem, 2)} m{cam.metodo === 'emenda' ? ' (emenda)' : ''}
+                  {formatNum(cam.metragem, 2)} m{cam.metodo === 'emenda' ? ' (emenda)' : cam.metodo === 'barra_postica' ? ' (barra postiça)' : ''}
                 </div>
                 <div className="col-span-3 font-mono tabular-nums text-right text-neutral-800">{formatBRL(cam.valor_tecido)}</div>
                 {cam.metodo === 'emenda' && cam.tiras && (
@@ -480,6 +498,14 @@ export function CortinaCard({
                     <FontAwesomeIcon icon={faCircleInfo} className="text-primary" style={{ fontSize: 10 }} />
                     <span>
                       Cálculo de Emenda: <strong>{cam.tiras} faixas</strong> de <strong>{(Number(altura) + cam.barra_consumo).toFixed(2).replace('.', ',')} m</strong> (altura {Number(altura).toFixed(2).replace('.', ',')} m + {cam.barra_consumo.toFixed(2).replace('.', ',')} m folga/barra)
+                    </span>
+                  </div>
+                )}
+                {cam.metodo === 'barra_postica' && cam.barra_postica_base !== null && cam.barra_postica_acrescimo !== null && (
+                  <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-2 border-l-2 border-primary flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
+                    <FontAwesomeIcon icon={faCircleInfo} className="text-primary" style={{ fontSize: 10 }} />
+                    <span>
+                      Barra postiça: <strong>{formatNum(cam.barra_postica_base, 2)} m</strong> + <strong>{formatNum(cam.barra_postica_acrescimo, 2)} m</strong> = <strong>{formatNum(cam.metragem, 2)} m</strong>
                     </span>
                   </div>
                 )}

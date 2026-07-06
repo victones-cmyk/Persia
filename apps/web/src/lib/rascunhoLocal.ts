@@ -37,7 +37,7 @@ export interface CortinaCardSnap {
   tipoBarra: string;
   aberturas?: string;
   jaPossuiVarao?: boolean;
-  camadas: { tecidoId: string; franzido: string; modelo?: string }[];
+  camadas: { tecidoId: string; franzido: string; modelo?: string; metodoAltura?: 'emenda' | 'barra_postica' }[];
   acessorioSel: Record<string, string>;
   qtdManual: Record<string, string>;
   instalacaoId?: string; // tipo de instalação por cortina (Victor 26/06/2026)

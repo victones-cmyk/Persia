@@ -25,6 +25,8 @@ export class NotImplementedError extends Error {
 
 export type ModeloCortina = 'ilhos' | 'prega' | 'franzido' | 'wave';
 export type FixacaoCortina = 'varao' | 'trilho' | 'varao_suico';
+export type MetodoCortina = 'normal' | 'emenda' | 'barra_postica';
+export type MetodoAlturaCortina = 'emenda' | 'barra_postica';
 export type ConfigTecidoCortina =
   | 'um_tecido'
   | 'dois_tecidos_mesmo_varao' //  frente + forro costurados juntos, mesmo varão
@@ -45,6 +47,7 @@ export interface EntradaCortina {
   espacamento_ilhos?: number; // m, default 0,15 (ilhós, sobre a largura franzida)
   espacamento_ferragem?: number; // m, default 0,10 (argola/rodízio, sobre o varão)
   largura_tecido_tras?: number; // largura do rolo do 2º tecido, se diferente
+  metodo_altura?: MetodoAlturaCortina; // quando altura + consumos > largura do tecido
 }
 
 export interface ItemCortina {
@@ -58,12 +61,15 @@ export interface ItemCortina {
 export interface ResultadoCortina {
   modelo: ModeloCortina;
   fixacao: FixacaoCortina;
-  metodo: 'normal' | 'emenda'; // emenda = altura da cortina > largura do tecido
+  metodo: MetodoCortina; // normal, emenda ou barra postiça
+  altura_excede_tecido: boolean;
   barra_consumo: number; // m gastos na altura (folga de topo + barra)
   consumo_frente: number; // largura × franzido (largura franzida do tecido frente)
   metragem_frente: number; // m lineares de tecido frente
   metragem_tras: number | null; // m lineares do 2º tecido (forro/trás)
   tiras_frente: number | null; // nº de tiras emendadas (só no método emenda)
+  barra_postica_base: number | null;
+  barra_postica_acrescimo: number | null;
   itens: ItemCortina[];
 }
 
@@ -107,9 +113,16 @@ function metragemFace(
   larguraTecido: number,
   altura: number,
   barraConsumo: number,
-  metodo: 'normal' | 'emenda',
-): { metragem: number; tiras: number | null } {
-  if (metodo === 'normal') return { metragem: arredondaTecido(consumo), tiras: null };
+  metodo: MetodoCortina,
+  aberturas: number,
+): { metragem: number; tiras: number | null; barraPosticaBase: number | null; barraPosticaAcrescimo: number | null } {
+  if (metodo === 'normal') return { metragem: arredondaTecido(consumo), tiras: null, barraPosticaBase: null, barraPosticaAcrescimo: null };
+  if (metodo === 'barra_postica') {
+    const base = arredondaTecido(consumo);
+    const acrescimoBruto = base * (aberturas >= 2 ? 0.5 : 1);
+    const metragem = arredondaTecido(base + acrescimoBruto);
+    return { metragem, tiras: null, barraPosticaBase: base, barraPosticaAcrescimo: roundHalfUp(metragem - base) };
+  }
   // Emenda: o nº de faixas = quantas larguras de tecido cobrem a largura FRANZIDA
   // (consumo ÷ largura do tecido, arredondado p/ cima). Confirmado pelo Victor (v.5.1):
   // cortina 2,00×6,00 com franzido 4× → consumo 8,00; tecido de 3,00 m → 3 faixas (8÷3),
@@ -117,7 +130,7 @@ function metragemFace(
   // acabamento de topo + barra (exato). Bate também com o exemplo antigo (A4,32: franzido
   // 2 → 2 faixas = 8,64; 2,5/3 → 3 faixas = 12,96).
   const tiras = Math.ceil(consumo / larguraTecido);
-  return { metragem: roundHalfUp(tiras * (altura + barraConsumo)), tiras };
+  return { metragem: roundHalfUp(tiras * (altura + barraConsumo)), tiras, barraPosticaBase: null, barraPosticaAcrescimo: null };
 }
 
 /** Calcula uma cortina dos modelos Ilhós / Prega / Franzido. */
@@ -139,14 +152,15 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   const multParidade = aberturas >= 2 ? 4 : 2;
 
   const barraConsumo = roundHalfUp(reg.folga_topo[e.modelo] + tamanhoBarra * fatorBarra);
-  const metodo: 'normal' | 'emenda' = e.altura + barraConsumo <= e.largura_tecido ? 'normal' : 'emenda';
+  const alturaExcedeTecido = e.altura + barraConsumo > e.largura_tecido;
+  const metodo: MetodoCortina = alturaExcedeTecido ? (e.metodo_altura ?? 'emenda') : 'normal';
 
   // ---- Tecido frente ----
   // Wave usa fator próprio (2,7, medido pelo Victor); nos demais é largura × franzido.
   const wave = e.modelo === 'wave' ? dadosWave(e.largura) : null;
   const fatorFrente = wave ? reg.franzido_wave : franzidoFrente;
   const consumoFrente = roundHalfUp(e.largura * fatorFrente);
-  const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo);
+  const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo, aberturas);
 
   // ---- Tecido de trás / forro ----
   let metragemTras: number | null = null;
@@ -154,8 +168,9 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
     metragemTras = frente.metragem; // costurado junto → acompanha a frente
   } else if (e.config === 'dois_tecidos_varao_duplo') {
     const consumoTras = roundHalfUp(e.largura * franzidoTras);
-    const metodoTras: 'normal' | 'emenda' = e.altura + barraConsumo <= larguraTecidoTras ? 'normal' : 'emenda';
-    metragemTras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras).metragem;
+    const alturaExcedeTecidoTras = e.altura + barraConsumo > larguraTecidoTras;
+    const metodoTras: MetodoCortina = alturaExcedeTecidoTras ? (e.metodo_altura ?? 'emenda') : 'normal';
+    metragemTras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras, aberturas).metragem;
   }
 
   const varaoDuplo = e.config === 'dois_tecidos_varao_duplo';
@@ -220,11 +235,14 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
     modelo: e.modelo,
     fixacao: e.fixacao,
     metodo,
+    altura_excede_tecido: alturaExcedeTecido,
     barra_consumo: barraConsumo,
     consumo_frente: consumoFrente,
     metragem_frente: frente.metragem,
     metragem_tras: metragemTras,
     tiras_frente: frente.tiras,
+    barra_postica_base: frente.barraPosticaBase,
+    barra_postica_acrescimo: frente.barraPosticaAcrescimo,
     itens,
   };
 }
@@ -242,6 +260,7 @@ export interface CamadaCortina {
   largura_tecido: number; // largura do rolo do tecido desta camada (m)
   franzido?: number; // default 3 (no wave, ignorado: usa 2,7)
   modelo?: ModeloCortina; // modelo PRÓPRIO da camada (Victor v.4.1: frente wave + fundo franzido). Default = e.modelo.
+  metodo_altura?: MetodoAlturaCortina;
 }
 
 export interface EntradaCortinaCompleta {
@@ -258,11 +277,14 @@ export interface EntradaCortinaCompleta {
 }
 
 export interface CamadaResultado {
-  metodo: 'normal' | 'emenda';
+  metodo: MetodoCortina;
+  altura_excede_tecido: boolean;
   consumo: number; // largura franzida (m)
   metragem: number; // m lineares de tecido (cortado de 5 em 5 cm)
   tiras: number | null;
   barra_consumo: number;
+  barra_postica_base: number | null;
+  barra_postica_acrescimo: number | null;
 }
 
 export interface ResultadoCortinaCompleta {
@@ -299,13 +321,23 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
       altura: e.altura,
       largura_tecido: cam.largura_tecido,
       franzido_frente: cam.franzido,
+      metodo_altura: cam.metodo_altura,
       tamanho_barra: e.tamanho_barra,
       tipo_barra: e.tipo_barra,
       aberturas: e.aberturas,
       espacamento_ilhos: e.espacamento_ilhos,
       espacamento_ferragem: e.espacamento_ferragem,
     });
-    camadas.push({ metodo: r.metodo, consumo: r.consumo_frente, metragem: r.metragem_frente, tiras: r.tiras_frente, barra_consumo: r.barra_consumo });
+    camadas.push({
+      metodo: r.metodo,
+      altura_excede_tecido: r.altura_excede_tecido,
+      consumo: r.consumo_frente,
+      metragem: r.metragem_frente,
+      tiras: r.tiras_frente,
+      barra_consumo: r.barra_consumo,
+      barra_postica_base: r.barra_postica_base,
+      barra_postica_acrescimo: r.barra_postica_acrescimo,
+    });
 
     for (const it of r.itens) {
       if (it.tipo === 'tecido') continue; // tecido é por camada

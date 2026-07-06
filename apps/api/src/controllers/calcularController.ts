@@ -267,6 +267,7 @@ export async function calcularCortinaController(req: Request, res: Response): Pr
     tamanho_barra: b.tamanho_barra !== undefined && b.tamanho_barra !== '' ? Number(b.tamanho_barra) : undefined,
     tipo_barra: b.tipo_barra,
     aberturas: b.aberturas !== undefined && b.aberturas !== '' ? Number(b.aberturas) : undefined,
+    metodo_altura: b.metodo_altura === 'barra_postica' ? 'barra_postica' : b.metodo_altura === 'emenda' ? 'emenda' : undefined,
   };
 
   try {
@@ -316,10 +317,11 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
     tecidos.push(t);
   }
 
-  const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string; modelo?: string }, i: number) => ({
+  const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string; modelo?: string; metodo_altura?: string }, i: number) => ({
     largura_tecido: tecidos[i]!.dimensao_m,
     franzido: c.franzido !== undefined && c.franzido !== '' ? Number(c.franzido) : undefined,
     modelo: c.modelo ? (c.modelo as CamadaCortina['modelo']) : undefined, // modelo PRÓPRIO da camada (Victor v.4.1)
+    metodo_altura: c.metodo_altura === 'barra_postica' ? 'barra_postica' : c.metodo_altura === 'emenda' ? 'emenda' : undefined,
   }));
 
   try {
@@ -339,10 +341,13 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
       return {
         tecido: { id: t.id, nome: t.nome, dimensao_m: t.dimensao_m, preco_venda: t.preco_venda },
         metodo: cam.metodo,
+        altura_excede_tecido: cam.altura_excede_tecido,
         metragem: cam.metragem,
         valor_tecido: roundHalfUp(cam.metragem * t.preco_venda),
         tiras: cam.tiras,
         barra_consumo: cam.barra_consumo,
+        barra_postica_base: cam.barra_postica_base,
+        barra_postica_acrescimo: cam.barra_postica_acrescimo,
         consumo: cam.consumo,
       };
     });
