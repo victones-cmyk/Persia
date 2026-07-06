@@ -1,14 +1,62 @@
 // apps/web/src/lib/calcTypes.ts
 // Tipos do domínio de cálculo de persiana, espelhando o backend (services/calc).
 
-export type TipoPersiana =
-  | 'persiana_rolo_blackout'
-  | 'persiana_rolo_screen'
-  | 'persiana_rolo_translucido'
-  | 'persiana_rolo_double_vision'
-  | 'persiana_romana_blackout'
-  | 'persiana_romana_screen'
-  | 'persiana_romana_translucido';
+export type TipoPersiana = string;
+
+export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana' | 'romana_tela_solar';
+
+export interface ComponenteCalculadora {
+  codigo_interno: string;
+  descricao: string;
+  qtd: string;
+}
+
+export interface ReceitaCalculadora {
+  componentes: ComponenteCalculadora[];
+  tecido_qtd: string;
+}
+
+export interface CalculadoraPersiana {
+  id: string;
+  nome: string;
+  db_tipo_produto: string;
+  codigo_gc: string;
+  familia: FamiliaPersiana;
+  margem: number;
+  dobrar_altura: boolean;
+  base_venda: 'dimensao' | 'largura';
+  fator_venda: number;
+  mao_de_obra: string;
+  ativo?: boolean;
+  receitas: {
+    com_bando?: ReceitaCalculadora;
+    sem_bando?: ReceitaCalculadora;
+    motor_com_bando?: ReceitaCalculadora;
+    motor_sem_bando?: ReceitaCalculadora;
+  };
+}
+
+export interface CamadaCalculadoraCortina {
+  id: string;
+  nome: string;
+  modelo_default: string;
+  franzido_default?: number;
+}
+
+export interface CalculadoraCortina {
+  id: string;
+  nome: string;
+  db_tipo_produto: string;
+  codigo_gc: string;
+  modelo_base: string;
+  fixacao_default: string;
+  tamanho_barra_default: number;
+  tipo_barra_default: 'simples' | 'dupla';
+  aberturas_default: number;
+  ativo?: boolean;
+  camadas: CamadaCalculadoraCortina[];
+}
+
 
 export type Cor = 'Branco' | 'Bege' | 'Cinza' | 'Preto';
 export type Acionamento =
@@ -85,6 +133,7 @@ export interface ItemInput {
   tc?: number;
   rolamento?: string | null;
   base?: string | null;
+  comando?: string | null;
   instalacao_id?: string | null; // tipo de instalação embutido no produto
 }
 
@@ -162,4 +211,5 @@ export const ACIONAMENTOS: { value: Acionamento; label: string }[] = [
   { value: 'motorizado_sem_bando', label: 'Motorizado sem Bandô' },
 ];
 
-export const ROLAMENTOS = ['Dianteiro', 'Traseiro'] as const;
+export const ROLAMENTOS = ['Normal', 'Invertido'] as const;
+export const COMANDOS = ['Direito', 'Esquerdo', 'Duplex'] as const;

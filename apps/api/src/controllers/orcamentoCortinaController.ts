@@ -2,7 +2,7 @@
 // Envio do orçamento de CORTINA ao GestãoClick (estágio 4, ver decisions §9.7).
 // RECALCULA tudo no servidor (nunca confia no cliente): por cortina roda o motor
 // multi-camada, lê os preços dos acessórios do GC e soma. Cada cortina vira 1
-// produto sintético "MODELO • TECIDO • L×A"; a instalação vira 1 linha de serviço.
+// produto sintético curto; detalhes técnicos seguem na descrição do produto.
 
 import type { Request, Response } from 'express';
 import { Prisma, type Orcamento } from '@prisma/client';
@@ -19,27 +19,20 @@ import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
-import { MODELOS_CORTINA_LABEL } from '../services/calc/cortinaLabels';
-
-/** Código/nome curto do tecido para o NOME do produto (Victor pediu "TEX-XX"). Os nomes
- * completos do GC são longos e estouravam o limite do nome (cortava as medidas). */
-function tecidoCurto(nome: string): string {
-  const m = nome.match(/\bTEX[-\s]?\d{2,4}\b/i);
-  if (m) return m[0].toUpperCase().replace(/\s+/, '-');
-  const base = nome.split(/\s+LARGURA|\s+L:|\s+COMPOSI/i)[0].trim();
-  return base.length > 28 ? `${base.slice(0, 28).trim()}…` : base;
-}
+import { descricaoProdutoCortina, nomeProdutoCortina } from '../services/calc/cortinaProduto';
 
 interface CamadaEntrada { tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave' }
 interface AcessorioEntrada { item: string; produto_id?: string; quantidade?: number }
 export interface CortinaEntrada {
   ambiente?: string;
+  modelo_cortina_nome?: string;
   modelo: 'ilhos' | 'prega' | 'franzido' | 'wave';
   fixacao: 'varao' | 'trilho' | 'varao_suico';
   largura: number | string;
   altura: number | string;
   tamanho_barra?: number | string;
   tipo_barra?: 'simples' | 'dupla';
+  aberturas?: number | string;
   camadas: CamadaEntrada[];
   acessorios: AcessorioEntrada[];
   ja_possui_varao?: boolean; // cliente já tem o trilho/varão → não inclui
@@ -49,6 +42,7 @@ export interface CortinaEntrada {
 export interface CortinaPreparada {
   ambiente: string;
   nome_produto: string;
+  descricao_produto: string;
   valor_total: number;
   valor_custo: number;
   snapshot: Record<string, unknown>;
@@ -85,6 +79,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     modelo: c.modelo ?? camadasCalc[0]?.modelo, fixacao: c.fixacao, largura, altura, camadas: camadasCalc,
     tamanho_barra: c.tamanho_barra !== undefined && c.tamanho_barra !== '' ? Number(c.tamanho_barra) : undefined,
     tipo_barra: c.tipo_barra,
+    aberturas: c.aberturas !== undefined && c.aberturas !== '' ? Number(c.aberturas) : undefined,
   });
 
   // Tecido (SOB MEDIDA): por camada.
@@ -95,7 +90,16 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     const vt = roundHalfUp(cam.metragem * t.preco_venda);
     valorTotal = roundHalfUp(valorTotal + vt);
     valorCusto = roundHalfUp(valorCusto + cam.metragem * t.preco_custo);
-    return { tecido_id: t.id, tecido_nome: t.nome, metragem: cam.metragem, valor_tecido: vt };
+    return { 
+      tecido_id: t.id, 
+      tecido_nome: t.nome, 
+      metragem: cam.metragem, 
+      valor_tecido: vt, 
+      metodo: cam.metodo, 
+      tiras: cam.tiras, 
+      barra_consumo: cam.barra_consumo,
+      consumo: cam.consumo
+    };
   });
 
   // Nome do item da barra (trilho/varão) conforme a fixação — para o "Já possui".
@@ -145,25 +149,33 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     }
   }
 
-  // Nome do produto (Victor v.4.1): "AMBIENTE, Cortina MODELO1 TECIDO1 + MODELO2 TECIDO2 LxA".
-  // Ambiente na frente; cada camada com seu modelo + tecido; medidas no fim.
-  const amb = c.ambiente?.trim() ? `${c.ambiente.trim()}, ` : '';
-  const corpo = camadasSnap.map((cs, i) => {
-    const m = c.camadas[i]?.modelo ?? c.modelo;
-    return `${MODELOS_CORTINA_LABEL[m] ?? m} ${tecidoCurto(cs.tecido_nome)}`;
-  }).join(' + ');
-  const dim = `${largura.toFixed(2).replace('.', ',')}X${altura.toFixed(2).replace('.', ',')}`;
-  const nomeProduto = `${amb}Cortina ${corpo} ${dim}`.slice(0, 120);
+  const nomeProduto = nomeProdutoCortina({
+    ambiente: c.ambiente,
+    modelo_cortina_nome: c.modelo_cortina_nome,
+    modelo_fallback: c.modelo,
+    largura,
+    altura,
+  });
+  const descricaoProduto = descricaoProdutoCortina({
+    fixacao: c.fixacao,
+    aberturas: c.aberturas,
+    camadas: camadasSnap.map((cs, i) => ({
+      modelo: c.camadas[i]?.modelo ?? c.modelo,
+      tecido_nome: cs.tecido_nome,
+      franzido: c.camadas[i]?.franzido,
+    })),
+  });
 
   return {
     ambiente: c.ambiente?.trim() || '',
     nome_produto: nomeProduto,
+    descricao_produto: descricaoProduto,
     valor_total: valorTotal,
     valor_custo: valorCusto,
     largura, altura,
     tecido_id: camadasSnap[0].tecido_id,
     tecido_nome: camadasSnap[0].tecido_nome,
-    snapshot: { ambiente: c.ambiente?.trim() || '', modelo: c.modelo, fixacao: c.fixacao, largura, altura, n_camadas: r.n_camadas, camadas: camadasSnap, acessorios: acessoriosSnap, valor_total: valorTotal, nome_produto: nomeProduto, valor_custo: valorCusto },
+    snapshot: { ambiente: c.ambiente?.trim() || '', modelo_cortina_nome: c.modelo_cortina_nome ?? null, modelo: c.modelo, fixacao: c.fixacao, abertura: c.aberturas ?? null, largura, altura, n_camadas: r.n_camadas, camadas: camadasSnap, acessorios: acessoriosSnap, valor_total: valorTotal, nome_produto: nomeProduto, descricao_produto: descricaoProduto, valor_custo: valorCusto },
   };
 }
 
@@ -206,7 +218,10 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   }
   // Instalação e RT já estão embutidos no valor de cada cortina.
   const valorTotal = roundHalfUp(preparadas.reduce((s, p) => s + p.valor_total, 0));
-  const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
+  const lojaIdOrcamento = sessao.perfil === 'admin'
+    ? (b.loja_id ?? editarOrc?.loja_id ?? sessao.loja_id)
+    : (editarOrc?.loja_id ?? sessao.loja_id);
+  const loja = await resolverLoja(lojaIdOrcamento);
   const primeira = preparadas[0];
 
   // Grava: cria novo ou atualiza o rascunho em edição (mesmo registro).
@@ -218,7 +233,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   const baseDados = {
     tipo_produto: 'cortina' as const,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
-    loja_id: editarOrc?.loja_id ?? loja.id,
+    loja_id: loja.id,
     entrada_json: { cortinas: cortinasEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
@@ -240,12 +255,14 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   }
 
   // Monta produtos (1 por cortina) + serviço de instalação e envia.
+  const usados: string[] = [];
   const criados: string[] = [];
   try {
     const linhas: LinhaProdutoGc[] = [];
     for (const p of preparadas) {
-      const produto = await criarProduto({ nome: p.nome_produto, valor_custo: p.valor_custo, valor_venda: p.valor_total });
-      criados.push(produto.gc_produto_id);
+      const produto = await criarProduto({ nome: p.nome_produto, descricao: p.descricao_produto, valor_custo: p.valor_custo, valor_venda: p.valor_total });
+      usados.push(produto.gc_produto_id);
+      if (produto.criado) criados.push(produto.gc_produto_id);
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: p.valor_total, valor_custo: p.valor_custo });
     }
 
@@ -264,7 +281,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     const orcamento = await persistir({
       ...baseDados,
       status: 'enviado',
-      gc_produto_id: criados[0] ?? null,
+      gc_produto_id: usados[0] ?? null,
       gc_orcamento_id: orc.gc_orcamento_id,
       gc_codigo: orc.gc_codigo,
       payload_gc_enviado: orc.payload as Prisma.InputJsonValue,
@@ -289,7 +306,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   }
 }
 
-interface CortinaSnapshot { nome_produto?: string; valor_total?: number; valor_custo?: number }
+interface CortinaSnapshot { nome_produto?: string; descricao_produto?: string; valor_total?: number; valor_custo?: number }
 
 /**
  * Recalcula as cortinas a partir da ENTRADA salva (`entrada_json`), sem confiar nos
@@ -317,18 +334,20 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
   if (!recalcular && snapCortinas.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento de cortina sem itens para enviar.');
   const loja = await resolverLoja(orc.loja_id);
 
+  const usados: string[] = [];
   const criados: string[] = [];
   try {
     // Recalcula a partir da entrada (preferido); cai para o snapshot só em registros legados.
     const preparadas = recalcular ? await recalcularCortinasDeEntrada(entrada!.cortinas!, Number(entrada!.rt_pct) || 0) : null;
     const fonte = preparadas
-      ? preparadas.map((p) => ({ nome_produto: p.nome_produto, valor_total: p.valor_total, valor_custo: p.valor_custo }))
-      : snapCortinas.map((c) => ({ nome_produto: String(c.nome_produto ?? 'Cortina'), valor_total: Number(c.valor_total) || 0, valor_custo: Number(c.valor_custo) || 0 }));
+      ? preparadas.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_total: p.valor_total, valor_custo: p.valor_custo }))
+      : snapCortinas.map((c) => ({ nome_produto: String(c.nome_produto ?? 'Cortina'), descricao_produto: c.descricao_produto ? String(c.descricao_produto) : undefined, valor_total: Number(c.valor_total) || 0, valor_custo: Number(c.valor_custo) || 0 }));
 
     const linhas: LinhaProdutoGc[] = [];
     for (const f of fonte) {
-      const produto = await criarProduto({ nome: f.nome_produto, valor_custo: f.valor_custo, valor_venda: f.valor_total });
-      criados.push(produto.gc_produto_id);
+      const produto = await criarProduto({ nome: f.nome_produto, descricao: f.descricao_produto, valor_custo: f.valor_custo, valor_venda: f.valor_total });
+      usados.push(produto.gc_produto_id);
+      if (produto.criado) criados.push(produto.gc_produto_id);
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: f.valor_total, valor_custo: f.valor_custo });
     }
     // Instalação embutida no valor de cada cortina (Victor 26/06/2026) — sem serviço.
@@ -346,7 +365,7 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
       where: { id: orc.id },
       data: {
         status: 'enviado',
-        gc_produto_id: criados[0] ?? null,
+        gc_produto_id: usados[0] ?? null,
         gc_orcamento_id: gcOrc.gc_orcamento_id,
         gc_codigo: gcOrc.gc_codigo,
         payload_gc_enviado: gcOrc.payload as Prisma.InputJsonValue,

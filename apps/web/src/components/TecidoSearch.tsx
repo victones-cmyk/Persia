@@ -18,12 +18,14 @@ export function TecidoSearch({
   onChange,
   disabled,
   placeholder,
+  id,
 }: {
   tecidos: TecidoOpcao[];
   value: string;
   onChange: (id: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  id?: string;
 }) {
   const [termo, setTermo] = useState('');
   const [aberto, setAberto] = useState(false);
@@ -106,6 +108,7 @@ export function TecidoSearch({
     <div className="relative" ref={boxRef}>
       <div className="relative">
         <input
+          id={id}
           className="input"
           name="busca-tecido"
           aria-label="Buscar tecido"

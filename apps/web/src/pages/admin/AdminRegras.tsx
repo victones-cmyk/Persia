@@ -10,7 +10,7 @@ import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { TIPOS_PERSIANA } from '../../lib/calcTypes';
-import { MODELOS_CORTINA } from '../../lib/cortinaTypes';
+import { MODELOS_CORTINA_CALC } from '../../lib/cortinaTypes';
 import type { RegrasCalculo, RegrasResp, ComposicaoCalculo, ComposicaoTipo } from '../../lib/regrasTypes';
 
 const clone = (r: RegrasCalculo) => JSON.parse(JSON.stringify(r)) as RegrasCalculo;
@@ -200,7 +200,7 @@ export function AdminRegras() {
             {['Modelo', 'Folga de topo (m)', 'Tem entretela'].map((h) => <Th key={h}>{h}</Th>)}
           </tr></thead>
           <tbody>
-            {MODELOS_CORTINA.map((m) => (
+            {MODELOS_CORTINA_CALC.map((m) => (
               <tr key={m.value} style={{ borderTop: '1px solid #dee2e6' }}>
                 <td style={{ padding: 8 }}><ComposicaoCell label={m.label} comp={composicao?.cortina[m.value]} /></td>
                 <td style={{ padding: 8 }}><InNum value={c.folga_topo[m.value]} step={0.01} ro={ro} onChange={(v) => up((r) => { r.cortina.folga_topo[m.value] = v; })} /></td>

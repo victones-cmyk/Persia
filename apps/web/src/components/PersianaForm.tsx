@@ -7,17 +7,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner, faPlus, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faSpinner, faPlus, faTrash, faCopy } from '@fortawesome/free-solid-svg-icons';
 import { api } from '../lib/api';
 import { roundHalfUp, formatBRL, formatNum, formatQtd } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
 import { MedidaInput } from './MedidaInput';
 import { ConfirmModal } from './ConfirmModal';
 import {
-  TIPOS_PERSIANA,
   CORES,
   ACIONAMENTOS,
   ROLAMENTOS,
+  COMANDOS,
   type TipoPersiana,
   type Cor,
   type Acionamento,
@@ -28,7 +28,9 @@ import {
   type CalcularLoteResposta,
   type OrcamentoCalculado,
   type ResultadoPersiana,
+  type CalculadoraPersiana,
 } from '../lib/calcTypes';
+
 import type { PersianaSnapshot, PersianaItemSnap } from '../lib/rascunhoLocal';
 
 interface ItemForm {
@@ -44,6 +46,7 @@ interface ItemForm {
   tcManual: boolean;
   rolamento: string;
   base: string;
+  comando: string;
   instalacao_id: string;
   instManual: boolean;
 }
@@ -54,10 +57,16 @@ interface ItemErro {
 }
 
 function itemVazio(): ItemForm {
-  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', instalacao_id: '', instManual: false };
+  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', comando: '', instalacao_id: '', instManual: false };
 }
 
 const ehMotorizado = (ac: string) => ac === 'motorizado_com_bando' || ac === 'motorizado_sem_bando';
+
+function normalizarRolamento(valor: string | null | undefined): string {
+  if (valor === 'Dianteiro') return 'Normal';
+  if (valor === 'Traseiro') return 'Invertido';
+  return valor ?? '';
+}
 
 /** Instalação sugerida pelo acionamento: motorizado → MOTORIZADA; senão → MANUAL (com fallbacks). */
 function sugerirInstalacao(instalacoes: TipoInstalacao[], acionamento: string): string {
@@ -82,8 +91,9 @@ function inputParaForm(it: ItemInput, tipoFallback: TipoPersiana | ''): ItemForm
     altura: it.altura != null ? String(it.altura) : '',
     tc: it.tc != null ? String(it.tc) : '',
     tcManual: it.tc != null,
-    rolamento: it.rolamento ?? '',
+    rolamento: normalizarRolamento(it.rolamento),
     base: it.base ?? '',
+    comando: it.comando ?? '',
     instalacao_id: it.instalacao_id ?? '',
     instManual: it.instalacao_id != null && it.instalacao_id !== '',
   };
@@ -102,8 +112,9 @@ function snapParaForm(s: PersianaItemSnap, tipoFallback: TipoPersiana | ''): Ite
     altura: s.altura,
     tc: s.tc,
     tcManual: s.tcManual,
-    rolamento: s.rolamento,
+    rolamento: normalizarRolamento(s.rolamento),
     base: s.base,
+    comando: s.comando ?? '',
     instalacao_id: s.instalacao_id ?? '',
     instManual: s.instManual ?? false,
   };
@@ -113,7 +124,7 @@ function formParaSnap(it: ItemForm): PersianaItemSnap {
   return {
     ambiente: it.ambiente, tipo: it.tipo, tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
     largura: it.largura, altura: it.altura, tc: it.tc, tcManual: it.tcManual,
-    rolamento: it.rolamento, base: it.base, instalacao_id: it.instalacao_id, instManual: it.instManual,
+    rolamento: it.rolamento, base: it.base, comando: it.comando, instalacao_id: it.instalacao_id, instManual: it.instManual,
   };
 }
 
@@ -140,6 +151,8 @@ export function PersianaForm({
   );
   const [mesmoAmbiente, setMesmoAmbiente] = useState(false);
 
+  // Lista de calculadoras de persianas carregadas dinamicamente
+  const [calculadoras, setCalculadoras] = useState<CalculadoraPersiana[]>([]);
   // Tecidos por TIPO (cada item escolhe seu tipo): carregados sob demanda e cacheados.
   const [tecidosPorTipo, setTecidosPorTipo] = useState<Record<string, TecidoOpcao[]>>({});
   const [tiposCarregando, setTiposCarregando] = useState<string[]>([]);
@@ -169,14 +182,21 @@ export function PersianaForm({
       });
   }
 
-  // Carrega tecidos dos tipos já presentes (restauro/edição) e a lista de instalações.
+  // Carrega as calculadoras, tecidos dos tipos já presentes (restauro/edição) e a lista de instalações.
   useEffect(() => {
+    api.get<{ calculadoras: CalculadoraPersiana[] }>('/calcular/calculadoras')
+      .then((r) => {
+        setCalculadoras(r.calculadoras);
+      })
+      .catch(() => setCalculadoras([]));
+
     for (const it of itens) if (it.tipo) garantirTecidos(it.tipo);
     api.get<{ instalacoes: TipoInstalacao[] }>('/calcular/instalacoes')
       .then((r) => setInstalacoes(r.instalacoes))
       .catch(() => setInstalacoes([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   // Quando a lista de instalações chega, preenche o sugerido nos itens ainda sem escolha.
   useEffect(() => {
@@ -224,6 +244,19 @@ export function PersianaForm({
     setRemoverIdx(null);
   }
 
+  function duplicarItem(idx: number) {
+    const orig = itens[idx];
+    const copia: ItemForm = {
+      ...orig,
+      id: crypto.randomUUID(),
+    };
+    setItens((prev) => {
+      const next = [...prev];
+      next.splice(idx + 1, 0, copia);
+      return next;
+    });
+  }
+
   const itemValido = (it: ItemForm) =>
     it.tipo !== '' && it.tecido_id !== '' && it.cor !== '' && it.acionamento !== '' && Number(it.largura) > 0 && Number(it.altura) > 0;
   // Só os itens completos entram no cálculo; itens incompletos bloqueiam o envio.
@@ -232,7 +265,7 @@ export function PersianaForm({
 
   // "Sujo" = começou a preencher algo (guarda de navegação contra perda de dados).
   const sujo = itens.some((it) =>
-    it.tipo || it.ambiente || it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base);
+    it.tipo || it.ambiente || it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base || it.comando);
   useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
   // Autosave local: emite o estado bruto sempre que muda (tipo representativo = 1º item).
   useEffect(() => { onSnapshot?.({ tipo: itens[0]?.tipo ?? '', itens: itens.map(formParaSnap) }); }, [itens, onSnapshot]);
@@ -249,6 +282,7 @@ export function PersianaForm({
       tc: it.tc === '' ? undefined : Number(it.tc),
       rolamento: it.rolamento || null,
       base: it.base || null,
+      comando: it.comando || null,
       instalacao_id: it.instalacao_id || null,
     };
   }
@@ -256,7 +290,7 @@ export function PersianaForm({
   // Cálculo automático (tempo real): recalcula com debounce a cada mudança. Calcula
   // só os itens completos; itens incompletos não somem o resultado, mas bloqueiam o envio.
   const calcSig = JSON.stringify({
-    itens: itens.map((it) => ({ tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, in: it.instalacao_id })),
+    itens: itens.map((it) => ({ tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, r: it.rolamento, b: it.base, co: it.comando, in: it.instalacao_id })),
   });
   useEffect(() => {
     if (itensComp.length === 0) { onResult(null); setResultPorIdx({}); return; }
@@ -295,7 +329,8 @@ export function PersianaForm({
         onResult(null);
         return;
       }
-      onResult({ tipo: (comp[0].it.tipo || 'persiana_rolo_blackout') as TipoPersiana, itens: calculados, total_bruto: r.total_bruto, incompleto });
+      onResult({ tipo: (comp[0].it.tipo || (calculadoras[0]?.id ?? 'persiana_rolo_blackout')) as TipoPersiana, itens: calculados, total_bruto: r.total_bruto, incompleto });
+
     } catch {
       onResult(null);
       setErroGeral('Não foi possível calcular. Tente novamente.');
@@ -332,14 +367,14 @@ export function PersianaForm({
             {/* Ambiente + Produto Sob Medida */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label className="form-label">Ambiente</label>
-                <input className="input" value={it.ambiente} onChange={(e) => atualizar(idx, { ambiente: e.target.value })} placeholder="Ex.: Sala, Quarto 1…" />
+                <label className="form-label" htmlFor={`ambiente-persiana-${idx}`}>Ambiente</label>
+                <input id={`ambiente-persiana-${idx}`} className="input" value={it.ambiente} onChange={(e) => atualizar(idx, { ambiente: e.target.value })} placeholder="Ex.: Sala, Quarto 1…" />
               </div>
               <div>
-                <label className="form-label">Produto Sob Medida<span className="label-required">*</span></label>
-                <select className="input" value={it.tipo} onChange={(e) => onTipoChange(idx, e.target.value as TipoPersiana)}>
+                <label className="form-label" htmlFor={`produto-persiana-${idx}`}>Produto Sob Medida<span className="label-required">*</span></label>
+                <select id={`produto-persiana-${idx}`} className="input" value={it.tipo} onChange={(e) => onTipoChange(idx, e.target.value as TipoPersiana)}>
                   <option value="">Selecione…</option>
-                  {TIPOS_PERSIANA.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  {calculadoras.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
                 </select>
               </div>
             </div>
@@ -347,7 +382,7 @@ export function PersianaForm({
             {/* Linha 1: Coleção (Tecido) · Cor · Acionamento */}
             <div className="grid grid-cols-4 gap-3 mb-3">
               <div className="col-span-2">
-                <label className="form-label">Coleção (Tecido)<span className="label-required">*</span></label>
+                <label className="form-label" htmlFor={`tecido-persiana-${idx}`}>Coleção (Tecido)<span className="label-required">*</span></label>
                 {carregandoTecidos ? (
                   <div className="skeleton" style={{ height: 38 }} />
                 ) : (
@@ -357,19 +392,20 @@ export function PersianaForm({
                     onChange={(id) => atualizar(idx, { tecido_id: id })}
                     disabled={!it.tipo}
                     placeholder={it.tipo ? 'Buscar tecido…' : 'Escolha o produto'}
+                    id={`tecido-persiana-${idx}`}
                   />
                 )}
               </div>
               <div>
-                <label className="form-label">Cor Acessório<span className="label-required">*</span></label>
-                <select className="input" value={it.cor} onChange={(e) => atualizar(idx, { cor: e.target.value as Cor })}>
+                <label className="form-label" htmlFor={`cor-persiana-${idx}`}>Cor Acessório<span className="label-required">*</span></label>
+                <select id={`cor-persiana-${idx}`} className="input" value={it.cor} onChange={(e) => atualizar(idx, { cor: e.target.value as Cor })}>
                   <option value="">—</option>
                   {CORES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
-                <label className="form-label">Acionamento<span className="label-required">*</span></label>
-                <select className="input" value={it.acionamento} onChange={(e) => onAcionamentoChange(idx, e.target.value as Acionamento)}>
+                <label className="form-label" htmlFor={`acionamento-persiana-${idx}`}>Acionamento<span className="label-required">*</span></label>
+                <select id={`acionamento-persiana-${idx}`} className="input" value={it.acionamento} onChange={(e) => onAcionamentoChange(idx, e.target.value as Acionamento)}>
                   <option value="">—</option>
                   {ACIONAMENTOS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
@@ -379,29 +415,29 @@ export function PersianaForm({
             {/* Linha 2: Largura · Altura · TC · Rolamento · Base */}
             <div className="grid grid-cols-5 gap-3 mb-3">
               <div>
-                <label className="form-label">Largura (m)<span className="label-required">*</span></label>
-                <MedidaInput className={erros[idx] ? 'input input-error' : 'input'}
+                <label className="form-label" htmlFor={`largura-persiana-${idx}`}>Largura (m)<span className="label-required">*</span></label>
+                <MedidaInput id={`largura-persiana-${idx}`} className={erros[idx] ? 'input input-error' : 'input'}
                   value={it.largura} onChange={(v) => { atualizar(idx, { largura: v }); setErros((p) => { const n = { ...p }; delete n[idx]; return n; }); }} />
               </div>
               <div>
-                <label className="form-label">Altura (m)<span className="label-required">*</span></label>
-                <MedidaInput value={it.altura} onChange={(v) => onAlturaChange(idx, v)} />
+                <label className="form-label" htmlFor={`altura-persiana-${idx}`}>Altura (m)<span className="label-required">*</span></label>
+                <MedidaInput id={`altura-persiana-${idx}`} value={it.altura} onChange={(v) => onAlturaChange(idx, v)} />
               </div>
               <div>
-                <label className="form-label" title="75% da altura, editável (RN-04)">TC (m)</label>
-                <input type="number" className="input" min={0.01} step={0.01}
+                <label className="form-label" htmlFor={`tc-persiana-${idx}`} title="75% da altura, editável (RN-04)">TC (m)</label>
+                <input id={`tc-persiana-${idx}`} type="number" className="input" min={0.01} step={0.01}
                   value={it.tc} onChange={(e) => atualizar(idx, { tc: e.target.value, tcManual: true })} />
               </div>
               <div>
-                <label className="form-label">Rolamento</label>
-                <select className="input" value={it.rolamento} onChange={(e) => atualizar(idx, { rolamento: e.target.value })}>
+                <label className="form-label" htmlFor={`rolamento-persiana-${idx}`}>Rolamento</label>
+                <select id={`rolamento-persiana-${idx}`} className="input" value={it.rolamento} onChange={(e) => atualizar(idx, { rolamento: e.target.value })}>
                   <option value="">—</option>
                   {ROLAMENTOS.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div>
-                <label className="form-label">Base</label>
-                <select className="input" value={it.base} onChange={(e) => atualizar(idx, { base: e.target.value })}>
+                <label className="form-label" htmlFor={`base-persiana-${idx}`}>Base</label>
+                <select id={`base-persiana-${idx}`} className="input" value={it.base} onChange={(e) => atualizar(idx, { base: e.target.value })}>
                   <option value="">—</option>
                   {CORES.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -411,8 +447,15 @@ export function PersianaForm({
             {/* Instalação (embutida no preço) — sugerida pelo acionamento, editável */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="form-label">Instalação</label>
-                <select className="input" value={it.instalacao_id}
+                <label className="form-label" htmlFor={`comando-persiana-${idx}`}>Comando</label>
+                <select id={`comando-persiana-${idx}`} className="input" value={it.comando} onChange={(e) => atualizar(idx, { comando: e.target.value })}>
+                  <option value="">—</option>
+                  {COMANDOS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="form-label" htmlFor={`instalacao-persiana-${idx}`}>Instalação</label>
+                <select id={`instalacao-persiana-${idx}`} className="input" value={it.instalacao_id}
                   onChange={(e) => atualizar(idx, { instalacao_id: e.target.value, instManual: true })}>
                   <option value="">Sem instalação</option>
                   {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
@@ -470,6 +513,16 @@ export function PersianaForm({
                 )}
               </div>
             )}
+            <div className="mt-3 pt-2 border-t border-neutral-200 flex justify-end">
+              <button
+                type="button"
+                className="btn btn-default btn-xs text-primary flex items-center gap-1.5"
+                onClick={() => duplicarItem(idx)}
+                title="Duplicar este item"
+              >
+                <FontAwesomeIcon icon={faCopy} /> Duplicar Item
+              </button>
+            </div>
           </div>
           );
         })}

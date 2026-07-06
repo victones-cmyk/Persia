@@ -61,11 +61,11 @@ npm run dev      # sobe API (3001) e frontend (5173) simultaneamente
 - API: http://localhost:3001/api/health
 
 ### Credenciais de homologação (seed)
-| Perfil | Email | Senha |
+| Perfil | Usuário | Senha |
 |---|---|---|
-| Admin (Victor) | victor@rainhadascortinas.com.br | `Admin@2026` |
-| Vendedor SP | vendedor.sp@rainhadascortinas.com.br | `Vendedor@2026` |
-| Vendedor SBC | vendedor.sbc@rainhadascortinas.com.br | `Vendedor@2026` |
+| Admin (Victor) | `victor.pavoni` | `Admin@2026` |
+| Vendedor SP | `loja.sp` | `Vendedor@2026` |
+| Vendedor SBC | `loja.sbc` | `Vendedor@2026` |
 
 ## Deploy no Railway
 

@@ -1,14 +1,7 @@
 // apps/api/src/services/calc/tipos.ts
 // Tipos e metadados do motor de cálculo de persiana (RN-02, RN-03, RN-07).
 
-export type TipoPersiana =
-  | 'persiana_rolo_blackout'
-  | 'persiana_rolo_screen'
-  | 'persiana_rolo_translucido'
-  | 'persiana_rolo_double_vision'
-  | 'persiana_romana_blackout'
-  | 'persiana_romana_screen'
-  | 'persiana_romana_translucido';
+export type TipoPersiana = string;
 
 export type Familia = 'rolo' | 'romana';
 export type Cor = 'Branco' | 'Bege' | 'Cinza' | 'Preto';
@@ -36,7 +29,7 @@ export interface MetaPersiana {
 }
 
 // Metadados por tipo — extraídos de base_3 (abas 04, 05, 06, 13) e RN-02.
-export const META: Record<TipoPersiana, MetaPersiana> = {
+export const META: Record<string, MetaPersiana> = {
   persiana_rolo_blackout: {
     codigoGc: '2591', familia: 'rolo', margem: 0.15, dobrarAltura: false,
     baseVenda: 'dimensao', fatorVenda: 1, maoDeObra: 'MÃO DE OBRA PERSIANA',
@@ -47,7 +40,6 @@ export const META: Record<TipoPersiana, MetaPersiana> = {
   },
   persiana_rolo_translucido: {
     codigoGc: '2608', familia: 'rolo', margem: 0.15, dobrarAltura: false,
-    // 2608 usa "MÃO DE OBRA PERSIANA ROMANA" no DecorSoft (aba 06).
     baseVenda: 'dimensao', fatorVenda: 1, maoDeObra: 'MÃO DE OBRA PERSIANA ROMANA',
   },
   persiana_rolo_double_vision: {
@@ -68,9 +60,9 @@ export const META: Record<TipoPersiana, MetaPersiana> = {
   },
 };
 
-export const TIPOS_PERSIANA = Object.keys(META) as TipoPersiana[];
+export const TIPOS_PERSIANA = Object.keys(META);
 
-export const TIPO_LABEL: Record<TipoPersiana, string> = {
+export const TIPO_LABEL: Record<string, string> = {
   persiana_rolo_blackout: 'PERSIANA ROLO BLACKOUT',
   persiana_rolo_screen: 'PERSIANA ROLO SCREEN',
   persiana_rolo_translucido: 'PERSIANA ROLO TRANSLÚCIDO',
@@ -87,9 +79,15 @@ export const ACIONAMENTO_LABEL: Record<Acionamento, string> = {
   motorizado_sem_bando: 'Motorizado sem Bandô',
 };
 
-export function isTipoPersiana(t: string): t is TipoPersiana {
-  return t in META;
+export function isTipoPersiana(t: string): boolean {
+  try {
+    const { getCalculadoras } = require('./calculadoras');
+    return getCalculadoras().some((c: any) => c.id === t);
+  } catch {
+    return t in META;
+  }
 }
 
 /** % padrão do Tamanho do Comando = 75% da altura (Victor 17/06/2026; era 70%). Campo editável. */
 export const TC_FATOR = 0.75;
+

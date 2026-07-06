@@ -9,6 +9,8 @@ import { validarSenha } from '../lib/senha';
 import { listarFuncionarios } from '../services/gc/catalogos';
 import { getRegras, salvarRegras, REGRAS_DEFAULT } from '../services/calc/regras';
 import { composicaoCalculo } from '../services/calc/composicao';
+import { getCalculadoras, salvarCalculadoras } from '../services/calc/calculadoras';
+import { getCalculadorasCortina, salvarCalculadorasCortina } from '../services/calc/calculadorasCortina';
 
 // ---------------------------------------------------------------------------
 // Versão em produção (só admin) — usado para conferir o auto-deploy do Railway.
@@ -35,6 +37,64 @@ export async function salvarRegrasCalculo(req: Request, res: Response): Promise<
   });
   res.json({ regras });
 }
+
+// ---------------------------------------------------------------------------
+// Calculadoras dinâmicas (só admin)
+// ---------------------------------------------------------------------------
+export async function listarCalculadoras(_req: Request, res: Response): Promise<void> {
+  res.json({ calculadoras: getCalculadoras() });
+}
+
+export async function atualizarCalculadoras(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const calculadoras = req.body?.calculadoras;
+  if (calculadoras === null) {
+    const { CALCULADORAS_DEFAULT } = require('../services/calc/calculadoras');
+    const salvas = await salvarCalculadoras(prisma, CALCULADORAS_DEFAULT);
+    await prisma.logAcao.create({
+      data: { usuario_id: sessao.id, acao: 'calculadoras_restauradas_padrao', detalhe: {} },
+    });
+    res.json({ calculadoras: salvas });
+    return;
+  }
+  if (!Array.isArray(calculadoras)) {
+    throw new AppError(400, 'CAMPOS_OBRIGATORIOS', 'A lista de calculadoras deve ser fornecida.');
+  }
+  const salvas = await salvarCalculadoras(prisma, calculadoras);
+  await prisma.logAcao.create({
+    data: { usuario_id: sessao.id, acao: 'calculadoras_atualizadas', detalhe: {} },
+  });
+  res.json({ calculadoras: salvas });
+}
+
+// Calculadoras dinâmicas de cortina (só admin)
+export async function listarCalculadorasCortina(_req: Request, res: Response): Promise<void> {
+  res.json({ calculadoras: getCalculadorasCortina() });
+}
+
+export async function atualizarCalculadorasCortina(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const calculadoras = req.body?.calculadoras;
+  if (calculadoras === null) {
+    const { CALCULADORAS_CORTINA_DEFAULT } = require('../services/calc/calculadorasCortina');
+    const salvas = await salvarCalculadorasCortina(prisma, CALCULADORAS_CORTINA_DEFAULT);
+    await prisma.logAcao.create({
+      data: { usuario_id: sessao.id, acao: 'calculadoras_cortina_restauradas_padrao', detalhe: {} },
+    });
+    res.json({ calculadoras: salvas });
+    return;
+  }
+  if (!Array.isArray(calculadoras)) {
+    throw new AppError(400, 'CAMPOS_OBRIGATORIOS', 'A lista de calculadoras de cortina deve ser fornecida.');
+  }
+  const salvas = await salvarCalculadorasCortina(prisma, calculadoras);
+  await prisma.logAcao.create({
+    data: { usuario_id: sessao.id, acao: 'calculadoras_cortina_atualizadas', detalhe: {} },
+  });
+  res.json({ calculadoras: salvas });
+}
+
+
 
 // ---------------------------------------------------------------------------
 // Usuários
@@ -218,4 +278,16 @@ export async function listarLogAcoes(req: Request, res: Response): Promise<void>
     logs,
     paginacao: { pagina, porPagina, total, totalPaginas: Math.max(1, Math.ceil(total / porPagina)) },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Lojas
+// ---------------------------------------------------------------------------
+export async function listarLojas(_req: Request, res: Response): Promise<void> {
+  const lojas = await prisma.loja.findMany({
+    where: { ativo: true },
+    select: { id: true, nome: true },
+    orderBy: { nome: 'asc' },
+  });
+  res.json({ lojas });
 }

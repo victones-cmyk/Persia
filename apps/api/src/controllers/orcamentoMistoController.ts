@@ -23,7 +23,7 @@ import { valorComRt, componenteRt } from '../services/calc/rtCalc';
 interface SessaoUsuario { id: string; perfil: 'vendedor' | 'admin'; gc_usuario_id: string | null; loja_id: string | null }
 
 /** Produto (linha) para o envio combinado ao GestãoClick. */
-type LinhaProduto = { nome_produto: string; valor_final: number; valor_custo: number };
+type LinhaProduto = { nome_produto: string; descricao_produto?: string; valor_final: number; valor_custo: number };
 
 /** POST /api/orcamentos/misto — cria um orçamento com persianas E cortinas juntas. */
 export async function criarOrcamentoMisto(req: Request, res: Response): Promise<void> {
@@ -90,12 +90,15 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   // Instalação e RT já embutidos no valor de cada produto.
   const valorTotal = roundHalfUp(persTotal + valorCortinas);
 
-  const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
+  const lojaIdOrcamento = sessao.perfil === 'admin'
+    ? (b.loja_id ?? editarOrc?.loja_id ?? sessao.loja_id)
+    : (editarOrc?.loja_id ?? sessao.loja_id);
+  const loja = await resolverLoja(lojaIdOrcamento);
 
   // Produtos para o GC: PERSIANAS primeiro, depois CORTINAS (ordem usada p/ mapear ids).
   const produtosEnvio: LinhaProduto[] = [
-    ...persPrep.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
-    ...cortPrep.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
+    ...persPrep.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+    ...cortPrep.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
   ];
 
   const entradaJson = { tipo: persPrep[0].tipo, itens: itensEntrada, cortinas: cortinasEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue;
@@ -103,7 +106,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const baseDados = {
     tipo_produto: 'misto' as const,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
-    loja_id: editarOrc?.loja_id ?? loja.id,
+    loja_id: loja.id,
     entrada_json: entradaJson,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
@@ -176,7 +179,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   }
 }
 
-interface CortinaSnap { nome_produto?: string; valor_total?: number; valor_custo?: number }
+interface CortinaSnap { nome_produto?: string; descricao_produto?: string; valor_total?: number; valor_custo?: number }
 interface MistoItensJson { persiana?: { tipo: string; itens: ItemSnapshot[] }; cortinas?: CortinaSnap[]; instalacao?: number }
 
 /** Reenvia um orçamento MISTO ao GestãoClick (replay do snapshot salvo). */
@@ -202,12 +205,12 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
 
   const produtos: LinhaProduto[] = recalcular
     ? [
-        ...(persPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
-        ...(cortPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
+        ...(persPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+        ...(cortPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
       ]
     : [
-        ...persSnaps.map((s) => ({ nome_produto: s.nome_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) })),
-        ...cortSnaps.map((s) => ({ nome_produto: String(s.nome_produto ?? 'Cortina'), valor_final: Number(s.valor_total) || 0, valor_custo: Number(s.valor_custo) || 0 })),
+        ...persSnaps.map((s) => ({ nome_produto: s.nome_produto, descricao_produto: s.descricao_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) })),
+        ...cortSnaps.map((s) => ({ nome_produto: String(s.nome_produto ?? 'Cortina'), descricao_produto: s.descricao_produto ? String(s.descricao_produto) : undefined, valor_final: Number(s.valor_total) || 0, valor_custo: Number(s.valor_custo) || 0 })),
       ];
 
   try {

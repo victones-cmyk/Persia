@@ -1,0 +1,82 @@
+// Formatação do produto sintético de cortina criado no GestãoClick.
+
+import type { FixacaoCortina, ModeloCortina } from './cortina';
+import { MODELOS_CORTINA_LABEL } from './cortinaLabels';
+
+type CamadaProdutoCortina = {
+  modelo?: ModeloCortina | null;
+  tecido_nome: string;
+  franzido?: number | string | null;
+};
+
+const FIXACAO_LABEL: Record<FixacaoCortina, string> = {
+  varao: 'Varão',
+  trilho: 'Trilho',
+  varao_suico: 'Varão suíço',
+};
+
+function numeroBR(n: number, casas = 2): string {
+  return n.toFixed(casas).replace('.', ',');
+}
+
+function textoLimpo(s: string | null | undefined): string {
+  return String(s ?? '').trim().replace(/\s+/g, ' ');
+}
+
+function modeloLimpo(modelo: string): string {
+  return textoLimpo(modelo).replace(/^cortina\s+/i, '');
+}
+
+function modeloLabel(modelo: ModeloCortina | null | undefined): string {
+  if (!modelo) return 'Cortina';
+  return MODELOS_CORTINA_LABEL[modelo] ?? modelo;
+}
+
+function aberturaLabel(aberturas: number | string | null | undefined): string {
+  const n = Number(aberturas);
+  if (n === 2) return 'Central';
+  if (n === 1 || !Number.isFinite(n) || n <= 0) return 'Sem abertura';
+  return `${n} aberturas`;
+}
+
+function franzidoLabel(franzido: number | string | null | undefined): string | null {
+  if (franzido === null || franzido === undefined || franzido === '') return null;
+  const n = Number(franzido);
+  if (!Number.isFinite(n)) return null;
+  return `${numeroBR(n, Number.isInteger(n) ? 0 : 1)}x`;
+}
+
+export function nomeProdutoCortina(params: {
+  ambiente?: string | null;
+  modelo_cortina_nome?: string | null;
+  modelo_fallback?: ModeloCortina | null;
+  largura: number;
+  altura: number;
+}): string {
+  const ambiente = textoLimpo(params.ambiente);
+  const modelo = modeloLimpo(params.modelo_cortina_nome || modeloLabel(params.modelo_fallback));
+  const partes = ['Cortina', ambiente, modelo].filter(Boolean);
+  return `${partes.join(' ')} L:${numeroBR(params.largura)}m X A:${numeroBR(params.altura)}m`;
+}
+
+export function descricaoProdutoCortina(params: {
+  fixacao: FixacaoCortina;
+  aberturas?: number | string | null;
+  camadas: CamadaProdutoCortina[];
+}): string {
+  const linhas = [
+    `Fixação: ${FIXACAO_LABEL[params.fixacao] ?? params.fixacao}`,
+    `Abertura: ${aberturaLabel(params.aberturas)}`,
+    'Cortina:',
+  ];
+
+  params.camadas.forEach((camada, i) => {
+    if (i > 0) linhas.push('');
+    linhas.push(`${i === 0 ? 'Frente' : `Camada ${i + 1}`}: ${modeloLabel(camada.modelo)}`);
+    linhas.push(`Tecido: ${textoLimpo(camada.tecido_nome)}`);
+    const franzido = franzidoLabel(camada.franzido);
+    if (franzido) linhas.push(`Franzido: ${franzido}`);
+  });
+
+  return linhas.join('\n');
+}

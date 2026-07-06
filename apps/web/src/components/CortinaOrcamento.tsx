@@ -98,6 +98,24 @@ export function CortinaOrcamento({
     setSnaps((m) => { const n = { ...m }; delete n[id]; return n; });
   };
 
+  const duplicarCortina = (id: string, idx: number) => {
+    const origSnap = snaps[id];
+    if (!origSnap) return;
+    const newId = crypto.randomUUID();
+    
+    // Copia o snapshot localmente para que o novo card monte idêntico
+    restauros.current[newId] = JSON.parse(JSON.stringify(origSnap));
+    setSnaps((m) => ({ ...m, [newId]: JSON.parse(JSON.stringify(origSnap)) }));
+    
+    setIds((xs) => {
+      const next = [...xs];
+      next.splice(idx + 1, 0, newId);
+      return next;
+    });
+    
+    showToast('info', 'Cortina duplicada', `Cortina ${idx + 1} copiada com sucesso.`);
+  };
+
   // "Sujo" = alguma cortina tocada (guarda de navegação).
   const sujo = ids.some((id) => preenchidos[id]);
   useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
@@ -178,6 +196,7 @@ export function CortinaOrcamento({
           onSnapshot={(s) => setSnap(id, s)}
           onRemover={() => setRemoverCortinaId(id)}
           podeRemover={ids.length > 1}
+          onDuplicar={() => duplicarCortina(id, i)}
         />
       ))}
       <button type="button" className="btn btn-default w-full" onClick={() => setIds((xs) => [...xs, crypto.randomUUID()])}>

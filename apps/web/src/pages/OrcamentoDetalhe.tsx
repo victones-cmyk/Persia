@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faArrowLeft, faRotateRight, faSpinner, faFloppyDisk, faXmark, faPen } from '@fortawesome/free-solid-svg-icons';
+import { faArrowLeft, faRotateRight, faSpinner, faFloppyDisk, faXmark, faPen, faCopy } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL, formatNum } from '../lib/formatacao';
@@ -14,7 +14,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import type { OrcamentoDetalhe as Orc, ItemSnapshot } from '../lib/orcamentoTypes';
 import type { ClienteResumo } from '../lib/calcTypes';
 import { TIPOS_PERSIANA, ACIONAMENTOS } from '../lib/calcTypes';
-import { MODELOS_CORTINA, FIXACOES_CORTINA } from '../lib/cortinaTypes';
+import { FIXACOES_CORTINA, modeloCortinaLabel } from '../lib/cortinaTypes';
 
 // Snapshot de uma cortina salvo em itens_json (estrutura do servidor).
 interface CortinaCamadaSnap { tecido_nome: string; metragem: number; valor_tecido: number }
@@ -25,7 +25,7 @@ interface CortinaSnap {
   valor_total: number; nome_produto?: string;
 }
 
-const modeloLabel = (v: string) => MODELOS_CORTINA.find((m) => m.value === v)?.label ?? v;
+const modeloLabel = (v: string) => modeloCortinaLabel(v);
 const fixacaoLabel = (v: string) => FIXACOES_CORTINA.find((f) => f.value === v)?.label ?? v;
 
 const tipoLabel = (v: string) => TIPOS_PERSIANA.find((t) => t.value === v)?.label ?? v.replace(/_/g, ' ');
@@ -93,6 +93,7 @@ export function OrcamentoDetalhe() {
   const [carregando, setCarregando] = useState(true);
   const [reenviando, setReenviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [duplicando, setDuplicando] = useState(false);
   const [cancelarAberto, setCancelarAberto] = useState(false);
   const [enviarAberto, setEnviarAberto] = useState(false);
 
@@ -147,6 +148,20 @@ export function OrcamentoDetalhe() {
       carregar();
     } finally {
       setReenviando(false);
+    }
+  }
+
+  async function duplicar() {
+    setDuplicando(true);
+    try {
+      const r = await api.post<{ orcamento: { id: string } }>(`/orcamentos/${id}/duplicar`);
+      showToast('success', 'Orçamento duplicado', 'A cópia foi criada como rascunho.');
+      navigate(`/orcamentos/novo?editar=${r.orcamento.id}`);
+    } catch (e) {
+      const msg = e instanceof ApiError ? (e.data as { message?: string; erro?: { message?: string } } | null)?.erro?.message ?? (e.data as { message?: string } | null)?.message ?? e.message : 'Tente novamente.';
+      showToast('error', 'Falha ao duplicar', msg);
+    } finally {
+      setDuplicando(false);
     }
   }
 
@@ -223,6 +238,7 @@ export function OrcamentoDetalhe() {
         )}
 
         <Linha label="Produto" valor={tipoLabel(orc.tipo_produto)} />
+        <Linha label="Loja" valor={orc.loja?.nome ?? '—'} />
 
         {/* Itens do orçamento — persianas e/ou cortinas (cobre misto) */}
         {(persianaItens.length > 0 || cortinaSnaps.length > 0) ? (
@@ -245,6 +261,7 @@ export function OrcamentoDetalhe() {
                       <span>Cor: {it.cor_acessorio || '—'}</span>
                       {it.rolamento && <span>Rolamento: {it.rolamento}</span>}
                       {it.base && <span>Base: {it.base}</span>}
+                      {it.comando && <span>Comando: {it.comando}</span>}
                       {it.instalacao_nome && <span>Instalação: {it.instalacao_nome}</span>}
                     </div>
                   </div>
@@ -293,9 +310,13 @@ export function OrcamentoDetalhe() {
           <Linha label="Cliente" valor={orc.nome_cliente || '—'} />
         ) : null}
 
-        {orc.status !== 'cancelado' && (
-          <div className="flex gap-2 mt-4">
-            <button className="btn btn-danger" disabled={reenviando || salvando} onClick={() => setCancelarAberto(true)}>
+        <div className="flex gap-2 mt-4">
+          <button className="btn btn-default" disabled={duplicando || reenviando || salvando} onClick={() => void duplicar()}>
+            {duplicando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faCopy} /> Duplicar</>}
+          </button>
+          {orc.status !== 'cancelado' && (
+            <>
+            <button className="btn btn-danger" disabled={duplicando || reenviando || salvando} onClick={() => setCancelarAberto(true)}>
               <FontAwesomeIcon icon={faXmark} /> Cancelar orçamento
             </button>
             {eRascunho && (
@@ -315,8 +336,9 @@ export function OrcamentoDetalhe() {
                 )}
               </button>
             )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
         {emEdicao && !cliente && (
           <div className="text-xs-ui text-neutral-500 mt-2">Selecione o cliente para habilitar o envio ao GestãoClick.</div>
         )}

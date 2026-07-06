@@ -16,6 +16,7 @@ export interface PersianaItemSnap {
   tcManual: boolean;
   rolamento: string;
   base: string;
+  comando?: string;
   instalacao_id: string;
   instManual: boolean;
 }
@@ -28,11 +29,13 @@ export interface PersianaSnapshot {
 export interface CortinaCardSnap {
   ambiente: string;
   modelo: string;
+  modeloCortinaNome?: string;
   fixacao: string;
   largura: string;
   altura: string;
   tamanhoBarra: string;
   tipoBarra: string;
+  aberturas?: string;
   jaPossuiVarao?: boolean;
   camadas: { tecidoId: string; franzido: string; modelo?: string }[];
   acessorioSel: Record<string, string>;
@@ -47,6 +50,7 @@ export interface CortinaSnapshot {
 export interface RascunhoLocal {
   tipo: 'persiana' | 'cortina' | 'misto';
   cliente: { id: string; nome: string } | null;
+  loja_id?: string;
   persiana?: PersianaSnapshot;
   cortina?: CortinaSnapshot;
   instalacao_valor?: string; // legado (instalação agora é por item)

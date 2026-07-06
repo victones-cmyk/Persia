@@ -5,6 +5,7 @@ import { roundHalfUp } from './arredondamento';
 import { META, type TipoPersiana, type Cor, type Acionamento, type Familia } from './tipos';
 import { getRegras } from './regras';
 import { todosComponentes } from './componentes';
+import { encontrarCalculadora } from './calculadoras';
 import type { ComponenteCalculado } from './componentes.types';
 
 export class RN01Error extends Error {
@@ -49,11 +50,22 @@ export interface ResultadoPersiana {
 }
 
 export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
+  const calc = encontrarCalculadora(e.tipo);
   const meta = META[e.tipo];
-  if (!meta) throw new Error(`Tipo de persiana inválido: ${e.tipo}`);
+  if (!calc && !meta) throw new Error(`Tipo de persiana inválido: ${e.tipo}`);
+
   // Regras parametrizáveis (módulo Admin → Regras de Cálculo).
   const reg = getRegras().persiana;
-  const rt = reg.tipos[e.tipo];
+
+  // Carrega margens e regras do banco (calculadora dinâmica) ou do META/Regras estático
+  const margem = calc ? calc.margem : (reg.tipos[e.tipo]?.margem ?? meta.margem);
+  const dobrarAltura = calc ? calc.dobrar_altura : (reg.tipos[e.tipo]?.dobrar_altura ?? meta.dobrarAltura);
+  const baseVenda = calc ? calc.base_venda : (reg.tipos[e.tipo]?.base_venda ?? meta.baseVenda);
+  const fatorVenda = calc ? calc.fator_venda : (reg.tipos[e.tipo]?.fator_venda ?? meta.fatorVenda);
+  const maoDeObra = calc ? calc.mao_de_obra : meta.maoDeObra;
+  const codigoGc = calc ? calc.codigo_gc : meta.codigoGc;
+  const familia = calc ? (calc.familia.startsWith('romana') ? 'romana' as const : 'rolo' as const) : meta.familia;
+
 
   if (!(e.largura > 0) || !(e.altura > 0) || !(e.dimensao > 0)) {
     throw new Error('Largura, altura e dimensão devem ser positivos.');
@@ -64,13 +76,13 @@ export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
     throw new RN01Error(e.largura, e.dimensao);
   }
 
-  const alturaEfetiva = rt.dobrar_altura ? e.altura * 2 : e.altura;
-  const fatorAltura = alturaEfetiva + rt.margem;
+  const alturaEfetiva = dobrarAltura ? e.altura * 2 : e.altura;
+  const fatorAltura = alturaEfetiva + margem;
 
   // RN-02 — Produção sempre usa [Largura]; Venda usa [Dimensao] ou [Largura] × fator.
   const qtd_producao = roundHalfUp(e.largura * fatorAltura);
-  const baseVenda = rt.base_venda === 'dimensao' ? e.dimensao : e.largura;
-  const qtd_venda = roundHalfUp(baseVenda * fatorAltura * rt.fator_venda);
+  const baseVendaVal = baseVenda === 'dimensao' ? e.dimensao : e.largura;
+  const qtd_venda = roundHalfUp(baseVendaVal * fatorAltura * fatorVenda);
 
   // RN-04 — TC padrão = altura × fator (parametrizável); campo editável (usa valor informado se houver).
   const tc = e.tc !== undefined ? roundHalfUp(e.tc) : roundHalfUp(e.altura * reg.tc_fator);
@@ -83,13 +95,13 @@ export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
 
   return {
     tipo: e.tipo,
-    codigo_gc: meta.codigoGc,
-    familia: meta.familia,
+    codigo_gc: codigoGc,
+    familia,
     largura: e.largura,
     altura: e.altura,
     dimensao: e.dimensao,
     altura_efetiva: alturaEfetiva,
-    margem: rt.margem,
+    margem,
     tc,
     qtd_producao,
     qtd_venda,
@@ -98,3 +110,4 @@ export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
     componentes,
   };
 }
+

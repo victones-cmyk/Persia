@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEye, faPen, faRotateRight, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faEye, faPen, faRotateRight, faXmark, faCopy } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL } from '../lib/formatacao';
@@ -173,6 +173,21 @@ export function Orcamentos() {
     }
   }
 
+  async function duplicar(id: string) {
+    setAcaoEmId(id);
+    try {
+      const r = await api.post<{ orcamento: { id: string } }>(`/orcamentos/${id}/duplicar`);
+      showToast('success', 'Orçamento duplicado', 'A cópia foi criada como rascunho.');
+      navigate(`/orcamentos/novo?editar=${r.orcamento.id}`);
+    } catch (e) {
+      const msg = e instanceof ApiError ? (e.data as { message?: string; erro?: { message?: string } } | null)?.erro?.message ?? (e.data as { message?: string } | null)?.message ?? e.message : 'Tente novamente.';
+      showToast('error', 'Falha ao duplicar', msg);
+      carregar();
+    } finally {
+      setAcaoEmId(null);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -259,16 +274,16 @@ export function Orcamentos() {
       </div>
 
       {/* Tabela */}
-      <div className="card p-0 overflow-hidden">
-        <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14, tableLayout: 'fixed' }}>
+      <div className="card p-0 table-scroll">
+        <table className="data-table" style={{ minWidth: 980 }}>
           <colgroup>
-            <col style={{ width: 150 }} />
+            <col style={{ width: 180 }} />
             <col />
             <col style={{ width: 110 }} />
             <col style={{ width: 130 }} />
             <col style={{ width: 120 }} />
             <col style={{ width: 100 }} />
-            <col style={{ width: 150 }} />
+            <col style={{ width: 184 }} />
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
@@ -278,7 +293,7 @@ export function Orcamentos() {
               <Th>Valor Final</Th>
               <Th>Status</Th>
               <Th>Data</Th>
-              <Th>Ações</Th>
+              <Th className="table-actions">Ações</Th>
             </tr>
           </thead>
           <tbody>
@@ -309,10 +324,13 @@ export function Orcamentos() {
                   <td style={{ padding: 12 }} className="font-mono tabular-nums">{formatBRL(Number(o.valor_final))}</td>
                   <td style={{ padding: 12 }}><StatusBadge status={o.status} /></td>
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-500">{dataBR(o.criado_em)}</td>
-                  <td style={{ padding: 12 }}>
-                    <div className="flex gap-1">
+                  <td style={{ padding: 12 }} className="table-actions">
+                    <div className="table-actions-row">
                       <button className="btn btn-info btn-xs" onClick={() => navigate(`/orcamentos/${o.id}`)} title="Visualizar">
                         <FontAwesomeIcon icon={faEye} />
+                      </button>
+                      <button className="btn btn-default btn-xs text-primary" disabled={acaoEmId === o.id} onClick={() => duplicar(o.id)} title="Duplicar como rascunho">
+                        <FontAwesomeIcon icon={faCopy} />
                       </button>
                       <button
                         className="btn btn-warning btn-xs"
@@ -382,6 +400,6 @@ export function Orcamentos() {
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{children}</th>;
+function Th({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <th className={className} style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{children}</th>;
 }

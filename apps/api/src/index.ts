@@ -22,6 +22,8 @@ import adminRouter from './routes/admin';
 import gcRouter from './routes/gc';
 import { getGcHealth } from './services/gc/health';
 import { carregarRegras } from './services/calc/regras';
+import { carregarCalculadoras } from './services/calc/calculadoras';
+import { carregarCalculadorasCortina } from './services/calc/calculadorasCortina';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -155,6 +157,9 @@ const server = app.listen(env.PORT, () => {
   console.log(`🚀 API Pérsia ouvindo em http://localhost:${env.PORT} (${env.NODE_ENV})`);
   // Carrega as regras de cálculo (módulo admin) para a memória.
   void carregarRegras(prisma);
+  // Carrega as calculadoras dinâmicas para a memória.
+  void carregarCalculadoras(prisma);
+  void carregarCalculadorasCortina(prisma);
 });
 
 // Encerramento gracioso.

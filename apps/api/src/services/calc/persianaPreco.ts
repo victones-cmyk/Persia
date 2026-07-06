@@ -6,11 +6,15 @@
 
 import { evalQuantidade, type VarsQtd } from './formula';
 import { roundHalfUp } from './arredondamento';
-import { RECEITAS_PERSIANA, type FamiliaPersiana, type VariantePersiana } from './persianaReceitas.data';
+import { RECEITAS_PERSIANA, type VariantePersiana } from './persianaReceitas.data';
+import { encontrarCalculadora, type FamiliaPersiana } from './calculadoras';
 import type { TipoPersiana, Acionamento } from './tipos';
 
 /** Família (receita) a partir do tipo de persiana. */
 export function familiaDoTipo(tipo: TipoPersiana): FamiliaPersiana {
+  const calc = encontrarCalculadora(tipo);
+  if (calc) return calc.familia;
+
   if (tipo === 'persiana_rolo_double_vision') return 'double_vision';
   if (tipo === 'persiana_rolo_screen') return 'tela_solar';
   if (tipo === 'persiana_romana_screen') return 'romana_tela_solar';
@@ -89,10 +93,11 @@ export interface EntradaPrecoPersiana {
 }
 
 export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPersiana {
-  const familia = familiaDoTipo(e.tipo);
+  const calc = encontrarCalculadora(e.tipo);
+  const familia = calc ? calc.familia : familiaDoTipo(e.tipo);
   const variante = varianteDoAcionamento(e.acionamento);
 
-  const receita = RECEITAS_PERSIANA[familia]?.[variante];
+  const receita = calc ? calc.receitas[variante] : RECEITAS_PERSIANA[familia]?.[variante];
   if (!receita) {
     // Pendentes: tela_solar motorizada e romana motorizada (esta não existe — Victor).
     const msg = ehAcionamentoMotorizado(e.acionamento)
@@ -128,3 +133,4 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
 
   return { familia, variante, itens, tecido, valor: roundHalfUp(total) };
 }
+

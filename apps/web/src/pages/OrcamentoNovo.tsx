@@ -57,6 +57,18 @@ export function OrcamentoNovo() {
   // Rascunho local recuperado (só fora do modo edição).
   const [rascunhoLocal] = useState<RascunhoLocal | null>(() => (editarId ? null : lerRascunhoLocal()));
 
+  interface Loja { id: string; nome: string }
+  const [lojas, setLojas] = useState<Loja[]>([]);
+  const [lojaId, setLojaId] = useState<string>(() => rascunhoLocal?.loja_id ?? '');
+
+  useEffect(() => {
+    if (usuario?.perfil === 'admin') {
+      api.get<{ lojas: Loja[] }>('/admin/lojas')
+        .then((r) => setLojas(r.lojas))
+        .catch(() => setLojas([]));
+    }
+  }, [usuario]);
+
   const [cliente, setCliente] = useState<ClienteResumo | null>(
     rascunhoLocal?.cliente ? { id: rascunhoLocal.cliente.id, nome: rascunhoLocal.cliente.nome, tipo_pessoa: '', documento: null } : null,
   );
@@ -93,6 +105,7 @@ export function OrcamentoNovo() {
   const persianaSujoRef = useRef(false);
   const cortinaSujoRef = useRef(false);
   const clienteRef = useRef(cliente); clienteRef.current = cliente;
+  const lojaIdRef = useRef(lojaId); lojaIdRef.current = lojaId;
   const rtRef = useRef(rt); rtRef.current = rt;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -105,6 +118,7 @@ export function OrcamentoNovo() {
       const r: RascunhoLocal = {
         tipo: 'misto',
         cliente: cli ? { id: cli.id, nome: cli.nome } : null,
+        loja_id: usuario?.perfil === 'admin' ? lojaIdRef.current || undefined : undefined,
         persiana: persianaSnapRef.current ?? undefined,
         cortina: cortinaSnapRef.current ?? undefined,
         rt_pct: rtRef.current,
@@ -112,13 +126,18 @@ export function OrcamentoNovo() {
       };
       salvarRascunhoLocal(r);
     }, 500);
-  }, [editarId]);
+  }, [editarId, usuario?.perfil]);
 
   const onSnapPersiana = useCallback((s: PersianaSnapshot) => { persianaSnapRef.current = s; agendarSalvar(); }, [agendarSalvar]);
   const onSnapCortina = useCallback((s: CortinaSnapshot) => { cortinaSnapRef.current = s; agendarSalvar(); }, [agendarSalvar]);
   const onDirtyPersiana = useCallback((sujo: boolean) => { persianaSujoRef.current = sujo; setDirty(sujo || cortinaSujoRef.current); agendarSalvar(); }, [agendarSalvar, setDirty]);
   const onDirtyCortina = useCallback((sujo: boolean) => { cortinaSujoRef.current = sujo; setDirty(sujo || persianaSujoRef.current); agendarSalvar(); }, [agendarSalvar, setDirty]);
   const onSelecionarCliente = useCallback((c: ClienteResumo | null) => { setCliente(c); agendarSalvar(); }, [agendarSalvar]);
+  const onSelecionarLoja = useCallback((id: string) => {
+    lojaIdRef.current = id;
+    setLojaId(id);
+    agendarSalvar();
+  }, [agendarSalvar]);
 
   // Marcar/desmarcar uma seção. Ao desmarcar, zera resultado/snapshot daquela seção
   // para que não conte no total nem volte na recuperação.
@@ -152,6 +171,7 @@ export function OrcamentoNovo() {
           navigate(`/orcamentos/${editarId}`); return;
         }
         setCliente(o.gc_cliente_id ? { id: o.gc_cliente_id, nome: o.nome_cliente, tipo_pessoa: '', documento: null } : null);
+        setLojaId(o.loja_id ?? '');
         const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[]; rt_pct?: number } | null;
         const ehMisto = o.tipo_produto === 'misto';
         const ehCortina = o.tipo_produto === 'cortina';
@@ -171,7 +191,7 @@ export function OrcamentoNovo() {
               tipo: o.tipo_produto as TipoPersiana,
               itens: o.itens_json.map((s: ItemSnapshot) => ({
                 tecido_id: s.tecido_codigo_gc, cor_acessorio: s.cor_acessorio as Cor, acionamento: s.acionamento as Acionamento,
-                largura: Number(s.largura_m), altura: Number(s.altura_m), tc: Number(s.tc_m), rolamento: s.rolamento, base: s.base,
+                largura: Number(s.largura_m), altura: Number(s.altura_m), tc: Number(s.tc_m), rolamento: s.rolamento, base: s.base, comando: s.comando,
               })),
             });
             novaOrdem.push('persiana');
@@ -215,7 +235,8 @@ export function OrcamentoNovo() {
   // Persiana (se houver) precisa estar completa; cortina (se houver) idem.
   const persianaOk = !temPersiana || !persianaIncompleto;
   const cortinaOk = !temCortina || cortinaCompletas;
-  const conteudoValido = algoPreenchido && persianaOk && cortinaOk;
+  const adminLojaOk = usuario?.perfil !== 'admin' || !!lojaId;
+  const conteudoValido = algoPreenchido && persianaOk && cortinaOk && adminLojaOk;
 
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !usuario?.gc_usuario_id;
@@ -237,6 +258,7 @@ export function OrcamentoNovo() {
     try {
       const comum = {
         rt_pct: rtNum,
+        ...(usuario?.perfil === 'admin' ? { loja_id: lojaId || undefined } : {}),
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(editarId ? { editar_id: editarId } : {}),
@@ -321,10 +343,26 @@ export function OrcamentoNovo() {
         </div>
       )}
 
-      {/* Cliente — no topo (padrão GestãoClick). Obrigatório só para enviar ao GC. */}
+      {/* Cliente e loja — no topo (padrão GestãoClick). Cliente é obrigatório só para enviar ao GC. */}
       <div className="card p-4 mb-4">
-        <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar ao GestãoClick)</span></label>
-        <ClienteSearch selecionado={cliente} onSelecionar={onSelecionarCliente} />
+        <div className={usuario?.perfil === 'admin' ? 'grid grid-cols-1 lg:grid-cols-3 gap-4' : ''}>
+          <div className={usuario?.perfil === 'admin' ? 'lg:col-span-2' : ''}>
+            <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar ao GestãoClick)</span></label>
+            <ClienteSearch selecionado={cliente} onSelecionar={onSelecionarCliente} />
+          </div>
+          {usuario?.perfil === 'admin' && (
+            <div>
+              <label className="form-label" htmlFor="loja-orcamento">Loja / Filial</label>
+              <select id="loja-orcamento" className="input" value={lojaId} onChange={(e) => onSelecionarLoja(e.target.value)}>
+                <option value="">Selecione a loja</option>
+                {lojas.map((loja) => (
+                  <option key={loja.id} value={loja.id}>{loja.nome}</option>
+                ))}
+              </select>
+              <div className="helper-text">Define onde o orçamento será salvo e enviado.</div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Seletor: o vendedor decide o que entra no orçamento. */}
@@ -422,6 +460,7 @@ export function OrcamentoNovo() {
               value={formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
 
             {!algoPreenchido && <div className="alert alert-info mb-3 text-xs-ui"><span>Adicione ao menos uma <strong>persiana</strong> ou <strong>cortina</strong>.</span></div>}
+            {algoPreenchido && usuario?.perfil === 'admin' && !lojaId && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione a <strong>Loja / Filial</strong> no topo.</span></div>}
             {temPersiana && persianaIncompleto && <div className="alert alert-warning mb-3 text-xs-ui"><span>Há <strong>persiana</strong> com campos obrigatórios em branco.</span></div>}
             {temCortina && !cortinaCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Escolha o <strong>produto de cada acessório</strong> em todas as cortinas.</span></div>}
             {algoPreenchido && conteudoValido && !cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar (ou use <strong>Salvar</strong>).</span></div>}

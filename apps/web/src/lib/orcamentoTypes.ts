@@ -31,6 +31,7 @@ export interface ItemSnapshot {
   acionamento: string;
   rolamento: string | null;
   base: string | null;
+  comando?: string | null;
   qtd_venda: number;
   qtd_producao: number;
   valor_bruto: number;
@@ -42,6 +43,7 @@ export interface ItemSnapshot {
 }
 
 export interface OrcamentoDetalhe extends OrcamentoListItem {
+  loja_id: string | null;
   gc_cliente_id: string | null;
   /** Entrada bruta do formulário (para reabrir o rascunho na calculadora). */
   entrada_json?: Record<string, unknown> | null;

@@ -16,6 +16,7 @@
 import { META, type TipoPersiana } from './tipos';
 import { RECEITAS_PERSIANA } from './persianaReceitas.data';
 import { familiaDoTipo } from './persianaPreco';
+import { encontrarCalculadora } from './calculadoras';
 import { calcularCortinaMultiCamada, type ModeloCortina } from './cortina';
 import { categoriaDoItem, GRUPOS_ACESSORIO_CORTINA, type CategoriaAcessorio } from '../gc/acessorios';
 import { SUBGRUPO_PERSIANA, GRUPO_TECIDO_CORTINA } from '../gc/tecidos';
@@ -63,8 +64,12 @@ function composicaoPersiana(tipo: TipoPersiana): ComposicaoTipo {
 
   // Receita representativa (com bandô; cai p/ sem bandô se não houver). Os componentes
   // variam um pouco conforme o acionamento (com/sem bandô, motor), mas todos entram no preço.
-  const familia = familiaDoTipo(tipo);
-  const receita = RECEITAS_PERSIANA[familia]?.com_bando ?? RECEITAS_PERSIANA[familia]?.sem_bando;
+  const calc = encontrarCalculadora(tipo);
+  const familia = calc ? calc.familia : familiaDoTipo(tipo);
+  const receita = calc
+    ? (calc.receitas.com_bando ?? calc.receitas.sem_bando ?? calc.receitas.motor_com_bando ?? calc.receitas.motor_sem_bando)
+    : (RECEITAS_PERSIANA[familia]?.com_bando ?? RECEITAS_PERSIANA[familia]?.sem_bando);
+
   const vistos = new Set<string>();
   for (const c of receita?.componentes ?? []) {
     if (vistos.has(c.descricao)) continue;

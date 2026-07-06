@@ -14,6 +14,7 @@ const config: Config = {
     extend: {
       colors: {
         brand: '#000000',
+        primary: '#0073b7',
         action: {
           add: '#00a65a',
           'add-border': '#008d4c',

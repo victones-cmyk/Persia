@@ -28,6 +28,10 @@ function senhaInicial(nomeVar: string): string {
   return valor;
 }
 
+function hashSenhaInicial(nomeVar: string): string {
+  return bcrypt.hashSync(senhaInicial(nomeVar), 10);
+}
+
 async function upsertLoja(nome: string, gc_loja_id: string) {
   const existente = await prisma.loja.findFirst({ where: { nome } });
   if (existente) {
@@ -49,11 +53,13 @@ async function main() {
       perfil: 'admin',
       loja_id: null, // admin acessa todas as lojas
       gc_usuario_id: '10512', // Victor — RESOLVIDO 11/06/2026
+      senha_hash: hashSenhaInicial('SEED_ADMIN_SENHA'),
+      senha_provisoria: true,
     },
     create: {
       nome: 'Victor Nogueira Pavoni',
       email: 'victor.pavoni',
-      senha_hash: bcrypt.hashSync(senhaInicial('SEED_ADMIN_SENHA'), 10),
+      senha_hash: hashSenhaInicial('SEED_ADMIN_SENHA'),
       perfil: 'admin',
       loja_id: null,
       gc_usuario_id: '10512',
@@ -69,11 +75,13 @@ async function main() {
       nome: 'Vendedor SP Teste',
       perfil: 'vendedor',
       loja_id: lojaSP.id,
+      senha_hash: hashSenhaInicial('SEED_VENDEDOR_SP_SENHA'),
+      senha_provisoria: true,
     },
     create: {
       nome: 'Vendedor SP Teste',
       email: 'loja.sp',
-      senha_hash: bcrypt.hashSync(senhaInicial('SEED_VENDEDOR_SP_SENHA'), 10),
+      senha_hash: hashSenhaInicial('SEED_VENDEDOR_SP_SENHA'),
       perfil: 'vendedor',
       loja_id: lojaSP.id,
       gc_usuario_id: null, // PLACEHOLDER-02
@@ -88,11 +96,13 @@ async function main() {
       nome: 'Vendedor SBC Teste',
       perfil: 'vendedor',
       loja_id: lojaSBC.id,
+      senha_hash: hashSenhaInicial('SEED_VENDEDOR_SBC_SENHA'),
+      senha_provisoria: true,
     },
     create: {
       nome: 'Vendedor SBC Teste',
       email: 'loja.sbc',
-      senha_hash: bcrypt.hashSync(senhaInicial('SEED_VENDEDOR_SBC_SENHA'), 10),
+      senha_hash: hashSenhaInicial('SEED_VENDEDOR_SBC_SENHA'),
       perfil: 'vendedor',
       loja_id: lojaSBC.id,
       gc_usuario_id: null, // PLACEHOLDER-02
@@ -115,8 +125,8 @@ async function main() {
 
   console.log('✅ Seed concluído:');
   console.log('   • Lojas: Matriz (SP) [gc 8274], Filial SBC [gc 8284]');
-  console.log('   • Admin: victor@rainhadascortinas.com.br');
-  console.log('   • Vendedores: vendedor.sp@ / vendedor.sbc@');
+  console.log('   • Admin: victor.pavoni');
+  console.log('   • Vendedores: loja.sp / loja.sbc');
   console.log('   • Configurações: desconto_max_vendedor_pct=10, desconto_max_admin_pct=30');
 }
 

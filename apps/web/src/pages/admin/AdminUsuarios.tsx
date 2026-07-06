@@ -103,8 +103,8 @@ export function AdminUsuarios() {
         </button>
       </div>
 
-      <div className="card p-0 overflow-hidden">
-        <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 14, tableLayout: 'fixed' }}>
+      <div className="card p-0 table-scroll">
+        <table className="data-table" style={{ minWidth: 1040 }}>
           <colgroup>
             <col />
             <col style={{ width: 180 }} />
@@ -112,12 +112,12 @@ export function AdminUsuarios() {
             <col style={{ width: 140 }} />
             <col style={{ width: 200 }} />
             <col style={{ width: 80 }} />
-            <col style={{ width: 150 }} />
+            <col style={{ width: 132 }} />
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
               {['Nome', 'Usuário', 'Perfil', 'Loja', 'Vendedor GestãoClick', 'Ativo', 'Ações'].map((h) => (
-                <th key={h} style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{h}</th>
+                <th key={h} className={h === 'Ações' ? 'table-actions' : undefined} style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -144,8 +144,8 @@ export function AdminUsuarios() {
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.loja?.nome ?? '—'}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.gc_usuario_id ? (funcMap[u.gc_usuario_id] ?? `ID ${u.gc_usuario_id}`) : <span className="text-error">—</span>}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.ativo ? 'Sim' : 'Não'}</td>
-                  <td style={{ padding: 12 }}>
-                    <div className="flex gap-1">
+                  <td style={{ padding: 12 }} className="table-actions">
+                    <div className="table-actions-row">
                       <button className="btn btn-warning btn-xs" onClick={() => setEditando(u)} title="Editar"><FontAwesomeIcon icon={faPen} /></button>
                       {u.ativo
                         ? <button className="btn btn-danger btn-xs" onClick={() => setDesativarAlvo(u)} title="Desativar"><FontAwesomeIcon icon={faUserSlash} /></button>

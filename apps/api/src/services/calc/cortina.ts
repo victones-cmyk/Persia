@@ -262,6 +262,7 @@ export interface CamadaResultado {
   consumo: number; // largura franzida (m)
   metragem: number; // m lineares de tecido (cortado de 5 em 5 cm)
   tiras: number | null;
+  barra_consumo: number;
 }
 
 export interface ResultadoCortinaCompleta {
@@ -304,7 +305,7 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
       espacamento_ilhos: e.espacamento_ilhos,
       espacamento_ferragem: e.espacamento_ferragem,
     });
-    camadas.push({ metodo: r.metodo, consumo: r.consumo_frente, metragem: r.metragem_frente, tiras: r.tiras_frente });
+    camadas.push({ metodo: r.metodo, consumo: r.consumo_frente, metragem: r.metragem_frente, tiras: r.tiras_frente, barra_consumo: r.barra_consumo });
 
     for (const it of r.itens) {
       if (it.tipo === 'tecido') continue; // tecido é por camada

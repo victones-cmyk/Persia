@@ -64,12 +64,20 @@ async function executar<T>(config: AxiosRequestConfig, tentativa = 0): Promise<T
       return executar<T>(config, tentativa + 1);
     }
 
+    const detalhe = ax.response?.data ?? ax.message;
+    const metodo = config.method?.toUpperCase() ?? 'GET';
+    const url = config.url ?? '';
+
     // Log obrigatório com payload completo antes de relançar.
     console.error(
-      `[gc] ERRO ${status} em ${config.method?.toUpperCase()} ${config.url}:`,
-      JSON.stringify(ax.response?.data ?? ax.message),
+      `[gc] ERRO ${status} em ${metodo} ${url}:`,
+      JSON.stringify(detalhe),
     );
-    throw new GcError(status, ax.message, ax.response?.data);
+    throw new GcError(status, `${metodo} ${url}: ${JSON.stringify(detalhe)}`, {
+      method: metodo,
+      url,
+      response: ax.response?.data ?? null,
+    });
   }
 }
 

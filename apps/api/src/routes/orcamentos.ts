@@ -8,6 +8,7 @@ import {
   listarOrcamentos,
   cancelarOrcamento,
   atualizarOrcamento,
+  duplicarOrcamento,
 } from '../controllers/orcamentoController';
 import { criarOrcamentoCortina } from '../controllers/orcamentoCortinaController';
 import { criarOrcamentoMisto } from '../controllers/orcamentoMistoController';
@@ -21,6 +22,7 @@ router.post('/cortina', criarOrcamentoCortina);
 router.post('/misto', criarOrcamentoMisto);
 router.post('/:id/reenviar', reenviarOrcamento);
 router.post('/:id/cancelar', cancelarOrcamento);
+router.post('/:id/duplicar', duplicarOrcamento);
 router.put('/:id', atualizarOrcamento);
 router.get('/:id', getOrcamento);
 

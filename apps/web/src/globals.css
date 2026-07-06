@@ -377,4 +377,47 @@ input[type='number'] {
   }
   .badge-secondary { background: var(--neutral-200); color: var(--neutral-600); border-color: var(--neutral-300); }
   .badge-primary   { background: #cce5ff; color: #004085; border-color: #b8daff; }
+
+  /* ---- Tabelas responsivas ---- */
+  .table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table-scroll::after {
+    content: '';
+    display: block;
+    height: 1px;
+  }
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-md);
+    table-layout: fixed;
+  }
+  .data-table th,
+  .data-table td {
+    vertical-align: middle;
+  }
+  .data-table .table-actions {
+    position: sticky;
+    right: 0;
+    z-index: 1;
+    background: var(--surface-card);
+    box-shadow: -1px 0 0 var(--neutral-300);
+  }
+  .data-table thead .table-actions {
+    z-index: 2;
+  }
+  .data-table tbody tr:hover .table-actions {
+    background: var(--neutral-100);
+  }
+  .table-actions-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    flex-wrap: nowrap;
+    min-width: max-content;
+  }
 }

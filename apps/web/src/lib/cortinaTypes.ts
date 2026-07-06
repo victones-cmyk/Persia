@@ -4,6 +4,7 @@
 import type { TecidoOpcao } from './calcTypes';
 
 export type ModeloCortina = 'ilhos' | 'prega' | 'franzido' | 'wave';
+export type ModeloCortinaOpcao = ModeloCortina | 'prega_americana' | 'prega_macho' | 'prega_femea';
 export type FixacaoCortina = 'varao' | 'trilho' | 'varao_suico';
 export type ConfigTecidoCortina = 'um_tecido' | 'dois_tecidos_mesmo_varao' | 'dois_tecidos_varao_duplo';
 
@@ -34,9 +35,34 @@ export interface CalcularCortinaResposta {
   valor_tecido: number;
 }
 
-export const MODELOS_CORTINA: { value: ModeloCortina; label: string }[] = [
+export function normalizarModeloCortina(modelo: ModeloCortinaOpcao): ModeloCortina {
+  if (modelo.startsWith('prega_')) return 'prega';
+  return modelo as ModeloCortina;
+}
+
+export function modeloCortinaParaOpcao(modelo: string | undefined | null): ModeloCortinaOpcao | '' {
+  if (!modelo) return '';
+  if (modelo === 'prega') return 'prega_americana';
+  return modelo as ModeloCortinaOpcao;
+}
+
+export function modeloCortinaLabel(modelo: string): string {
+  if (modelo === 'prega') return 'Prega';
+  return MODELOS_CORTINA.find((m) => m.value === modelo)?.label ?? modelo;
+}
+
+export const MODELOS_CORTINA: { value: ModeloCortinaOpcao; label: string }[] = [
   { value: 'ilhos', label: 'Ilhós' },
-  { value: 'prega', label: 'Prega (Americana / Macho / Fêmea)' },
+  { value: 'prega_americana', label: 'Modelo Prega Americana' },
+  { value: 'prega_macho', label: 'Modelo Prega Macho' },
+  { value: 'prega_femea', label: 'Modelo Prega Fêmea' },
+  { value: 'franzido', label: 'Franzido' },
+  { value: 'wave', label: 'Wave' },
+];
+
+export const MODELOS_CORTINA_CALC: { value: ModeloCortina; label: string }[] = [
+  { value: 'ilhos', label: 'Ilhós' },
+  { value: 'prega', label: 'Prega' },
   { value: 'franzido', label: 'Franzido' },
   { value: 'wave', label: 'Wave' },
 ];
@@ -84,6 +110,9 @@ export interface CamadaCalc {
   metodo: 'normal' | 'emenda';
   metragem: number;
   valor_tecido: number;
+  tiras: number | null;
+  barra_consumo: number;
+  consumo: number;
 }
 export interface AcessorioCalc {
   item: string;

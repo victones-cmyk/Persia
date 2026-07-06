@@ -341,6 +341,9 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
         metodo: cam.metodo,
         metragem: cam.metragem,
         valor_tecido: roundHalfUp(cam.metragem * t.preco_venda),
+        tiras: cam.tiras,
+        barra_consumo: cam.barra_consumo,
+        consumo: cam.consumo,
       };
     });
     const valorTecidoTotal = roundHalfUp(camadas.reduce((s, c) => s + c.valor_tecido, 0));
@@ -369,4 +372,14 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
     if (err instanceof Error && /(positivas|camadas)/.test(err.message)) throw new AppError(400, 'ENTRADA_INVALIDA', err.message);
     throw err;
   }
+}
+
+export async function listarCalculadorasController(_req: Request, res: Response): Promise<void> {
+  const { getCalculadorasAtivas } = require('../services/calc/calculadoras');
+  res.json({ calculadoras: getCalculadorasAtivas() });
+}
+
+export async function listarCalculadorasCortinaController(_req: Request, res: Response): Promise<void> {
+  const { getCalculadorasCortinaAtivas } = require('../services/calc/calculadorasCortina');
+  res.json({ calculadoras: getCalculadorasCortinaAtivas() });
 }

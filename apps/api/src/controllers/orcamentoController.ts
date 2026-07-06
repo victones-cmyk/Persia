@@ -5,22 +5,24 @@
 // Soma das linhas = total exato (RN-10). Recalcula tudo no servidor (nunca confia no cliente).
 
 import type { Request, Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, TipoProduto } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { ReceitaPendenteError } from '../services/calc/persianaPreco';
 import { precoPersianaItem, mapasDePrecoComponentes, componentesSnapshot } from '../services/calc/persianaPrecoGc';
 import { componenteInstalacao } from '../services/calc/instalacaoCalc';
 import { valorComRt, componenteRt } from '../services/calc/rtCalc';
+import { encontrarCalculadora } from '../services/calc/calculadoras';
+
 import { indiceInstalacoes } from '../services/gc/instalacao';
 import {
   isTipoPersiana,
   TIPO_LABEL,
-  ACIONAMENTO_LABEL,
   type TipoPersiana,
   type Cor,
   type Acionamento,
 } from '../services/calc/tipos';
+import { descricaoProdutoPersiana, nomeProdutoPersiana } from '../services/calc/persianaProduto';
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
@@ -43,6 +45,7 @@ export interface ItemEntrada {
   tc?: number;
   rolamento?: string | null;
   base?: string | null;
+  comando?: string | null;
   instalacao_id?: string | null; // tipo de instalação (grupo INSTALAÇÃO) embutido no produto
 }
 
@@ -58,6 +61,7 @@ interface ItemPreparado {
   tc: number;
   rolamento: string | null;
   base: string | null;
+  comando: string | null;
   qtd_venda: number;
   qtd_producao: number;
   valor_bruto: number;
@@ -67,6 +71,7 @@ interface ItemPreparado {
   instalacao_nome: string | null;
   componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
   nome_produto: string;
+  descricao_produto: string;
 }
 
 /** Snapshot persistido em itens_json (independe do GC para reenvio/exibição). */
@@ -83,6 +88,7 @@ export interface ItemSnapshot {
   acionamento: string;
   rolamento: string | null;
   base: string | null;
+  comando: string | null;
   qtd_venda: number;
   qtd_producao: number;
   valor_bruto: number;
@@ -92,13 +98,12 @@ export interface ItemSnapshot {
   instalacao_nome: string | null;
   gc_produto_id: string | null;
   nome_produto: string;
+  descricao_produto?: string;
   componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
 }
 
-function nomeProdutoGc(tipo: TipoPersiana, it: { ambiente?: string; tecido_nome: string; largura: number; altura: number; cor_acessorio: string; acionamento: Acionamento }): string {
-  // Victor (v.4.1): o AMBIENTE vem na frente do nome do produto. Ex.: "SALA, Persiana ...".
-  const amb = it.ambiente?.trim() ? `${it.ambiente.trim()}, ` : '';
-  return `${amb}${TIPO_LABEL[tipo]} - ${it.tecido_nome} - ${it.largura.toFixed(2)}x${it.altura.toFixed(2)} - ${it.cor_acessorio} - ${ACIONAMENTO_LABEL[it.acionamento]}`.slice(0, 120);
+function produtoSobMedidaLabel(tipo: TipoPersiana): string {
+  return encontrarCalculadora(tipo)?.nome ?? TIPO_LABEL[tipo] ?? tipo;
 }
 
 /**
@@ -159,6 +164,21 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
     const componentes = [...componentesSnapshot(item.venda), ...(inst ? [componenteInstalacao(inst)] : [])];
 
     const ambiente = it.ambiente?.trim() || '';
+    const produtoSobMedida = produtoSobMedidaLabel(tipo);
+    const nomeProduto = nomeProdutoPersiana({
+      ambiente,
+      produto_sob_medida: produtoSobMedida,
+      largura,
+      altura,
+    });
+    const descricaoProduto = descricaoProdutoPersiana({
+      acionamento: it.acionamento,
+      cor_acessorio: it.cor_acessorio,
+      tecido_nome: tecido.nome,
+      rolamento: it.rolamento,
+      comando: it.comando,
+      tc: item.tc,
+    });
     preparados.push({
       ambiente,
       tipo,
@@ -170,6 +190,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
       tc: item.tc,
       rolamento: it.rolamento ?? null,
       base: it.base ?? null,
+      comando: it.comando ?? null,
       qtd_venda: item.venda.tecido.quantidade,
       qtd_producao: item.venda.tecido.quantidade,
       valor_bruto: valorBruto,
@@ -178,7 +199,8 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
       instalacao_id: inst?.id ?? null,
       instalacao_nome: inst?.nome ?? null,
       componentes,
-      nome_produto: nomeProdutoGc(tipo, { ambiente, tecido_nome: tecido.nome, largura, altura, cor_acessorio: it.cor_acessorio, acionamento: it.acionamento }),
+      nome_produto: nomeProduto,
+      descricao_produto: descricaoProduto,
     });
   }
 
@@ -191,21 +213,24 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
  * Retorna os gc_produto_id na MESMA ORDEM dos itens.
  */
 export async function executarEnvioGc(args: {
-  itens: { nome_produto: string; valor_final: number; valor_custo: number }[];
+  itens: { nome_produto: string; descricao_produto?: string; valor_final: number; valor_custo: number }[];
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
 }): Promise<{ gc_orcamento_id: string; gc_codigo: string | null; gc_produto_ids: string[]; payload: object; resposta: unknown }> {
+  const usados: string[] = [];
   const criados: string[] = [];
   try {
     const linhas: LinhaProdutoGc[] = [];
     for (const it of args.itens) {
       const produto = await criarProduto({
         nome: it.nome_produto,
+        descricao: it.descricao_produto,
         valor_custo: it.valor_custo,
         valor_venda: it.valor_final,
       });
-      criados.push(produto.gc_produto_id);
+      usados.push(produto.gc_produto_id);
+      if (produto.criado) criados.push(produto.gc_produto_id);
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
     }
 
@@ -225,7 +250,7 @@ export async function executarEnvioGc(args: {
     return {
       gc_orcamento_id: orc.gc_orcamento_id,
       gc_codigo: orc.gc_codigo,
-      gc_produto_ids: criados,
+      gc_produto_ids: usados,
       payload: orc.payload,
       resposta: orc.resposta,
     };
@@ -255,6 +280,7 @@ export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[])
     acionamento: p.acionamento,
     rolamento: p.rolamento,
     base: p.base,
+    comando: p.comando,
     qtd_venda: p.qtd_venda,
     qtd_producao: p.qtd_producao,
     valor_bruto: p.valor_bruto,
@@ -264,6 +290,7 @@ export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[])
     instalacao_nome: p.instalacao_nome,
     gc_produto_id: gcProdutoIds[i] ?? null,
     nome_produto: p.nome_produto,
+    descricao_produto: p.descricao_produto,
     componentes: p.componentes,
   }));
 }
@@ -320,7 +347,10 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       p.componentes = [...p.componentes, componenteRt(rtPct)];
     }
   }
-  const loja = await resolverLoja(editarOrc?.loja_id ?? sessao.loja_id);
+  const lojaIdOrcamento = sessao.perfil === 'admin'
+    ? (b.loja_id ?? editarOrc?.loja_id ?? sessao.loja_id)
+    : (editarOrc?.loja_id ?? sessao.loja_id);
+  const loja = await resolverLoja(lojaIdOrcamento);
   const primeiro = preparados[0];
   // Instalação e RT já estão embutidos no valor de cada item — sem linha à parte.
   const valorTotal = roundHalfUp(preparados.reduce((s, p) => s + p.valor_final, 0));
@@ -334,12 +364,15 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       ? prisma.orcamento.update({ where: { id: editarId }, data: data as Prisma.OrcamentoUncheckedUpdateInput })
       : prisma.orcamento.create({ data });
 
+  const calc = encontrarCalculadora(primeiro.tipo);
+  const dbTipoProduto = (calc ? calc.db_tipo_produto : primeiro.tipo) as TipoProduto;
+
   // Campos comuns ao salvar (sucesso ou erro). Colunas single = 1º item (compat).
   // tipo_produto = tipo do 1º item (representativo; o tipo real de cada item está em itens_json).
   const baseDados = {
-    tipo_produto: primeiro.tipo,
+    tipo_produto: dbTipoProduto,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
-    loja_id: editarOrc?.loja_id ?? loja.id,
+    loja_id: loja.id,
     entrada_json: entradaJson,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
@@ -372,7 +405,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
 
   try {
     const envio = await executarEnvioGc({
-      itens: preparados.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+      itens: preparados.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
       gc_cliente_id: String(b.gc_cliente_id),
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
@@ -420,8 +453,8 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
 }
 
 /** Reconstrói os itens preparados a partir do snapshot salvo (fallback de reenvio legado). */
-function preparadosDoSnapshot(snaps: ItemSnapshot[]): { nome_produto: string; valor_final: number; valor_custo: number }[] {
-  return snaps.map((s) => ({ nome_produto: s.nome_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) }));
+function preparadosDoSnapshot(snaps: ItemSnapshot[]): { nome_produto: string; descricao_produto?: string; valor_final: number; valor_custo: number }[] {
+  return snaps.map((s) => ({ nome_produto: s.nome_produto, descricao_produto: s.descricao_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) }));
 }
 
 /**
@@ -485,7 +518,7 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
 
     const envio = await executarEnvioGc({
       itens: preparados
-        ? preparados.map((p) => ({ nome_produto: p.nome_produto, valor_final: p.valor_final, valor_custo: p.valor_custo }))
+        ? preparados.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo }))
         : preparadosDoSnapshot(snaps),
       gc_cliente_id: orc.gc_cliente_id,
       gcVendedorId: sessao.gc_usuario_id,
@@ -601,6 +634,54 @@ export async function atualizarOrcamento(req: Request, res: Response): Promise<v
   if (b.nome_cliente !== undefined) data.nome_cliente = b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)';
   const atualizado = await prisma.orcamento.update({ where: { id: orc.id }, data });
   res.json({ orcamento: atualizado });
+}
+
+/** POST /api/orcamentos/:id/duplicar — cria uma cópia editável, sem vínculos com o GestãoClick. */
+export async function duplicarOrcamento(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const orc = await prisma.orcamento.findUnique({ where: { id: String(req.params.id) } });
+  if (!orc || (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id)) {
+    throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+  }
+
+  const jsonOuNulo = (valor: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull =>
+    valor === null ? Prisma.DbNull : valor as Prisma.InputJsonValue;
+
+  const copia = await prisma.orcamento.create({
+    data: {
+      tipo_produto: orc.tipo_produto,
+      usuario_id: sessao.id,
+      loja_id: orc.loja_id,
+      status: 'rascunho',
+      nome_cliente: orc.nome_cliente,
+      gc_cliente_id: orc.gc_cliente_id,
+      tecido_codigo_gc: orc.tecido_codigo_gc,
+      tecido_nome: orc.tecido_nome,
+      largura_m: orc.largura_m,
+      altura_m: orc.altura_m,
+      dimensao_m: orc.dimensao_m,
+      tc_m: orc.tc_m,
+      acionamento: orc.acionamento,
+      cor_acessorio: orc.cor_acessorio,
+      rolamento: orc.rolamento,
+      valor_bruto: orc.valor_bruto,
+      valor_final: orc.valor_final,
+      itens_json: jsonOuNulo(orc.itens_json),
+      entrada_json: jsonOuNulo(orc.entrada_json),
+      gc_orcamento_id: null,
+      gc_codigo: null,
+      gc_produto_id: null,
+      payload_gc_enviado: Prisma.DbNull,
+      resposta_gc: Prisma.DbNull,
+      erro_gc: null,
+    },
+  });
+
+  await prisma.logAcao.create({
+    data: { usuario_id: sessao.id, acao: 'orcamento_duplicado', detalhe: { origem_id: orc.id, copia_id: copia.id } },
+  });
+
+  res.status(201).json({ orcamento: copia });
 }
 
 export async function getOrcamento(req: Request, res: Response): Promise<void> {
