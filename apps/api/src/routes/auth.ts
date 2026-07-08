@@ -6,12 +6,12 @@ import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
-// Proteção contra força bruta: no máx. 10 tentativas de login por IP a cada 15 min.
+// Proteção contra força bruta: no máx. 30 tentativas de login por IP a cada 15 min.
 // Conta apenas tentativas que falham (skipSuccessfulRequests) — quem acerta a senha
 // não é penalizado. Ao exceder, responde 429 sem revelar detalhes.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 10,
+  limit: 30,
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,

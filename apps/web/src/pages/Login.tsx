@@ -37,6 +37,8 @@ export function Login() {
     } catch (err) {
       if (err instanceof ApiError && err.code === 'USUARIO_INATIVO') {
         setErro('Usuário inativo. Procure o administrador.');
+      } else if (err instanceof ApiError && err.status === 429) {
+        setErro('Muitas tentativas de login. Aguarde alguns minutos e tente novamente.');
       } else if (err instanceof ApiError && err.status === 401) {
         setErro('Usuário ou senha incorretos');
       } else {
