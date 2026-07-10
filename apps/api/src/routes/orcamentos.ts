@@ -9,6 +9,7 @@ import {
   cancelarOrcamento,
   atualizarOrcamento,
   duplicarOrcamento,
+  gerarVendaOrcamento,
 } from '../controllers/orcamentoController';
 import { criarOrcamentoCortina } from '../controllers/orcamentoCortinaController';
 import { criarOrcamentoMisto } from '../controllers/orcamentoMistoController';
@@ -33,6 +34,7 @@ router.get('/ordens-producao/:id/etiqueta.zpl', baixarZplEtiqueta);
 router.post('/ordens-producao/:id/imprimir-etiqueta', imprimirEtiquetaOrdem);
 router.get('/:id/producao', getProducaoOrcamento);
 router.put('/:id/pedido', atualizarPedidoOrcamento);
+router.post('/:id/gerar-venda', gerarVendaOrcamento);
 router.post('/:id/ordens-producao', criarOrdensProducao);
 router.post('/:id/reenviar', reenviarOrcamento);
 router.post('/:id/cancelar', cancelarOrcamento);

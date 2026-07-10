@@ -7,6 +7,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faFileLines,
   faPlus,
+  faFileInvoiceDollar,
   faUsers,
   faClockRotateLeft,
   faSliders,
@@ -27,6 +28,7 @@ interface Item {
 const ITENS_GERAIS: Item[] = [
   { to: '/orcamentos', label: 'Orçamentos', icon: faFileLines, end: true },
   { to: '/orcamentos/novo', label: 'Novo Orçamento', icon: faPlus },
+  { to: '/vendas', label: 'Vendas', icon: faFileInvoiceDollar, end: true },
 ];
 
 const ITENS_ADMIN: Item[] = [

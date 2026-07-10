@@ -26,6 +26,7 @@ import { descricaoProdutoPersiana, nomeProdutoPersiana } from '../services/calc/
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
+import { criarVendaDePayload } from '../services/gc/vendas';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
@@ -561,6 +562,80 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
   }
 }
 
+export async function gerarVendaOrcamento(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const orc = await prisma.orcamento.findUnique({ where: { id: String(req.params.id) } });
+  if (!orc || (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id)) {
+    throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
+  }
+  if (orc.status !== 'enviado') {
+    throw new AppError(409, 'ORCAMENTO_NAO_ENVIADO', 'A venda só pode ser gerada para orçamentos enviados ao GestãoClick.');
+  }
+  if (!orc.gc_orcamento_id) {
+    throw new AppError(409, 'SEM_ORCAMENTO_GC', 'Este orçamento ainda não possui número no GestãoClick.');
+  }
+  if (orc.gc_pedido_id || orc.gc_pedido_codigo) {
+    res.json({
+      orcamento: orc,
+      venda: {
+        gc_pedido_id: orc.gc_pedido_id,
+        gc_pedido_codigo: orc.gc_pedido_codigo,
+      },
+      ja_existia: true,
+    });
+    return;
+  }
+  if (!orc.payload_gc_enviado) {
+    throw new AppError(409, 'SEM_PAYLOAD_GC', 'Não foi encontrado o payload original enviado ao GestãoClick.');
+  }
+
+  try {
+    const venda = await criarVendaDePayload(orc.payload_gc_enviado);
+    const respostaAnterior = orc.resposta_gc && typeof orc.resposta_gc === 'object' && !Array.isArray(orc.resposta_gc)
+      ? orc.resposta_gc as Prisma.JsonObject
+      : {};
+    const atualizado = await prisma.orcamento.update({
+      where: { id: orc.id },
+      data: {
+        gc_pedido_id: venda.gc_pedido_id,
+        gc_pedido_codigo: venda.gc_pedido_codigo,
+        pedido_confirmado_em: new Date(),
+        resposta_gc: {
+          ...respostaAnterior,
+          venda: venda.resposta,
+          payload_venda: venda.payload,
+        } as Prisma.InputJsonValue,
+        erro_gc: null,
+      },
+    });
+    await prisma.logAcao.create({
+      data: {
+        usuario_id: sessao.id,
+        acao: 'venda_gerada_gc',
+        detalhe: {
+          orcamento_id: orc.id,
+          gc_orcamento_id: orc.gc_orcamento_id,
+          gc_pedido_id: venda.gc_pedido_id,
+          gc_pedido_codigo: venda.gc_pedido_codigo,
+        },
+      },
+    });
+    res.json({ orcamento: atualizado, venda, ja_existia: false });
+  } catch (err) {
+    const gc = err instanceof GcError ? err : null;
+    await prisma.orcamento.update({
+      where: { id: orc.id },
+      data: { erro_gc: gc ? `HTTP ${gc.status}: ${gc.message}` : String((err as Error).message) },
+    });
+    res.status(502).json({
+      erro: {
+        codigo: gc?.status === 401 ? 'GC_AUTH' : 'GC_ERRO',
+        message: gc?.message ?? 'Falha ao gerar venda no GestãoClick.',
+      },
+    });
+  }
+}
+
 /** GET /api/orcamentos — lista paginada (20/pág), filtros status e cliente. Vendedor vê só os seus. */
 export async function listarOrcamentos(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
@@ -573,6 +648,12 @@ export async function listarOrcamentos(req: Request, res: Response): Promise<voi
   if (sessao.perfil !== 'admin') where.usuario_id = sessao.id;
   if (['rascunho', 'enviado', 'erro', 'cancelado'].includes(status)) {
     where.status = status as Prisma.EnumStatusOrcamentoFilter['equals'];
+  }
+  if (req.query.vendas === '1' || req.query.vendas === 'true') {
+    where.OR = [
+      { gc_pedido_id: { not: null } },
+      { gc_pedido_codigo: { not: null } },
+    ];
   }
   if (cliente) where.nome_cliente = { contains: cliente, mode: 'insensitive' };
 

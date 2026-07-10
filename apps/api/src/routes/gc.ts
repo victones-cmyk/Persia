@@ -3,7 +3,8 @@
 
 import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { buscarClientes } from '../services/gc/clientes';
+import { AppError } from '../middleware/errorHandler';
+import { buscarClientes, criarClienteRapido } from '../services/gc/clientes';
 
 const router = Router();
 router.use(requireAuth);
@@ -13,6 +14,25 @@ router.get('/clientes', async (req: Request, res: Response) => {
   const q = String(req.query.q ?? '');
   const clientes = await buscarClientes(q);
   res.json({ clientes });
+});
+
+router.post('/clientes', async (req: Request, res: Response) => {
+  const body = req.body as { nome?: unknown; telefone?: unknown } | null;
+  const nome = typeof body?.nome === 'string' ? body.nome.trim() : '';
+  const telefone = typeof body?.telefone === 'string' ? body.telefone.trim() : '';
+
+  if (nome.length < 2) {
+    throw new AppError(400, 'NOME_CLIENTE_OBRIGATORIO', 'Informe o nome do cliente.');
+  }
+  if (nome.length > 150) {
+    throw new AppError(400, 'NOME_CLIENTE_INVALIDO', 'O nome do cliente deve ter no máximo 150 caracteres.');
+  }
+  if (telefone.length > 30) {
+    throw new AppError(400, 'TELEFONE_CLIENTE_INVALIDO', 'O telefone deve ter no máximo 30 caracteres.');
+  }
+
+  const cliente = await criarClienteRapido({ nome, telefone });
+  res.status(201).json({ cliente });
 });
 
 export default router;

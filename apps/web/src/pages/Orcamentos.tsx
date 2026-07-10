@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEye, faPen, faRotateRight, faXmark, faCopy, faIndustry } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faEye, faPen, faRotateRight, faXmark, faCopy, faIndustry, faFileInvoiceDollar } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL } from '../lib/formatacao';
@@ -91,7 +91,12 @@ function statusValido(v: string | null): '' | StatusOrcamento {
   return FILTROS.some((f) => f.valor === s) ? (s as '' | StatusOrcamento) : '';
 }
 
-export function Orcamentos() {
+interface OrcamentosProps {
+  modo?: 'orcamentos' | 'vendas';
+}
+
+export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
+  const somenteVendas = modo === 'vendas';
   const navigate = useNavigate();
   const { showToast } = useToast();
   // Filtros persistidos na SESSÃO (sessionStorage): mantêm-se ao atualizar a página,
@@ -115,7 +120,8 @@ export function Orcamentos() {
     setCarregando(true);
     try {
       const params = new URLSearchParams({ pagina: String(pagina) });
-      if (status) params.set('status', status);
+      if (somenteVendas) params.set('vendas', '1');
+      if (!somenteVendas && status) params.set('status', status);
       if (cliente.trim()) params.set('cliente', cliente.trim());
       const { inicio, fim } = intervaloDoPeriodo(periodo, dataDe, dataAte);
       if (inicio) params.set('data_inicio', inicio.toISOString());
@@ -130,7 +136,7 @@ export function Orcamentos() {
     } finally {
       setCarregando(false);
     }
-  }, [pagina, status, cliente, periodo, dataDe, dataAte]);
+  }, [pagina, status, cliente, periodo, dataDe, dataAte, somenteVendas]);
 
   // Debounce 300ms na busca por cliente; status/página recarregam na hora.
   useEffect(() => {
@@ -190,45 +196,77 @@ export function Orcamentos() {
     }
   }
 
+  async function gerarVenda(id: string) {
+    setAcaoEmId(id);
+    try {
+      const r = await api.post<{ orcamento: OrcamentoListItem; ja_existia?: boolean }>(`/orcamentos/${id}/gerar-venda`);
+      const codigo = r.orcamento.gc_pedido_codigo ?? r.orcamento.gc_pedido_id ?? '';
+      showToast(
+        'success',
+        r.ja_existia ? 'Venda já gerada' : 'Venda gerada no GestãoClick',
+        codigo ? `Pedido ${codigo}` : undefined,
+      );
+      carregar();
+    } catch (e) {
+      const msg = e instanceof ApiError
+        ? (e.data as { erro?: { message?: string }; message?: string } | null)?.erro?.message
+          ?? (e.data as { message?: string } | null)?.message
+          ?? e.message
+        : 'Tente novamente.';
+      showToast('error', 'Falha ao gerar venda', msg);
+      carregar();
+    } finally {
+      setAcaoEmId(null);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl-ui font-bold text-neutral-800">Orçamentos</h1>
-        <Link to="/orcamentos/novo" className="btn btn-success">
-          <FontAwesomeIcon icon={faPlus} /> Criar Orçamento
-        </Link>
+        <h1 className="text-2xl-ui font-bold text-neutral-800">{somenteVendas ? 'Vendas' : 'Orçamentos'}</h1>
+        {!somenteVendas && (
+          <Link to="/orcamentos/novo" className="btn btn-success">
+            <FontAwesomeIcon icon={faPlus} /> Criar Orçamento
+          </Link>
+        )}
       </div>
 
       {/* Filtros + busca */}
       <div className="card p-4 mb-4">
         <div className="flex flex-wrap items-center gap-3 justify-between">
-          <div className="flex gap-0">
-            {FILTROS.map((f, i) => {
-              const ativo = status === f.valor;
-              return (
-                <button
-                  key={f.valor || 'todos'}
-                  type="button"
-                  onClick={() => {
-                    setStatus(f.valor);
-                    setPagina(1);
-                  }}
-                  className="text-sm-ui"
-                  style={{
-                    height: 30,
-                    padding: '0 14px',
-                    border: '1px solid ' + (ativo ? '#008d4c' : '#dee2e6'),
-                    background: ativo ? '#00a65a' : '#fff',
-                    color: ativo ? '#fff' : '#6c757d',
-                    borderRadius: i === 0 ? '3px 0 0 3px' : i === FILTROS.length - 1 ? '0 3px 3px 0' : 0,
-                    borderLeft: i === 0 ? undefined : 'none',
-                  }}
-                >
-                  {f.label}
-                </button>
-              );
-            })}
-          </div>
+          {!somenteVendas ? (
+            <div className="flex gap-0">
+              {FILTROS.map((f, i) => {
+                const ativo = status === f.valor;
+                return (
+                  <button
+                    key={f.valor || 'todos'}
+                    type="button"
+                    onClick={() => {
+                      setStatus(f.valor);
+                      setPagina(1);
+                    }}
+                    className="text-sm-ui"
+                    style={{
+                      height: 30,
+                      padding: '0 14px',
+                      border: '1px solid ' + (ativo ? '#008d4c' : '#dee2e6'),
+                      background: ativo ? '#00a65a' : '#fff',
+                      color: ativo ? '#fff' : '#6c757d',
+                      borderRadius: i === 0 ? '3px 0 0 3px' : i === FILTROS.length - 1 ? '0 3px 3px 0' : 0,
+                      borderLeft: i === 0 ? undefined : 'none',
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-sm-ui text-neutral-600">
+              Orçamentos transformados em venda no GestãoClick
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             {/* Filtro por data de criação: campos De/Até (dd/mm/aaaa) à esquerda do
                 seletor de período; o filtro só é aplicado com AMBAS preenchidas. */}
@@ -314,7 +352,7 @@ export function Orcamentos() {
             ) : orcamentos.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6c757d' }}>
-                  Nenhum orçamento encontrado.
+                  {somenteVendas ? 'Nenhuma venda encontrada.' : 'Nenhum orçamento encontrado.'}
                 </td>
               </tr>
             ) : (
@@ -344,6 +382,22 @@ export function Orcamentos() {
                       >
                         <FontAwesomeIcon icon={faIndustry} />
                       </button>
+                      {!somenteVendas && (
+                        <button
+                          className="btn btn-success btn-xs"
+                          disabled={o.status !== 'enviado' || Boolean(o.gc_pedido_codigo || o.gc_pedido_id) || acaoEmId === o.id}
+                          onClick={() => gerarVenda(o.id)}
+                          title={
+                            o.status !== 'enviado'
+                              ? 'Venda apenas para orçamentos enviados'
+                              : o.gc_pedido_codigo || o.gc_pedido_id
+                                ? 'Venda já gerada'
+                                : 'Gerar venda no GestãoClick'
+                          }
+                        >
+                          <FontAwesomeIcon icon={faFileInvoiceDollar} />
+                        </button>
+                      )}
                       <button className="btn btn-default btn-xs text-primary" disabled={acaoEmId === o.id} onClick={() => duplicar(o.id)} title="Duplicar como rascunho">
                         <FontAwesomeIcon icon={faCopy} />
                       </button>
@@ -424,4 +478,8 @@ export function Orcamentos() {
 
 function Th({ children, className }: { children: React.ReactNode; className?: string }) {
   return <th className={className} style={{ padding: 12, textAlign: 'left', fontWeight: 700 }}>{children}</th>;
+}
+
+export function Vendas() {
+  return <Orcamentos modo="vendas" />;
 }

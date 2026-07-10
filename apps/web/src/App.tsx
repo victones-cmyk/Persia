@@ -8,7 +8,7 @@ import { TrocarSenha } from './pages/TrocarSenha';
 import { Layout } from './components/Layout';
 import { ProtectedRoute, AdminRoute, SenhaDefinitivaRoute } from './components/ProtectedRoute';
 import { OrcamentoNovo } from './pages/OrcamentoNovo';
-import { Orcamentos } from './pages/Orcamentos';
+import { Orcamentos, Vendas } from './pages/Orcamentos';
 import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
 import { AdminUsuarios } from './pages/admin/AdminUsuarios';
 import { AdminLog } from './pages/admin/AdminLog';
@@ -31,6 +31,7 @@ function App() {
             <Route path="/orcamentos" element={<Orcamentos />} />
             <Route path="/orcamentos/novo" element={<OrcamentoNovo />} />
             <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
+            <Route path="/vendas" element={<Vendas />} />
 
             <Route element={<AdminRoute />}>
               <Route path="/admin/usuarios" element={<AdminUsuarios />} />

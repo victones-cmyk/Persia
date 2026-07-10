@@ -19,6 +19,11 @@ export interface ClienteResumo {
   documento: string | null;
 }
 
+export interface NovoClienteRapido {
+  nome: string;
+  telefone?: string | null;
+}
+
 /** Busca clientes ativos por nome ou documento (1ª página, máx 100). */
 export async function buscarClientes(query: string): Promise<ClienteResumo[]> {
   const termo = query.trim();
@@ -41,4 +46,32 @@ export async function buscarClientes(query: string): Promise<ClienteResumo[]> {
     tipo_pessoa: c.tipo_pessoa,
     documento: c.cnpj || c.cpf || null,
   }));
+}
+
+export async function criarClienteRapido(input: NovoClienteRapido): Promise<ClienteResumo> {
+  const nome = input.nome.trim();
+  const telefone = input.telefone?.trim() ?? '';
+
+  const env = await gcRequest<GcEnvelope<GcClienteRaw>>({
+    method: 'POST',
+    url: '/api/clientes',
+    data: {
+      tipo_pessoa: 'PF',
+      nome,
+      telefone,
+      ativo: '1',
+    },
+  });
+
+  const c = env.data;
+  if (!c?.id) {
+    throw new Error('GestãoClick não retornou o id do cliente.');
+  }
+
+  return {
+    id: c.id,
+    nome: c.nome ?? nome,
+    tipo_pessoa: c.tipo_pessoa ?? 'PF',
+    documento: c.cnpj || c.cpf || null,
+  };
 }
