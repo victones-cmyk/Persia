@@ -31,6 +31,7 @@ export interface CortinaCardSnap {
   modelo: string;
   modeloCortinaNome?: string;
   fixacao: string;
+  desconto?: string;
   largura: string;
   altura: string;
   tamanhoBarra: string;

@@ -27,7 +27,7 @@ import {
   type PersianaSnapshot, type CortinaSnapshot, type RascunhoLocal,
 } from '../lib/rascunhoLocal';
 
-const ESTADO_CORTINA_VAZIO: CortinaOrcamentoEstado = { total: 0, todasCompletas: false, temCortinas: false, count: 0, cortinas: [], totais: [] };
+const ESTADO_CORTINA_VAZIO: CortinaOrcamentoEstado = { total: 0, todasCompletas: false, temCortinas: false, count: 0, cortinas: [], totais: [], calculando: false };
 
 type Secao = 'persiana' | 'cortina';
 
@@ -74,6 +74,7 @@ export function OrcamentoNovo() {
   );
   const [resultado, setResultado] = useState<OrcamentoCalculado | null>(null); // persiana
   const [cortinaEstado, setCortinaEstado] = useState<CortinaOrcamentoEstado>(ESTADO_CORTINA_VAZIO);
+  const [persianaCalculando, setPersianaCalculando] = useState(false);
   // O vendedor escolhe o que incluir; cada seção só aparece quando marcada e na
   // ORDEM em que foi selecionada (a 1ª escolhida fica em cima).
   const [ordem, setOrdem] = useState<Secao[]>(() => {
@@ -145,6 +146,7 @@ export function OrcamentoNovo() {
     setOrdem((prev) => (v ? (prev.includes('persiana') ? prev : [...prev, 'persiana']) : prev.filter((s) => s !== 'persiana')));
     if (!v) {
       setResultado(null);
+      setPersianaCalculando(false);
       persianaSnapRef.current = null; persianaSujoRef.current = false;
       setDirty(cortinaSujoRef.current); agendarSalvar();
     }
@@ -218,6 +220,7 @@ export function OrcamentoNovo() {
   const temCortina = cortinaEstado.temCortinas;
   const cortinaTotal = cortinaEstado.total;
   const cortinaCompletas = cortinaEstado.todasCompletas;
+  const calculandoOrcamento = persianaCalculando || cortinaEstado.calculando;
 
   const algoPreenchido = temPersiana || temCortina;
   // Instalação já está embutida no valor de cada item (Victor 26/06/2026).
@@ -236,11 +239,11 @@ export function OrcamentoNovo() {
   const persianaOk = !temPersiana || !persianaIncompleto;
   const cortinaOk = !temCortina || cortinaCompletas;
   const adminLojaOk = usuario?.perfil !== 'admin' || !!lojaId;
-  const conteudoValido = algoPreenchido && persianaOk && cortinaOk && adminLojaOk;
+  const conteudoValido = algoPreenchido && persianaOk && cortinaOk && adminLojaOk && !calculandoOrcamento;
 
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !usuario?.gc_usuario_id;
-  const ocupado = enviando || salvando;
+  const ocupado = enviando || salvando || calculandoOrcamento;
   const podeSalvar = conteudoValido && !ocupado;
   const podeEnviar = conteudoValido && !gcOffline && !!cliente && !ocupado;
 
@@ -394,7 +397,7 @@ export function OrcamentoNovo() {
               <section key="persiana">
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
                 {prontoEdicao && (
-                  <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} />
+                  <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} onCalculandoChange={setPersianaCalculando} />
                 )}
               </section>
             ) : (
@@ -428,11 +431,15 @@ export function OrcamentoNovo() {
             <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3 mb-3 space-y-1">
               <div className="flex justify-between text-xs-ui">
                 <span className="text-neutral-600">Persianas {temPersiana ? `(${persianaItens.length})` : ''}{temPersiana && persianaIncompleto ? <span className="text-warning"> (incompleto)</span> : null}</span>
-                <span className="font-mono tabular-nums text-neutral-800">{formatBRL(persianaTotal)}</span>
+                <span className="font-mono tabular-nums text-neutral-800">
+                  {persianaCalculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(persianaTotal)}
+                </span>
               </div>
               <div className="flex justify-between text-xs-ui">
                 <span className="text-neutral-600">Cortinas {temCortina ? `(${cortinaEstado.count})` : ''}{temCortina && !cortinaCompletas ? <span className="text-warning"> (acessório a definir)</span> : null}</span>
-                <span className="font-mono tabular-nums text-neutral-800">{formatBRL(cortinaTotal)}</span>
+                <span className="font-mono tabular-nums text-neutral-800">
+                  {cortinaEstado.calculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(cortinaTotal)}
+                </span>
               </div>
             </div>
 
@@ -457,12 +464,13 @@ export function OrcamentoNovo() {
 
             <label className="form-label" htmlFor="total-misto">Valor total</label>
             <input id="total-misto" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}
-              value={formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
+              value={calculandoOrcamento ? 'Calculando...' : formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
 
             {!algoPreenchido && <div className="alert alert-info mb-3 text-xs-ui"><span>Adicione ao menos uma <strong>persiana</strong> ou <strong>cortina</strong>.</span></div>}
             {algoPreenchido && usuario?.perfil === 'admin' && !lojaId && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione a <strong>Loja / Filial</strong> no topo.</span></div>}
             {temPersiana && persianaIncompleto && <div className="alert alert-warning mb-3 text-xs-ui"><span>Há <strong>persiana</strong> com campos obrigatórios em branco.</span></div>}
             {temCortina && !cortinaCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Escolha o <strong>produto de cada acessório</strong> em todas as cortinas.</span></div>}
+            {calculandoOrcamento && <div className="alert alert-info mb-3 text-xs-ui"><span>Aguarde o cálculo terminar para salvar ou enviar.</span></div>}
             {algoPreenchido && conteudoValido && !cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar (ou use <strong>Salvar</strong>).</span></div>}
             {algoPreenchido && gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong>.</span></div>}
             {algoPreenchido && !gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor.</span></div>}

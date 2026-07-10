@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faTrash, faSpinner, faCircleInfo, faCopy } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
+import { getCacheado } from '../lib/dadosCache';
 import { TecidoSearch } from './TecidoSearch';
 import { BuscaSelect } from './BuscaSelect';
 import { MedidaInput } from './MedidaInput';
@@ -15,9 +16,9 @@ import { formatBRL, formatNum } from '../lib/formatacao';
 import type { TecidoOpcao, TipoInstalacao, CalculadoraCortina } from '../lib/calcTypes';
 import type { CortinaCardSnap } from '../lib/rascunhoLocal';
 import {
-  MODELOS_CORTINA, FIXACOES_CORTINA, FIXACOES_POR_MODELO,
+  MODELOS_CORTINA, FIXACOES_CORTINA, FIXACOES_POR_MODELO, DESCONTOS_CORTINA,
   modeloCortinaParaOpcao, normalizarModeloCortina,
-  type ModeloCortina, type ModeloCortinaOpcao, type FixacaoCortina, type AcessoriosCortinaResp,
+  type ModeloCortina, type ModeloCortinaOpcao, type FixacaoCortina, type DescontoCortina, type AcessoriosCortinaResp,
   type CalcCortinaCompletaResp, type CategoriaAcessorio, type MetodoAlturaCortina,
 } from '../lib/cortinaTypes';
 
@@ -28,6 +29,7 @@ export interface CortinaResumo {
     ambiente: string;
     modelo: ModeloCortina; // = modelo da 1ª camada (compat)
     fixacao: FixacaoCortina;
+    desconto?: DescontoCortina;
     largura: number;
     altura: number;
     modelo_cortina_nome?: string;
@@ -45,6 +47,23 @@ export interface CortinaResumo {
 interface CamadaState { id: string; tecidoId: string; modelo: ModeloCortinaOpcao | ''; franzido: string; metodoAltura: MetodoAlturaCortina; }
 
 const novaCamada = (modelo: ModeloCortinaOpcao | '' = ''): CamadaState => ({ id: crypto.randomUUID(), tecidoId: '', modelo, franzido: '', metodoAltura: 'emenda' });
+const calcCache = new Map<string, { expiraEm: number; valor: CalcCortinaCompletaResp }>();
+const calcEmVoo = new Map<string, Promise<CalcCortinaCompletaResp>>();
+
+function postCalculoCortinaCacheado(key: string, payload: unknown): Promise<CalcCortinaCompletaResp> {
+  const cached = calcCache.get(key);
+  if (cached && Date.now() <= cached.expiraEm) return Promise.resolve(cached.valor);
+  const emVoo = calcEmVoo.get(key);
+  if (emVoo) return emVoo;
+  const req = api.post<CalcCortinaCompletaResp>('/calcular/cortina/completa', payload)
+    .then((valor) => {
+      calcCache.set(key, { expiraEm: Date.now() + 2 * 60 * 1000, valor });
+      return valor;
+    })
+    .finally(() => calcEmVoo.delete(key));
+  calcEmVoo.set(key, req);
+  return req;
+}
 
 // Itens obrigatórios do wave: o produto é resolvido na tela (sem seletor), casando pelo
 // nome dentro do grupo WAVE já carregado. Espelha o WAVE_FIXO_KEYWORD do backend.
@@ -66,6 +85,7 @@ function fixacoesComuns(modelos: ModeloCortinaOpcao[]): FixacaoCortina[] {
 
 export function CortinaCard({
   indice, tecidos, opcoes, instalacoes, inicial, restauro, onChange, onRemover, podeRemover, onPreenchidoChange, onSnapshot, onDuplicar,
+  onCalculandoChange,
 }: {
   indice: number;
   tecidos: TecidoOpcao[];
@@ -79,6 +99,7 @@ export function CortinaCard({
   onPreenchidoChange?: (preenchido: boolean) => void;
   onSnapshot?: (snap: CortinaCardSnap) => void;
   onDuplicar?: () => void;
+  onCalculandoChange?: (calculando: boolean) => void;
 }) {
   // Modelo da camada: restauro/inicial por camada; fallback ao modelo único antigo (compat).
   const modeloCamadaInicial = (i: number): ModeloCortinaOpcao | '' =>
@@ -90,6 +111,7 @@ export function CortinaCard({
 
   const [ambiente, setAmbiente] = useState(restauro?.ambiente ?? inicial?.ambiente ?? '');
   const [fixacao, setFixacao] = useState<FixacaoCortina>((restauro?.fixacao as FixacaoCortina) ?? inicial?.fixacao ?? 'varao');
+  const [desconto, setDesconto] = useState<DescontoCortina>((restauro?.desconto as DescontoCortina | undefined) ?? (inicial as { desconto?: DescontoCortina } | undefined)?.desconto ?? 'sem_desconto');
   const [largura, setLargura] = useState(restauro?.largura ?? (inicial ? String(inicial.largura) : ''));
   const [altura, setAltura] = useState(restauro?.altura ?? (inicial ? String(inicial.altura) : ''));
   const [tamanhoBarra, setTamanhoBarra] = useState(restauro?.tamanhoBarra ?? (inicial?.tamanho_barra != null ? String(inicial.tamanho_barra * 100) : ''));
@@ -114,7 +136,7 @@ export function CortinaCard({
   const [modeloCortinaNome, setModeloCortinaNome] = useState<string>(restauro?.modeloCortinaNome ?? inicial?.modelo_cortina_nome ?? '');
 
   useEffect(() => {
-    api.get<{ calculadoras: CalculadoraCortina[] }>('/calcular/calculadoras-cortina')
+    getCacheado<{ calculadoras: CalculadoraCortina[] }>('cortina-calculadoras', '/calcular/calculadoras-cortina')
       .then((r) => setCalculadoras(r.calculadoras))
       .catch(() => setCalculadoras([]));
   }, []);
@@ -167,6 +189,12 @@ export function CortinaCard({
   }, [JSON.stringify(modelosSelecionados)]);
 
   const fixacoesDisponiveis = FIXACOES_CORTINA.filter((f) => fixacoesPermitidas.includes(f.value));
+  const descontosDisponiveis = DESCONTOS_CORTINA.filter((d) => !d.fixacoes || d.fixacoes.includes(fixacao));
+  useEffect(() => {
+    if (!descontosDisponiveis.some((d) => d.value === desconto)) {
+      setDesconto('sem_desconto');
+    }
+  }, [fixacao, desconto, descontosDisponiveis]);
   const modeloPrincipal = camadas[0]?.modelo || '';
   // Nome do item da barra conforme a fixação — para o "Já possui".
   const nomeBarra = fixacao === 'trilho' ? 'Trilho' : fixacao === 'varao_suico' ? 'Varão suíço' : 'Varão';
@@ -220,7 +248,7 @@ export function CortinaCard({
   };
 
   const assinatura = JSON.stringify({
-    fixacao, largura, altura, tamanhoBarra, tipoBarra, aberturas,
+    fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas,
     camadas: camadas.map((c) => ({ t: c.tecidoId, m: c.modelo, f: c.modelo === 'wave' ? '' : c.franzido, ma: c.metodoAltura })),
   });
 
@@ -232,24 +260,40 @@ export function CortinaCard({
   const franzidoDe = (c: CamadaState) => (c.franzido === '' ? undefined : Number(c.franzido));
 
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seqCalc = useRef(0);
   useEffect(() => {
-    if (!podeCalcular) { setCalc(null); setErro(null); return; }
+    seqCalc.current += 1;
+    const seq = seqCalc.current;
+    if (!podeCalcular) {
+      setCalculando(false);
+      onCalculandoChange?.(false);
+      setCalc(null);
+      setErro(null);
+      return;
+    }
     if (debounce.current) clearTimeout(debounce.current);
+    setCalculando(true);
+    onCalculandoChange?.(true);
     debounce.current = setTimeout(async () => {
-      setCalculando(true); setErro(null);
+      setErro(null);
+      const payload = {
+        modelo: camadas[0]?.modelo ? normalizarModeloCortina(camadas[0].modelo) : undefined, fixacao, desconto, largura: Number(largura), altura: Number(altura),
+        tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
+        aberturas: aberturas === '' ? undefined : Number(aberturas),
+        camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : undefined, franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
+      };
       try {
-        const r = await api.post<CalcCortinaCompletaResp>('/calcular/cortina/completa', {
-          modelo: camadas[0]?.modelo ? normalizarModeloCortina(camadas[0].modelo) : undefined, fixacao, largura: Number(largura), altura: Number(altura),
-          tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
-          aberturas: aberturas === '' ? undefined : Number(aberturas),
-          camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : undefined, franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
-        });
+        const r = await postCalculoCortinaCacheado(assinatura, payload);
+        if (seq !== seqCalc.current) return;
         setCalc(r);
       } catch (e) {
+        if (seq !== seqCalc.current) return;
         setCalc(null);
         setErro(e instanceof ApiError ? e.message : 'Falha ao calcular.');
       } finally {
+        if (seq !== seqCalc.current) return;
         setCalculando(false);
+        onCalculandoChange?.(false);
       }
     }, 350);
     return () => { if (debounce.current) clearTimeout(debounce.current); };
@@ -305,7 +349,7 @@ export function CortinaCard({
       total: Math.round(total * 100) / 100,
       completo,
       payload: {
-        ambiente, modelo: camadas[0]?.modelo ? normalizarModeloCortina(camadas[0].modelo) : 'franzido', fixacao, largura: Number(largura), altura: Number(altura),
+        ambiente, modelo: camadas[0]?.modelo ? normalizarModeloCortina(camadas[0].modelo) : 'franzido', fixacao, desconto, largura: Number(largura), altura: Number(altura),
         modelo_cortina_nome: modeloCortinaNome || undefined,
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
@@ -315,11 +359,11 @@ export function CortinaCard({
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, modeloCortinaNome, JSON.stringify(camadas.map((c) => ({ modelo: c.modelo, metodoAltura: c.metodoAltura })))]);
+  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, modeloCortinaNome, JSON.stringify(camadas.map((c) => ({ modelo: c.modelo, metodoAltura: c.metodoAltura })))]);
 
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
 
-  const preenchido = ambiente !== '' || largura !== '' || altura !== '' ||
+  const preenchido = ambiente !== '' || largura !== '' || altura !== '' || desconto !== 'sem_desconto' ||
     tamanhoBarra !== '' || tipoBarra !== '' || aberturas !== '' || camadas.some((c) => c.tecidoId || c.franzido || c.modelo) ||
     Object.keys(acessorioSel).length > 0 || Object.values(qtdManual).some((v) => v !== '');
   useEffect(() => { onPreenchidoChange?.(preenchido); }, [preenchido, onPreenchidoChange]);
@@ -328,12 +372,12 @@ export function CortinaCard({
   onSnapshotRef.current = onSnapshot;
   useEffect(() => {
     onSnapshotRef.current?.({
-      ambiente, modelo: modeloPrincipal, fixacao, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao,
+      ambiente, modelo: modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao,
       modeloCortinaNome,
       camadas: camadas.map((c) => ({ tecidoId: c.tecidoId, franzido: c.franzido, modelo: c.modelo, metodoAltura: c.metodoAltura })),
       acessorioSel, qtdManual, instalacaoId,
     });
-  }, [ambiente, modeloPrincipal, fixacao, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, modeloCortinaNome, camadas, acessorioSel, qtdManual, instalacaoId]);
+  }, [ambiente, modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, modeloCortinaNome, camadas, acessorioSel, qtdManual, instalacaoId]);
 
   const setCamada = (id: string, patch: Partial<CamadaState>) =>
     setCamadas((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -395,6 +439,12 @@ export function CortinaCard({
             <option value="">Selecione…</option>
             <option value="simples">Simples</option>
             <option value="dupla">Dupla</option>
+          </select>
+        </div>
+        <div>
+          <label className="form-label" htmlFor={`desconto-cortina-${indice}`}>Desconto</label>
+          <select id={`desconto-cortina-${indice}`} className="input" value={desconto} onChange={(e) => setDesconto(e.target.value as DescontoCortina)}>
+            {descontosDisponiveis.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </select>
         </div>
         <div>

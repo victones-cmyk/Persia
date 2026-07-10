@@ -5,6 +5,7 @@ export interface ComponenteSnapshot {
   grupo?: string;
   descricao?: string;
   quantidade?: number;
+  quantidade_label?: string;
   unidade?: string;
 }
 
@@ -23,6 +24,19 @@ export interface ItemProducaoSnapshot {
   base?: string | null;
   comando?: string | null;
   instalacao_nome?: string | null;
+  fixacao?: string | null;
+  abertura?: string | number | null;
+  desconto?: string | null;
+  n_camadas?: number;
+  camadas?: Array<{
+    modelo?: string | null;
+    tecido_nome?: string | null;
+    metodo?: string | null;
+    metragem?: number | null;
+    tiras?: number | null;
+    barra_postica_base?: number | null;
+    barra_postica_acrescimo?: number | null;
+  }>;
   nome_produto?: string;
   descricao_produto?: string;
   qtd_venda?: number;
@@ -134,6 +148,52 @@ function ehPersianaDocumento(ordem: OrdemDocumento): boolean {
   const item = ordem.item;
   return String(ordem.tipoProduto) !== 'cortina'
     && Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined || item.rolamento);
+}
+
+function ehCortinaDocumento(ordem: OrdemDocumento): boolean {
+  return String(ordem.tipoProduto) === 'cortina'
+    || Boolean(ordem.item.camadas?.length || componentesPorGrupo(ordem.item, 'Tecido').length);
+}
+
+function fixacaoCortinaLabel(v: unknown): string {
+  const s = texto(v, '').toLowerCase();
+  if (s === 'varao') return 'Varão';
+  if (s === 'trilho') return 'Trilho';
+  if (s === 'varao_suico') return 'Varão suíço';
+  return texto(v);
+}
+
+function aberturaCortinaLabel(v: unknown): string {
+  const s = texto(v, '').toLowerCase();
+  if (s === '2' || s === 'central') return 'Central';
+  if (s === '1' || s === 'sem_abertura' || s === 'sem abertura') return 'Sem abertura';
+  return texto(v);
+}
+
+function descontoCortinaLabel(v: unknown): string {
+  const s = texto(v, 'sem_desconto');
+  const mapa: Record<string, string> = {
+    teto_ao_chao: 'Teto ao chão',
+    gesso_ao_chao: 'Gesso ao chão',
+    sem_desconto: 'Sem desconto',
+    varao_ao_chao: 'Varão ao chão',
+    suporte_de_teto: 'Suporte de teto',
+  };
+  return mapa[s] ?? texto(v);
+}
+
+function modeloCortinaLabel(v: unknown): string {
+  const s = texto(v, '').toLowerCase();
+  const mapa: Record<string, string> = {
+    ilhos: 'Ilhós',
+    prega: 'Prega',
+    prega_americana: 'Modelo Prega Americana',
+    prega_macho: 'Modelo Prega Macho',
+    prega_femea: 'Modelo Prega Fêmea',
+    franzido: 'Franzido',
+    wave: 'Wave',
+  };
+  return mapa[s] ?? texto(v);
 }
 
 function campoPdf(
@@ -273,6 +333,173 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
   doc.font('Helvetica').fontSize(7).fillColor(muted).text('Conferir medidas, tecido e acessorios antes da producao.', left, 798, { width: pageW, height: 10 });
 }
 
+function campoCortinaPdf(
+  doc: PDFKit.PDFDocument,
+  label: string,
+  value: string,
+  x: number,
+  y: number,
+  w: number,
+  h = 31,
+  fill = '#ffffff',
+  mutedValue = false,
+): void {
+  doc.save().fillColor(fill).rect(x, y, w, h).fill().lineWidth(0.7).strokeColor('#cfd6dd').rect(x, y, w, h).stroke().restore();
+  doc.font('Helvetica-Bold').fontSize(5.9).fillColor('#5d6873').text(label, x + 7, y + 5, { width: w - 14, height: 8 });
+  doc.font('Helvetica').fontSize(8.4).fillColor(mutedValue ? '#7b858f' : '#111111').text(abreviar(value, 78), x + 7, y + 14, { width: w - 14, height: h - 15 });
+}
+
+function tecidoCamada(item: ItemProducaoSnapshot, index: number): string {
+  const camada = item.camadas?.[index];
+  if (camada?.tecido_nome) return camada.tecido_nome;
+  const tecidos = componentesPorGrupo(item, 'Tecido');
+  return tecidoSemPrefixo(descComponente(tecidos[index]));
+}
+
+function modeloCamada(item: ItemProducaoSnapshot, index: number): string {
+  if (!item.camadas?.[index] && !tecidoCamada(item, index)) return '';
+  return modeloCortinaLabel(item.camadas?.[index]?.modelo ?? item.tipo);
+}
+
+function desenharCabecalhoCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento, titulo = 'Ordem de Producao'): void {
+  const left = 36;
+  const muted = '#5d6873';
+  doc.rect(0, 0, 595, 76).fill('#f1f3f5');
+  doc.fillColor('#15191d').font('Helvetica-Bold').fontSize(18).text(titulo, left, 22, { width: 260 });
+  doc.font('Helvetica-Bold').fontSize(11).text(ordem.codigo, 372, 19, { width: 187, align: 'right' });
+  doc.font('Helvetica').fontSize(7).fillColor(muted).text(`Gerada em ${dataBR(ordem.criadoEm)}`, 372, 39, { width: 187, align: 'right' });
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(muted).text(`Entrega: ${dataCurtaBR(ordem.entregaEm)}`, 372, 57, { width: 187, align: 'right' });
+}
+
+function rodapeProducao(doc: PDFKit.PDFDocument): void {
+  const left = 36;
+  const pageW = 523;
+  doc.moveTo(left, 790).lineTo(left + pageW, 790).strokeColor('#d7dce0').stroke();
+  doc.font('Helvetica').fontSize(7).fillColor('#5d6873').text('Conferir medidas, tecido e acessorios antes do corte/producao.', left, 800, { width: pageW, height: 10 });
+}
+
+function desenharTabelaComponentesCortina(
+  doc: PDFKit.PDFDocument,
+  ordem: OrdemDocumento,
+  componentes: ComponenteSnapshot[],
+  startY: number,
+): void {
+  const left = 36;
+  const pageW = 523;
+  const soft = '#f1f3f5';
+  const ink = '#15191d';
+  const line = '#cfd6dd';
+  const headerH = 18;
+  const minRowH = 16;
+  const maxRowH = 44;
+  const maxY = 782;
+  const descW = 335;
+  const qtdX = left + 438;
+  const qtdW = 78;
+  let y = startY;
+  let page = 1;
+  let tableTop = startY + 24;
+
+  const desenharCabecalhoTabela = (titulo: string) => {
+    sectionTitle(doc, titulo, left, y, pageW);
+    y += 24;
+    tableTop = y;
+    doc.rect(left, y, pageW, headerH).fill(soft);
+    doc.font('Helvetica-Bold').fontSize(7).fillColor(ink);
+    doc.text('Grupo', left + 8, y + 5, { width: 82 });
+    doc.text('Descricao', left + 98, y + 5, { width: descW });
+    doc.text('Qtd.', qtdX, y + 5, { width: qtdW, align: 'right' });
+    doc.save().lineWidth(0.7).strokeColor(line).rect(left, y, pageW, headerH).stroke().restore();
+    y += headerH;
+  };
+
+  desenharCabecalhoTabela('Componentes e materiais');
+
+  const linhas = componentes.length > 0 ? componentes : [{ grupo: '-', descricao: 'Nenhum componente informado', quantidade: 0, unidade: '-' }];
+  linhas.forEach((c) => {
+    const descricao = texto(c.descricao, '');
+    const grupo = texto(c.grupo, '');
+    const tecido = grupo.toLowerCase() === 'tecido';
+    const quantidade = c.quantidade_label ?? numero(c.quantidade);
+    doc.font('Helvetica').fontSize(6.8);
+    const rowH = Math.max(
+      minRowH,
+      Math.min(maxRowH, Math.max(
+        doc.heightOfString(descricao, { width: descW }),
+        doc.heightOfString(quantidade, { width: qtdW, align: 'right' }),
+      ) + 8),
+    );
+    if (y + rowH > maxY) {
+      doc.save().lineWidth(0.7).strokeColor(line).rect(left, tableTop, pageW, Math.max(headerH, maxY - tableTop)).stroke().restore();
+      rodapeProducao(doc);
+      doc.addPage();
+      page += 1;
+      desenharCabecalhoCortina(doc, ordem, 'Ordem de Producao');
+      y = 98;
+      desenharCabecalhoTabela(`Componentes e materiais (continuação ${page})`);
+    }
+    if (tecido) {
+      doc.save().fillColor('#fffba6').rect(left, y, pageW, rowH).fill().restore();
+    }
+    doc.moveTo(left, y).lineTo(left + pageW, y).strokeColor('#e3e7eb').stroke();
+    doc.font('Helvetica').fontSize(6.8).fillColor(ink);
+    doc.text(abreviar(grupo, 18), left + 8, y + 4, { width: 82, height: rowH - 4 });
+    doc.text(descricao, left + 98, y + 4, { width: descW, height: rowH - 4 });
+    doc.text(quantidade, qtdX, y + 4, { width: qtdW, height: rowH - 4, align: 'right' });
+    y += rowH;
+  });
+  doc.save().lineWidth(0.7).strokeColor(line).rect(left, tableTop, pageW, Math.max(headerH, y - tableTop)).stroke().restore();
+  rodapeProducao(doc);
+}
+
+function desenharPdfCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): void {
+  const item = ordem.item;
+  const left = 36;
+  const pageW = 523;
+  const gap = 8;
+  const ink = '#15191d';
+
+  desenharCabecalhoCortina(doc, ordem);
+
+  const metaY = 98;
+  const metaW = (pageW - gap * 3) / 4;
+  [
+    ['Pedido', ordem.pedidoCodigo],
+    ['Cliente', ordem.cliente],
+    ['Vendedor', primeiroNome(ordem.vendedor)],
+    ['Instalacao', texto(item.instalacao_nome)],
+  ].forEach(([label, value], index) => {
+    campoCortinaPdf(doc, label, value, left + index * (metaW + gap), metaY, metaW, 48);
+  });
+
+  const produtoY = 168;
+  sectionTitle(doc, 'Produto', left, produtoY, pageW);
+  doc.font('Helvetica-Bold').fontSize(12).fillColor(ink).text(abreviar(produtoResumo(item), 112), left, produtoY + 23, { width: pageW, height: 18 });
+
+  const dadosY = 224;
+  sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
+  const y0 = dadosY + 24;
+  const rowH = 36;
+  const ambienteW = 260;
+  const smallW = (pageW - ambienteW - gap * 2) / 2;
+  const colW = (pageW - gap) / 2;
+  campoCortinaPdf(doc, 'Ambiente', texto(item.ambiente), left, y0, ambienteW, 30);
+  campoCortinaPdf(doc, 'Largura', `${numero(item.largura_m)} m`, left + ambienteW + gap, y0, smallW, 30);
+  campoCortinaPdf(doc, 'Altura', `${numero(item.altura_m)} m`, left + ambienteW + gap + smallW + gap, y0, smallW, 30);
+  campoCortinaPdf(doc, 'Cortina', tecidoCamada(item, 0), left, y0 + rowH, colW, 30);
+  campoCortinaPdf(doc, 'Tipo', modeloCamada(item, 0), left + colW + gap, y0 + rowH, colW, 30);
+  campoCortinaPdf(doc, 'Forro', tecidoCamada(item, 1), left, y0 + rowH * 2, colW, 30);
+  campoCortinaPdf(doc, 'Tipo', modeloCamada(item, 1), left + colW + gap, y0 + rowH * 2, colW, 30);
+  campoCortinaPdf(doc, 'Xale', tecidoCamada(item, 2), left, y0 + rowH * 3, colW, 30);
+  campoCortinaPdf(doc, 'Tipo', modeloCamada(item, 2), left + colW + gap, y0 + rowH * 3, colW, 30);
+  campoCortinaPdf(doc, 'Fixação', fixacaoCortinaLabel(item.fixacao), left, y0 + rowH * 4, pageW, 30);
+  campoCortinaPdf(doc, 'Abertura', aberturaCortinaLabel(item.abertura), left, y0 + rowH * 5, colW, 30);
+  campoCortinaPdf(doc, 'Desconto', descontoCortinaLabel(item.desconto), left + colW + gap, y0 + rowH * 5, colW, 30, '#fffba6');
+  campoCortinaPdf(doc, 'Observações', '', left, y0 + rowH * 6, pageW, 34);
+
+  desenharTabelaComponentesCortina(doc, ordem, item.componentes ?? [], 512);
+}
+
 export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 36, info: { Title: `Ordem de Producao ${ordem.codigo}` } });
@@ -283,6 +510,12 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
 
     if (ehPersianaDocumento(ordem)) {
       desenharPdfPersiana(doc, ordem);
+      doc.end();
+      return;
+    }
+
+    if (ehCortinaDocumento(ordem)) {
+      desenharPdfCortina(doc, ordem);
       doc.end();
       return;
     }

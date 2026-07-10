@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faSpinner, faPaperPlane, faFloppyDisk } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
+import { getCacheado } from '../lib/dadosCache';
 import { CortinaCard, type CortinaResumo, type CortinaInicial } from './CortinaCard';
 import { ConfirmModal } from './ConfirmModal';
 import { formatBRL } from '../lib/formatacao';
@@ -25,6 +26,7 @@ export interface CortinaOrcamentoEstado {
   count: number; // nº de cortinas com payload
   cortinas: NonNullable<CortinaResumo['payload']>[];
   totais: number[]; // total de cada cortina (alinhado com `cortinas`) — p/ aplicar RT por item
+  calculando: boolean;
 }
 
 export function CortinaOrcamento({
@@ -66,6 +68,7 @@ export function CortinaOrcamento({
   const [resumos, setResumos] = useState<Record<string, CortinaResumo>>({});
   const [preenchidos, setPreenchidos] = useState<Record<string, boolean>>({});
   const [snaps, setSnaps] = useState<Record<string, CortinaCardSnap>>({});
+  const [calculandoCards, setCalculandoCards] = useState<Record<string, boolean>>({});
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [salvarAberto, setSalvarAberto] = useState(false);
@@ -75,14 +78,14 @@ export function CortinaOrcamento({
   useEffect(() => {
     // Tecidos liberam a tela (rápido/cacheado). Acessórios carregam em segundo
     // plano — os seletores mostram "carregando opções…" só na seção até chegarem.
-    api.get<{ tecidos: TecidoOpcao[] }>('/calcular/cortina/tecidos')
+    getCacheado<{ tecidos: TecidoOpcao[] }>('cortina-tecidos', '/calcular/cortina/tecidos')
       .then((t) => setTecidos(t.tecidos))
       .catch(() => setErroCarga(true))
       .finally(() => { setCarregando(false); onCarregar?.(true); });
-    api.get<AcessoriosCortinaResp>('/calcular/cortina/acessorios')
+    getCacheado<AcessoriosCortinaResp>('cortina-acessorios', '/calcular/cortina/acessorios')
       .then((o) => setOpcoes(o))
       .catch(() => {});
-    api.get<{ instalacoes: TipoInstalacao[] }>('/calcular/instalacoes')
+    getCacheado<{ instalacoes: TipoInstalacao[] }>('instalacoes', '/calcular/instalacoes')
       .then((r) => setInstalacoes(r.instalacoes))
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,6 +99,7 @@ export function CortinaOrcamento({
     setResumos((m) => { const n = { ...m }; delete n[id]; return n; });
     setPreenchidos((m) => { const n = { ...m }; delete n[id]; return n; });
     setSnaps((m) => { const n = { ...m }; delete n[id]; return n; });
+    setCalculandoCards((m) => { const n = { ...m }; delete n[id]; return n; });
   };
 
   const duplicarCortina = (id: string, idx: number) => {
@@ -130,6 +134,7 @@ export function CortinaOrcamento({
   // Instalação já está embutida no total de cada cortina (Victor 26/06/2026).
   const totalCortinas = ids.reduce((s, id) => s + (resumos[id]?.total ?? 0), 0);
   const totalGeral = Math.round(totalCortinas * 100) / 100;
+  const calculando = ids.some((id) => calculandoCards[id]);
 
   const todasCompletas = ids.length > 0 && ids.every((id) => resumos[id]?.completo && resumos[id]?.payload);
 
@@ -140,12 +145,12 @@ export function CortinaOrcamento({
     const comPayload = ids.filter((id) => resumos[id]?.payload);
     const cortinas = comPayload.map((id) => resumos[id]!.payload!) as NonNullable<CortinaResumo['payload']>[];
     const totais = comPayload.map((id) => resumos[id]!.total);
-    onEstadoRef.current?.({ total: totalCortinas, todasCompletas, temCortinas: cortinas.length > 0, count: cortinas.length, cortinas, totais });
-  }, [embutido, totalCortinas, todasCompletas, ids, resumos]);
+    onEstadoRef.current?.({ total: totalCortinas, todasCompletas, temCortinas: cortinas.length > 0, count: cortinas.length, cortinas, totais, calculando });
+  }, [embutido, totalCortinas, todasCompletas, ids, resumos, calculando]);
 
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !gcUsuarioId;
-  const ocupado = enviando || salvando;
+  const ocupado = enviando || salvando || calculando;
   const podeEnviar = !gcOffline && !!cliente && todasCompletas && !ocupado;
 
   async function doSubmit(apenasSalvar: boolean) {
@@ -194,6 +199,7 @@ export function CortinaOrcamento({
           onChange={(r) => setResumo(id, r)}
           onPreenchidoChange={(v) => setPreenchido(id, v)}
           onSnapshot={(s) => setSnap(id, s)}
+          onCalculandoChange={(v) => setCalculandoCards((m) => (m[id] === v ? m : { ...m, [id]: v }))}
           onRemover={() => setRemoverCortinaId(id)}
           podeRemover={ids.length > 1}
           onDuplicar={() => duplicarCortina(id, i)}
@@ -240,7 +246,9 @@ export function CortinaOrcamento({
                   Cortina {i + 1}
                   {resumos[id] && !resumos[id].completo && <span className="text-warning"> (acessório a definir)</span>}
                 </span>
-                <span className="font-mono tabular-nums text-neutral-800">{formatBRL(resumos[id]?.total ?? 0)}</span>
+                <span className="font-mono tabular-nums text-neutral-800">
+                  {calculandoCards[id] ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(resumos[id]?.total ?? 0)}
+                </span>
               </div>
             ))}
           </div>
@@ -249,12 +257,13 @@ export function CortinaOrcamento({
 
           <label className="form-label" htmlFor="total-cortina">Valor total</label>
           <input id="total-cortina" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}
-            value={formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
+            value={calculando ? 'Calculando...' : formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
 
           {!cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar (ou use <strong>Salvar</strong>).</span></div>}
           {!todasCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Escolha o <strong>produto de cada acessório</strong> em todas as cortinas para enviar.</span></div>}
           {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong>.</span></div>}
           {!gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor.</span></div>}
+          {calculando && <div className="alert alert-info mb-3 text-xs-ui"><span>Aguarde o cálculo terminar para salvar ou enviar.</span></div>}
 
           <div className="flex gap-2">
             <button type="button" className="btn btn-default flex-1" disabled={ocupado || !todasCompletas} aria-disabled={ocupado || !todasCompletas} onClick={() => setSalvarAberto(true)} title="Salva sem enviar ao GestãoClick">

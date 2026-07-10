@@ -9,6 +9,12 @@ export type FixacaoCortina = 'varao' | 'trilho' | 'varao_suico';
 export type MetodoCortina = 'normal' | 'emenda' | 'barra_postica';
 export type MetodoAlturaCortina = 'emenda' | 'barra_postica';
 export type ConfigTecidoCortina = 'um_tecido' | 'dois_tecidos_mesmo_varao' | 'dois_tecidos_varao_duplo';
+export type DescontoCortina =
+  | 'teto_ao_chao'
+  | 'gesso_ao_chao'
+  | 'sem_desconto'
+  | 'varao_ao_chao'
+  | 'suporte_de_teto';
 
 export interface ItemCortina {
   tipo: 'tecido' | 'acessorio';
@@ -76,6 +82,14 @@ export const FIXACOES_CORTINA: { value: FixacaoCortina; label: string }[] = [
   { value: 'varao', label: 'Varão' },
   { value: 'trilho', label: 'Trilho' },
   { value: 'varao_suico', label: 'Varão suíço' },
+];
+
+export const DESCONTOS_CORTINA: { value: DescontoCortina; label: string; fixacoes?: FixacaoCortina[] }[] = [
+  { value: 'teto_ao_chao', label: 'Teto ao chão' },
+  { value: 'gesso_ao_chao', label: 'Gesso ao chão' },
+  { value: 'sem_desconto', label: 'Sem desconto' },
+  { value: 'varao_ao_chao', label: 'Varão ao chão', fixacoes: ['varao', 'varao_suico'] },
+  { value: 'suporte_de_teto', label: 'Suporte de teto', fixacoes: ['varao', 'varao_suico'] },
 ];
 
 export const CONFIGS_CORTINA: { value: ConfigTecidoCortina; label: string }[] = [

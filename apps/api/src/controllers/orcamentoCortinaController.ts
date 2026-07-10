@@ -28,6 +28,7 @@ export interface CortinaEntrada {
   modelo_cortina_nome?: string;
   modelo: 'ilhos' | 'prega' | 'franzido' | 'wave';
   fixacao: 'varao' | 'trilho' | 'varao_suico';
+  desconto?: 'teto_ao_chao' | 'gesso_ao_chao' | 'sem_desconto' | 'varao_ao_chao' | 'suporte_de_teto';
   largura: number | string;
   altura: number | string;
   tamanho_barra?: number | string;
@@ -94,6 +95,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     return { 
       tecido_id: t.id, 
       tecido_nome: t.nome, 
+      modelo: c.camadas[i]?.modelo ?? c.modelo,
       metragem: cam.metragem, 
       valor_tecido: vt, 
       metodo: cam.metodo, 
@@ -179,7 +181,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     largura, altura,
     tecido_id: camadasSnap[0].tecido_id,
     tecido_nome: camadasSnap[0].tecido_nome,
-    snapshot: { ambiente: c.ambiente?.trim() || '', modelo_cortina_nome: c.modelo_cortina_nome ?? null, modelo: c.modelo, fixacao: c.fixacao, abertura: c.aberturas ?? null, largura, altura, n_camadas: r.n_camadas, camadas: camadasSnap, acessorios: acessoriosSnap, valor_total: valorTotal, nome_produto: nomeProduto, descricao_produto: descricaoProduto, valor_custo: valorCusto },
+    snapshot: { ambiente: c.ambiente?.trim() || '', modelo_cortina_nome: c.modelo_cortina_nome ?? null, modelo: c.modelo, fixacao: c.fixacao, desconto: c.desconto ?? 'sem_desconto', abertura: c.aberturas ?? null, largura, altura, n_camadas: r.n_camadas, camadas: camadasSnap, acessorios: acessoriosSnap, valor_total: valorTotal, nome_produto: nomeProduto, descricao_produto: descricaoProduto, valor_custo: valorCusto },
   };
 }
 

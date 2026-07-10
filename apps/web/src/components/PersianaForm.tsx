@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faPlus, faTrash, faCopy } from '@fortawesome/free-solid-svg-icons';
 import { api } from '../lib/api';
+import { getCacheado } from '../lib/dadosCache';
 import { roundHalfUp, formatBRL, formatNum, formatQtd } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
 import { MedidaInput } from './MedidaInput';
@@ -134,12 +135,14 @@ export function PersianaForm({
   restauro,
   onDirtyChange,
   onSnapshot,
+  onCalculandoChange,
 }: {
   onResult: (dados: OrcamentoCalculado | null) => void;
   inicial?: { tipo: TipoPersiana; itens: ItemInput[] };
   restauro?: PersianaSnapshot; // autosave local (estado bruto)
   onDirtyChange?: (sujo: boolean) => void;
   onSnapshot?: (snap: PersianaSnapshot) => void;
+  onCalculandoChange?: (calculando: boolean) => void;
 }) {
   const tipoFallback: TipoPersiana | '' = (restauro?.tipo as TipoPersiana | '') || inicial?.tipo || '';
   const [itens, setItens] = useState<ItemForm[]>(
@@ -172,8 +175,7 @@ export function PersianaForm({
     if (!tipo || tecidosPorTipo[tipo] || emVoo.current.has(tipo)) return;
     emVoo.current.add(tipo);
     setTiposCarregando((p) => (p.includes(tipo) ? p : [...p, tipo]));
-    api
-      .get<{ tecidos: TecidoOpcao[] }>(`/calcular/tecidos?tipo=${tipo}`)
+    getCacheado<{ tecidos: TecidoOpcao[] }>(`persiana-tecidos:${tipo}`, `/calcular/tecidos?tipo=${tipo}`)
       .then((r) => setTecidosPorTipo((p) => ({ ...p, [tipo]: r.tecidos })))
       .catch(() => setTecidosPorTipo((p) => ({ ...p, [tipo]: [] })))
       .finally(() => {
@@ -184,14 +186,14 @@ export function PersianaForm({
 
   // Carrega as calculadoras, tecidos dos tipos já presentes (restauro/edição) e a lista de instalações.
   useEffect(() => {
-    api.get<{ calculadoras: CalculadoraPersiana[] }>('/calcular/calculadoras')
+    getCacheado<{ calculadoras: CalculadoraPersiana[] }>('persiana-calculadoras', '/calcular/calculadoras')
       .then((r) => {
         setCalculadoras(r.calculadoras);
       })
       .catch(() => setCalculadoras([]));
 
     for (const it of itens) if (it.tipo) garantirTecidos(it.tipo);
-    api.get<{ instalacoes: TipoInstalacao[] }>('/calcular/instalacoes')
+    getCacheado<{ instalacoes: TipoInstalacao[] }>('instalacoes', '/calcular/instalacoes')
       .then((r) => setInstalacoes(r.instalacoes))
       .catch(() => setInstalacoes([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -292,16 +294,21 @@ export function PersianaForm({
   const calcSig = JSON.stringify({
     itens: itens.map((it) => ({ tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, r: it.rolamento, b: it.base, co: it.comando, in: it.instalacao_id })),
   });
+  const seqCalc = useRef(0);
   useEffect(() => {
-    if (itensComp.length === 0) { onResult(null); setResultPorIdx({}); return; }
+    seqCalc.current += 1;
+    const seq = seqCalc.current;
+    if (itensComp.length === 0) { setCalculando(false); onCalculandoChange?.(false); onResult(null); setResultPorIdx({}); return; }
     const comp = itensComp;
     const incompleto = temIncompleto;
-    const id = setTimeout(() => { void calcularCom(comp, incompleto); }, 400);
+    setCalculando(true);
+    onCalculandoChange?.(true);
+    const id = setTimeout(() => { void calcularCom(comp, incompleto, seq); }, 400);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calcSig]);
 
-  async function calcularCom(comp: { it: ItemForm; idx: number }[], incompleto: boolean) {
+  async function calcularCom(comp: { it: ItemForm; idx: number }[], incompleto: boolean, seq: number) {
     setCalculando(true);
     setErros({});
     setErroGeral(null);
@@ -322,6 +329,7 @@ export function PersianaForm({
           novosErros[origIdx] = { message: res.message, alternativos: res.alternativos };
         }
       }
+      if (seq !== seqCalc.current) return;
       setResultPorIdx(novosResultados);
 
       if (Object.keys(novosErros).length > 0) {
@@ -332,10 +340,13 @@ export function PersianaForm({
       onResult({ tipo: (comp[0].it.tipo || (calculadoras[0]?.id ?? 'persiana_rolo_blackout')) as TipoPersiana, itens: calculados, total_bruto: r.total_bruto, incompleto });
 
     } catch {
+      if (seq !== seqCalc.current) return;
       onResult(null);
       setErroGeral('Não foi possível calcular. Tente novamente.');
     } finally {
+      if (seq !== seqCalc.current) return;
       setCalculando(false);
+      onCalculandoChange?.(false);
     }
   }
 

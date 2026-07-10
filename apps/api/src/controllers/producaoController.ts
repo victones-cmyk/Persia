@@ -17,25 +17,105 @@ function temAcesso(orc: Pick<Orcamento, 'usuario_id'>, sessao: Express.Request['
 
 interface CortinaSnapshotProducao {
   ambiente?: string;
+  modelo_cortina_nome?: string | null;
   modelo?: string;
   fixacao?: string;
+  abertura?: string | number | null;
+  desconto?: string | null;
   largura?: number;
   altura?: number;
   n_camadas?: number;
-  camadas?: Array<{ tecido_nome?: string; metragem?: number; valor_tecido?: number }>;
+  camadas?: Array<{
+    tecido_nome?: string;
+    modelo?: string | null;
+    metodo?: string | null;
+    metragem?: number;
+    tiras?: number | null;
+    barra_postica_base?: number | null;
+    barra_postica_acrescimo?: number | null;
+    valor_tecido?: number;
+  }>;
   acessorios?: Array<{ item?: string; produto_nome?: string; quantidade?: number; preco?: number; subtotal?: number }>;
   valor_total?: number;
   nome_produto?: string;
 }
 
+function numeroProducao(v: unknown): string {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '-';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function camadaLabel(index: number): string {
+  return index === 0 ? 'Frente' : `Camada ${index + 1}`;
+}
+
+function componenteTecidoCortina(cam: NonNullable<CortinaSnapshotProducao['camadas']>[number], index: number) {
+  const label = camadaLabel(index);
+  const tecido = cam.tecido_nome ?? '-';
+  const metragem = Number(cam.metragem ?? 0);
+  const tiras = Number(cam.tiras ?? 0);
+
+  if (cam.metodo === 'emenda' && tiras > 0 && metragem > 0) {
+    const faixa = metragem / tiras;
+    return {
+      grupo: 'Tecido',
+      descricao: `${label}: ${tecido}`,
+      quantidade: tiras,
+      quantidade_label: `${tiras} x ${numeroProducao(faixa)} m`,
+      unidade: 'm',
+    };
+  }
+
+  if (cam.metodo === 'barra_postica') {
+    const base = Number(cam.barra_postica_base ?? 0);
+    const acrescimo = Number(cam.barra_postica_acrescimo ?? 0);
+    return {
+      grupo: 'Tecido',
+      descricao: `${label}: ${tecido}`,
+      quantidade: metragem,
+      quantidade_label: base > 0 && acrescimo > 0
+        ? `${numeroProducao(base)} + ${numeroProducao(acrescimo)} m`
+        : (metragem > 0 ? `${numeroProducao(metragem)} m` : '-'),
+      unidade: 'm',
+    };
+  }
+
+  return {
+    grupo: 'Tecido',
+    descricao: `${label}: ${tecido}`,
+    quantidade: metragem,
+    quantidade_label: metragem > 0 ? `${numeroProducao(metragem)} m` : '-',
+    unidade: 'm',
+  };
+}
+
 function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
   const tecidos = c.camadas?.map((cam, i) => `${i === 0 ? 'Frente' : `Camada ${i + 1}`}: ${cam.tecido_nome ?? '-'}`).join(' | ');
+  const instalacao = (c.acessorios ?? []).find((a) => {
+    const item = `${a.item ?? ''} ${a.produto_nome ?? ''}`.toLowerCase();
+    return item.includes('instal');
+  });
   return {
     ambiente: c.ambiente,
-    tipo: c.modelo,
+    tipo: c.modelo_cortina_nome ?? c.modelo,
     tecido_nome: tecidos || c.camadas?.[0]?.tecido_nome,
+    fixacao: c.fixacao,
+    abertura: c.abertura,
+    desconto: c.desconto,
     largura_m: Number(c.largura ?? 0),
     altura_m: Number(c.altura ?? 0),
+    n_camadas: c.n_camadas,
+    camadas: c.camadas?.map((cam) => ({
+      modelo: cam.modelo ?? c.modelo,
+      tecido_nome: cam.tecido_nome,
+      metodo: cam.metodo,
+      metragem: cam.metragem,
+      tiras: cam.tiras,
+      barra_postica_base: cam.barra_postica_base,
+      barra_postica_acrescimo: cam.barra_postica_acrescimo,
+    })),
+    instalacao_nome: instalacao?.produto_nome ?? null,
     qtd_producao: c.camadas?.[0]?.metragem,
     nome_produto: c.nome_produto ?? `Cortina ${c.modelo ?? ''}`.trim(),
     descricao_produto: [
@@ -44,12 +124,7 @@ function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
       ...(c.camadas ?? []).map((cam, i) => `${i === 0 ? 'Frente' : `Camada ${i + 1}`}: ${cam.tecido_nome ?? '-'} - ${cam.metragem ?? 0} m`),
     ].filter(Boolean).join('\n'),
     componentes: [
-      ...(c.camadas ?? []).map((cam, i) => ({
-        grupo: 'Tecido',
-        descricao: `${i === 0 ? 'Frente' : `Camada ${i + 1}`}: ${cam.tecido_nome ?? '-'}`,
-        quantidade: Number(cam.metragem ?? 0),
-        unidade: 'm',
-      })),
+      ...(c.camadas ?? []).map(componenteTecidoCortina),
       ...(c.acessorios ?? []).map((a) => ({
         grupo: 'Acessorio',
         descricao: a.produto_nome || a.item || '-',
