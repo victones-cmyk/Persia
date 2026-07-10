@@ -736,9 +736,10 @@ function gerarZplEtiquetaEmbalagemPersiana(ordem: OrdemDocumento, width: number,
   const meta = ordem.etiquetaEmbalagem;
   if (!meta) return '';
 
-  const x = marginLeft;
+  const extraLeft = Math.round(5 * (width / 100));
+  const x = marginLeft + extraLeft;
   const y = 8;
-  const w = width - marginLeft - marginRight;
+  const w = width - x - marginRight;
   const h = height - 16;
   const rightW = 240;
   const leftW = w - rightW;
@@ -770,8 +771,9 @@ function gerarZplEtiquetaEmbalagemPersiana(ordem: OrdemDocumento, width: number,
     zplLine(col2X, y + 70, 29, 25, 90, 'VEND:', 1, 8),
     zplLine(col2X + 92, y + 70, 29, 25, 190, primeiroNome(ordem.vendedor), 1, 18),
     zplLine(x + 14, y + 126, 28, 24, leftW - 35, `DATA DE ENTREGA: ${entrega}`, 1, 38),
-    zplLine(x + 14, y + 183, 30, 26, 270, `PEÇAS: ${meta.pecaNumero} / ${meta.pecaTotal}`, 1, 18),
-    zplLine(x + 315, y + 183, 30, 26, leftW - 335, `AMBIENTE: ${ambiente}`, 1, 34),
+    zplLine(x + 14, y + 183, 30, 26, 245, `PEÇAS: ${meta.pecaNumero} / ${meta.pecaTotal}`, 1, 18),
+    zplLine(x + 275, y + 174, 24, 21, leftW - 295, 'AMBIENTE:', 1, 12),
+    zplLine(x + 275, y + 205, 22, 19, leftW - 295, ambiente, 1, 28),
     zplLine(rightX + 18, y + 18, 34, 30, rightW - 36, 'INSTALAÇÃO', 1, 12),
     zplLine(rightX + 18, y + 72, 32, 28, rightW - 36, instalacaoSimNao(item.instalacao_nome), 1, 12),
     zplLine(rightX + 18, midY + 18, 34, 30, rightW - 36, 'MEDIDA:', 1, 9),
