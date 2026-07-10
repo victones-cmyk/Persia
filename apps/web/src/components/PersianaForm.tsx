@@ -48,6 +48,7 @@ interface ItemForm {
   rolamento: string;
   base: string;
   comando: string;
+  fixacao_instalacao: string;
   instalacao_id: string;
   instManual: boolean;
 }
@@ -58,7 +59,7 @@ interface ItemErro {
 }
 
 function itemVazio(): ItemForm {
-  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', comando: '', instalacao_id: '', instManual: false };
+  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', comando: '', fixacao_instalacao: '', instalacao_id: '', instManual: false };
 }
 
 const ehMotorizado = (ac: string) => ac === 'motorizado_com_bando' || ac === 'motorizado_sem_bando';
@@ -95,6 +96,7 @@ function inputParaForm(it: ItemInput, tipoFallback: TipoPersiana | ''): ItemForm
     rolamento: normalizarRolamento(it.rolamento),
     base: it.base ?? '',
     comando: it.comando ?? '',
+    fixacao_instalacao: it.fixacao_instalacao ?? '',
     instalacao_id: it.instalacao_id ?? '',
     instManual: it.instalacao_id != null && it.instalacao_id !== '',
   };
@@ -116,6 +118,7 @@ function snapParaForm(s: PersianaItemSnap, tipoFallback: TipoPersiana | ''): Ite
     rolamento: normalizarRolamento(s.rolamento),
     base: s.base,
     comando: s.comando ?? '',
+    fixacao_instalacao: s.fixacao_instalacao ?? '',
     instalacao_id: s.instalacao_id ?? '',
     instManual: s.instManual ?? false,
   };
@@ -125,7 +128,7 @@ function formParaSnap(it: ItemForm): PersianaItemSnap {
   return {
     ambiente: it.ambiente, tipo: it.tipo, tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
     largura: it.largura, altura: it.altura, tc: it.tc, tcManual: it.tcManual,
-    rolamento: it.rolamento, base: it.base, comando: it.comando, instalacao_id: it.instalacao_id, instManual: it.instManual,
+    rolamento: it.rolamento, base: it.base, comando: it.comando, fixacao_instalacao: it.fixacao_instalacao, instalacao_id: it.instalacao_id, instManual: it.instManual,
   };
 }
 
@@ -267,7 +270,7 @@ export function PersianaForm({
 
   // "Sujo" = começou a preencher algo (guarda de navegação contra perda de dados).
   const sujo = itens.some((it) =>
-    it.tipo || it.ambiente || it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base || it.comando);
+    it.tipo || it.ambiente || it.tecido_id || it.cor || it.acionamento || it.largura || it.altura || it.tc || it.rolamento || it.base || it.comando || it.fixacao_instalacao);
   useEffect(() => { onDirtyChange?.(sujo); }, [sujo, onDirtyChange]);
   // Autosave local: emite o estado bruto sempre que muda (tipo representativo = 1º item).
   useEffect(() => { onSnapshot?.({ tipo: itens[0]?.tipo ?? '', itens: itens.map(formParaSnap) }); }, [itens, onSnapshot]);
@@ -285,6 +288,7 @@ export function PersianaForm({
       rolamento: it.rolamento || null,
       base: it.base || null,
       comando: it.comando || null,
+      fixacao_instalacao: it.fixacao_instalacao === 'teto' || it.fixacao_instalacao === 'parede' ? it.fixacao_instalacao : null,
       instalacao_id: it.instalacao_id || null,
     };
   }
@@ -292,7 +296,7 @@ export function PersianaForm({
   // Cálculo automático (tempo real): recalcula com debounce a cada mudança. Calcula
   // só os itens completos; itens incompletos não somem o resultado, mas bloqueiam o envio.
   const calcSig = JSON.stringify({
-    itens: itens.map((it) => ({ tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, r: it.rolamento, b: it.base, co: it.comando, in: it.instalacao_id })),
+    itens: itens.map((it) => ({ tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, r: it.rolamento, b: it.base, co: it.comando, fx: it.fixacao_instalacao, in: it.instalacao_id })),
   });
   const seqCalc = useRef(0);
   useEffect(() => {
@@ -456,12 +460,20 @@ export function PersianaForm({
             </div>
 
             {/* Instalação (embutida no preço) — sugerida pelo acionamento, editável */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="form-label" htmlFor={`comando-persiana-${idx}`}>Comando</label>
                 <select id={`comando-persiana-${idx}`} className="input" value={it.comando} onChange={(e) => atualizar(idx, { comando: e.target.value })}>
                   <option value="">—</option>
                   {COMANDOS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="form-label" htmlFor={`fixacao-persiana-${idx}`}>Fixação</label>
+                <select id={`fixacao-persiana-${idx}`} className="input" value={it.fixacao_instalacao} onChange={(e) => atualizar(idx, { fixacao_instalacao: e.target.value })}>
+                  <option value="">—</option>
+                  <option value="teto">Teto</option>
+                  <option value="parede">Parede</option>
                 </select>
               </div>
               <div>

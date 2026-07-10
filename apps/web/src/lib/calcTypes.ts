@@ -134,6 +134,7 @@ export interface ItemInput {
   rolamento?: string | null;
   base?: string | null;
   comando?: string | null;
+  fixacao_instalacao?: 'teto' | 'parede' | null;
   instalacao_id?: string | null; // tipo de instalação embutido no produto
 }
 

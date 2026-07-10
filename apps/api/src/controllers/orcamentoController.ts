@@ -47,6 +47,7 @@ export interface ItemEntrada {
   rolamento?: string | null;
   base?: string | null;
   comando?: string | null;
+  fixacao_instalacao?: string | null;
   instalacao_id?: string | null; // tipo de instalação (grupo INSTALAÇÃO) embutido no produto
 }
 
@@ -63,6 +64,7 @@ interface ItemPreparado {
   rolamento: string | null;
   base: string | null;
   comando: string | null;
+  fixacao_instalacao: string | null;
   qtd_venda: number;
   qtd_producao: number;
   valor_bruto: number;
@@ -90,6 +92,7 @@ export interface ItemSnapshot {
   rolamento: string | null;
   base: string | null;
   comando: string | null;
+  fixacao_instalacao?: string | null;
   qtd_venda: number;
   qtd_producao: number;
   valor_bruto: number;
@@ -192,6 +195,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
       rolamento: it.rolamento ?? null,
       base: it.base ?? null,
       comando: it.comando ?? null,
+      fixacao_instalacao: it.fixacao_instalacao === 'teto' || it.fixacao_instalacao === 'parede' ? it.fixacao_instalacao : null,
       qtd_venda: item.venda.tecido.quantidade,
       qtd_producao: item.venda.tecido.quantidade,
       valor_bruto: valorBruto,
@@ -282,6 +286,7 @@ export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[])
     rolamento: p.rolamento,
     base: p.base,
     comando: p.comando,
+    fixacao_instalacao: p.fixacao_instalacao,
     qtd_venda: p.qtd_venda,
     qtd_producao: p.qtd_producao,
     valor_bruto: p.valor_bruto,

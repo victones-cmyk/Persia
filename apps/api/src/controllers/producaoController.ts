@@ -8,6 +8,7 @@ import { env } from '../config/env';
 import {
   gerarPdfOrdemProducao,
   gerarZplEtiqueta,
+  gerarZplEtiquetasImpressao,
   type ItemProducaoSnapshot,
   type OrdemDocumento,
 } from '../services/producao/documentos';
@@ -217,6 +218,7 @@ async function carregarOrcamentoAutorizado(req: Request) {
 function ordemParaDocumento(
   ordem: OrdemProducao,
   orc: Orcamento & { loja?: { nome: string } | null; usuario?: { nome: string } | null },
+  etiquetaEmbalagem?: OrdemDocumento['etiquetaEmbalagem'],
 ): OrdemDocumento {
   return {
     codigo: ordem.codigo,
@@ -229,6 +231,7 @@ function ordemParaDocumento(
     criadoEm: ordem.criado_em,
     entradaEm: ordem.impresso_em ?? new Date(),
     entregaEm: orc.pedido_entrega_em,
+    etiquetaEmbalagem: etiquetaEmbalagem ?? null,
     item: ordem.item_snapshot_json as unknown as ItemProducaoSnapshot,
   };
 }
@@ -427,9 +430,87 @@ function imprimirRawEtiqueta(zpl: string): Promise<void> {
   return env.ZEBRA_HOST.trim() ? imprimirRawTcp(zpl) : imprimirRawCups(zpl);
 }
 
+function itemSnapshotDaOrdem(ordem: Pick<OrdemProducao, 'item_snapshot_json'>): ItemProducaoSnapshot {
+  return ordem.item_snapshot_json as unknown as ItemProducaoSnapshot;
+}
+
+function ehOrdemPersiana(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snapshot_json'>): boolean {
+  const item = itemSnapshotDaOrdem(ordem);
+  if (String(ordem.tipo_produto) === 'cortina') return false;
+  return Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined);
+}
+
+async function proximoSerialEtiqueta(tx: Prisma.TransactionClient): Promise<number> {
+  const chave = 'etiqueta_persiana_serial';
+  const existente = await tx.configuracao.findUnique({ where: { chave } });
+  const atual = Number(existente?.valor ?? 5999);
+  const proximo = Math.max(Number.isFinite(atual) ? atual : 5999, 5999) + 1;
+  await tx.configuracao.upsert({
+    where: { chave },
+    create: {
+      chave,
+      valor: String(proximo),
+      descricao: 'Ultimo S/N usado nas etiquetas de embalagem de persianas.',
+    },
+    update: { valor: String(proximo) },
+  });
+  return proximo;
+}
+
+async function prepararEtiquetaEmbalagemPersiana(ordem: OrdemProducao): Promise<{
+  ordem: OrdemProducao;
+  meta: OrdemDocumento['etiquetaEmbalagem'];
+}> {
+  if (!ehOrdemPersiana(ordem)) return { ordem, meta: null };
+
+  return prisma.$transaction(async (tx) => {
+    const ordensPedido = await tx.ordemProducao.findMany({
+      where: { orcamento_id: ordem.orcamento_id },
+      orderBy: { item_index: 'asc' },
+    });
+    const persianas = ordensPedido.filter(ehOrdemPersiana);
+    const pecaIndex = Math.max(0, persianas.findIndex((op) => op.id === ordem.id));
+    const snapshot = itemSnapshotDaOrdem(ordem);
+    const serialExistente = Number(snapshot.etiqueta_embalagem_serial);
+    const serial = Number.isFinite(serialExistente) && serialExistente >= 6000
+      ? serialExistente
+      : await proximoSerialEtiqueta(tx);
+
+    if (serial === serialExistente) {
+      return {
+        ordem,
+        meta: {
+          pecaNumero: pecaIndex + 1,
+          pecaTotal: Math.max(1, persianas.length),
+          serial,
+        },
+      };
+    }
+
+    const itemAtualizado = {
+      ...snapshot,
+      etiqueta_embalagem_serial: serial,
+    };
+    const atualizada = await tx.ordemProducao.update({
+      where: { id: ordem.id },
+      data: { item_snapshot_json: itemAtualizado as unknown as Prisma.InputJsonValue },
+    });
+
+    return {
+      ordem: atualizada,
+      meta: {
+        pecaNumero: pecaIndex + 1,
+        pecaTotal: Math.max(1, persianas.length),
+        serial,
+      },
+    };
+  });
+}
+
 export async function imprimirEtiquetaOrdem(req: Request, res: Response): Promise<void> {
   const ordem = await carregarOrdemAutorizada(req);
-  const zpl = gerarZplEtiqueta(ordemParaDocumento(ordem, ordem.orcamento), env.ZEBRA_DPI);
+  const etiqueta = await prepararEtiquetaEmbalagemPersiana(ordem);
+  const zpl = gerarZplEtiquetasImpressao(ordemParaDocumento(etiqueta.ordem, ordem.orcamento, etiqueta.meta), env.ZEBRA_DPI);
   await imprimirRawEtiqueta(zpl);
   const atualizada = await prisma.ordemProducao.update({
     where: { id: ordem.id },

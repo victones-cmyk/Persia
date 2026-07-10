@@ -36,6 +36,7 @@ export interface ItemSnapshot {
   rolamento: string | null;
   base: string | null;
   comando?: string | null;
+  fixacao_instalacao?: string | null;
   qtd_venda: number;
   qtd_producao: number;
   valor_bruto: number;

@@ -194,6 +194,7 @@ export function OrcamentoNovo() {
               itens: o.itens_json.map((s: ItemSnapshot) => ({
                 tecido_id: s.tecido_codigo_gc, cor_acessorio: s.cor_acessorio as Cor, acionamento: s.acionamento as Acionamento,
                 largura: Number(s.largura_m), altura: Number(s.altura_m), tc: Number(s.tc_m), rolamento: s.rolamento, base: s.base, comando: s.comando,
+                fixacao_instalacao: s.fixacao_instalacao === 'teto' || s.fixacao_instalacao === 'parede' ? s.fixacao_instalacao : null,
               })),
             });
             novaOrdem.push('persiana');

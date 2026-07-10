@@ -23,6 +23,7 @@ export interface ItemProducaoSnapshot {
   rolamento?: string | null;
   base?: string | null;
   comando?: string | null;
+  fixacao_instalacao?: string | null;
   instalacao_nome?: string | null;
   fixacao?: string | null;
   abertura?: string | number | null;
@@ -41,7 +42,14 @@ export interface ItemProducaoSnapshot {
   descricao_produto?: string;
   qtd_venda?: number;
   qtd_producao?: number;
+  etiqueta_embalagem_serial?: number;
   componentes?: ComponenteSnapshot[];
+}
+
+export interface EtiquetaEmbalagemMeta {
+  pecaNumero: number;
+  pecaTotal: number;
+  serial: number;
 }
 
 export interface OrdemDocumento {
@@ -55,6 +63,7 @@ export interface OrdemDocumento {
   criadoEm: Date;
   entradaEm?: Date | null;
   entregaEm?: Date | null;
+  etiquetaEmbalagem?: EtiquetaEmbalagemMeta | null;
   item: ItemProducaoSnapshot;
 }
 
@@ -654,20 +663,30 @@ function gerarZplEtiquetaCortina(ordem: OrdemDocumento, width: number, height: n
   ].filter(Boolean).join('\n');
 }
 
-export function gerarZplEtiqueta(ordem: OrdemDocumento, dpi = 203): string {
-  const dotsPorMm = dpi / 25.4;
-  const width = Math.round(100 * dotsPorMm);
-  const height = Math.round(35 * dotsPorMm);
-  const marginLeft = Math.round(4 * dotsPorMm);
-  const marginRight = Math.round(3 * dotsPorMm);
-  const item = ordem.item;
-  const temCamposPersiana = Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined);
-  const ehCortina = String(ordem.tipoProduto) === 'cortina'
-    || (!temCamposPersiana && componentesPorGrupo(item, 'Tecido').length > 0);
-  if (ehCortina) {
-    return gerarZplEtiquetaCortina(ordem, width, height, marginLeft, marginRight);
-  }
+function lojaEtiqueta(v: unknown): string {
+  const s = texto(v, '').toLowerCase();
+  if (s.includes('filial') || s.includes('sbc')) return 'Filial';
+  if (s.includes('matriz') || s.includes('sp')) return 'Matriz';
+  return texto(v, '');
+}
 
+function instalacaoSimNao(v: unknown): string {
+  const s = texto(v, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (!s || s === '-' || s.includes('sem instalacao')) return 'Não';
+  return 'Sim';
+}
+
+function fixacaoPersianaLabel(item: ItemProducaoSnapshot): string {
+  if (item.fixacao_instalacao === 'teto') return 'Teto';
+  if (item.fixacao_instalacao === 'parede') return 'Parede';
+  const s = texto(item.instalacao_nome, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (s.includes('teto')) return 'Teto';
+  if (s.includes('parede')) return 'Parede';
+  return '';
+}
+
+function gerarZplEtiquetaPersiana(ordem: OrdemDocumento, width: number, height: number, marginLeft: number, marginRight: number, dotsPorMm: number): string {
+  const item = ordem.item;
   const marginLeftPersiana = marginLeft + Math.round(3 * dotsPorMm);
   const contentW = width - marginLeftPersiana - marginRight;
   const produto = zplText(produtoResumo(item));
@@ -710,4 +729,90 @@ export function gerarZplEtiqueta(ordem: OrdemDocumento, dpi = 203): string {
     `^FO${qrX},72^BQN,2,3^FDLA,${zplText(ordem.pedidoCodigo, 50)}^FS`,
     '^XZ',
   ].join('\n');
+}
+
+function gerarZplEtiquetaEmbalagemPersiana(ordem: OrdemDocumento, width: number, height: number, marginLeft: number, marginRight: number): string {
+  const item = ordem.item;
+  const meta = ordem.etiquetaEmbalagem;
+  if (!meta) return '';
+
+  const x = marginLeft;
+  const y = 8;
+  const w = width - marginLeft - marginRight;
+  const h = height - 16;
+  const rightW = 240;
+  const leftW = w - rightW;
+  const col1W = 290;
+  const col2X = x + col1W + 15;
+  const rightX = x + leftW;
+  const lineX = rightX - 8;
+  const midY = y + 124;
+  const bottomY = y + h - 54;
+  const entrega = dataCurtaBR(ordem.entregaEm);
+  const medida = `L:${numero(item.largura_m)}  x  A:${numero(item.altura_m)}`;
+  const ambiente = texto(item.ambiente, '');
+
+  return [
+    '^XA',
+    '^CI28',
+    `^PW${width}`,
+    `^LL${height}`,
+    '^LH0,0',
+    `^FO${x},${y}^GB${w},${h},3,B,0^FS`,
+    `^FO${lineX},${y}^GB3,${h},3,B,0^FS`,
+    `^FO${rightX},${midY}^GB${rightW},3,3,B,0^FS`,
+    zplLine(x + 14, y + 14, 29, 25, 170, 'PEDIDO:', 1, 12),
+    zplLine(x + 142, y + 14, 29, 25, 135, ordem.pedidoCodigo, 1, 20),
+    zplLine(col2X, y + 14, 29, 25, 90, 'LOJA:', 1, 8),
+    zplLine(col2X + 92, y + 14, 29, 25, 190, lojaEtiqueta(ordem.loja), 1, 18),
+    zplLine(x + 14, y + 70, 29, 25, 170, 'FIXAÇÃO:', 1, 12),
+    zplLine(x + 176, y + 70, 29, 25, 120, fixacaoPersianaLabel(item), 1, 12),
+    zplLine(col2X, y + 70, 29, 25, 90, 'VEND:', 1, 8),
+    zplLine(col2X + 92, y + 70, 29, 25, 190, primeiroNome(ordem.vendedor), 1, 18),
+    zplLine(x + 14, y + 126, 28, 24, leftW - 35, `DATA DE ENTREGA: ${entrega}`, 1, 38),
+    zplLine(x + 14, y + 183, 30, 26, 270, `PEÇAS: ${meta.pecaNumero} / ${meta.pecaTotal}`, 1, 18),
+    zplLine(x + 315, y + 183, 30, 26, leftW - 335, `AMBIENTE: ${ambiente}`, 1, 34),
+    zplLine(rightX + 18, y + 18, 34, 30, rightW - 36, 'INSTALAÇÃO', 1, 12),
+    zplLine(rightX + 18, y + 72, 32, 28, rightW - 36, instalacaoSimNao(item.instalacao_nome), 1, 12),
+    zplLine(rightX + 18, midY + 18, 34, 30, rightW - 36, 'MEDIDA:', 1, 9),
+    zplLine(rightX + 16, midY + 66, 22, 18, rightW - 32, medida, 1, 36),
+    zplLine(rightX + 58, bottomY, 28, 25, rightW - 90, `S/N: ${meta.serial}`, 1, 16),
+    '^XZ',
+  ].join('\n');
+}
+
+function dimensoesEtiqueta(dpi: number) {
+  const dotsPorMm = dpi / 25.4;
+  const width = Math.round(100 * dotsPorMm);
+  const height = Math.round(35 * dotsPorMm);
+  const marginLeft = Math.round(4 * dotsPorMm);
+  const marginRight = Math.round(3 * dotsPorMm);
+  return { dotsPorMm, width, height, marginLeft, marginRight };
+}
+
+export function gerarZplEtiqueta(ordem: OrdemDocumento, dpi = 203): string {
+  const { dotsPorMm, width, height, marginLeft, marginRight } = dimensoesEtiqueta(dpi);
+  const item = ordem.item;
+  const temCamposPersiana = Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined);
+  const ehCortina = String(ordem.tipoProduto) === 'cortina'
+    || (!temCamposPersiana && componentesPorGrupo(item, 'Tecido').length > 0);
+  if (ehCortina) {
+    return gerarZplEtiquetaCortina(ordem, width, height, marginLeft, marginRight);
+  }
+
+  return gerarZplEtiquetaPersiana(ordem, width, height, marginLeft, marginRight, dotsPorMm);
+}
+
+export function gerarZplEtiquetasImpressao(ordem: OrdemDocumento, dpi = 203): string {
+  const { dotsPorMm, width, height, marginLeft, marginRight } = dimensoesEtiqueta(dpi);
+  const item = ordem.item;
+  const temCamposPersiana = Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined);
+  const ehCortina = String(ordem.tipoProduto) === 'cortina'
+    || (!temCamposPersiana && componentesPorGrupo(item, 'Tecido').length > 0);
+  if (ehCortina) return gerarZplEtiquetaCortina(ordem, width, height, marginLeft, marginRight);
+
+  return [
+    gerarZplEtiquetaPersiana(ordem, width, height, marginLeft, marginRight, dotsPorMm),
+    gerarZplEtiquetaEmbalagemPersiana(ordem, width, height, marginLeft, marginRight),
+  ].filter(Boolean).join('\n');
 }
