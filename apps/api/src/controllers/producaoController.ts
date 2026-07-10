@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { spawn } from 'node:child_process';
+import net from 'node:net';
 import { Prisma, type Orcamento, type OrdemProducao } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
@@ -387,16 +388,55 @@ function imprimirRawCups(zpl: string): Promise<void> {
   });
 }
 
+function imprimirRawTcp(zpl: string): Promise<void> {
+  const host = env.ZEBRA_HOST.trim();
+  const port = env.ZEBRA_PORT;
+  if (!host) {
+    throw new AppError(400, 'IMPRESSORA_NAO_CONFIGURADA', 'Configure ZEBRA_HOST no servidor para imprimir etiquetas via TCP.');
+  }
+
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host, port });
+    let finalizado = false;
+
+    const encerrarComErro = (err: Error) => {
+      if (finalizado) return;
+      finalizado = true;
+      socket.destroy();
+      reject(new AppError(500, 'FALHA_IMPRESSAO_TCP', `Falha ao enviar etiqueta para ${host}:${port}: ${err.message}`));
+    };
+
+    socket.setTimeout(env.ZEBRA_TCP_TIMEOUT_MS);
+    socket.on('connect', () => {
+      socket.end(zpl);
+    });
+    socket.on('timeout', () => {
+      encerrarComErro(new Error('tempo limite esgotado'));
+    });
+    socket.on('error', encerrarComErro);
+    socket.on('close', (hadError) => {
+      if (!finalizado && !hadError) {
+        finalizado = true;
+        resolve();
+      }
+    });
+  });
+}
+
+function imprimirRawEtiqueta(zpl: string): Promise<void> {
+  return env.ZEBRA_HOST.trim() ? imprimirRawTcp(zpl) : imprimirRawCups(zpl);
+}
+
 export async function imprimirEtiquetaOrdem(req: Request, res: Response): Promise<void> {
   const ordem = await carregarOrdemAutorizada(req);
   const zpl = gerarZplEtiqueta(ordemParaDocumento(ordem, ordem.orcamento), env.ZEBRA_DPI);
-  await imprimirRawCups(zpl);
+  await imprimirRawEtiqueta(zpl);
   const atualizada = await prisma.ordemProducao.update({
     where: { id: ordem.id },
     data: { status: 'impressa', impresso_em: new Date() },
   });
   await prisma.logAcao.create({
-    data: { usuario_id: req.session.usuario!.id, acao: 'etiqueta_ordem_impressa', detalhe: { ordem_id: ordem.id, codigo: ordem.codigo, impressora: env.ZEBRA_PRINTER_NAME } },
+    data: { usuario_id: req.session.usuario!.id, acao: 'etiqueta_ordem_impressa', detalhe: { ordem_id: ordem.id, codigo: ordem.codigo, impressora: env.ZEBRA_HOST || env.ZEBRA_PRINTER_NAME } },
   });
   res.json({ ordem: atualizada });
 }

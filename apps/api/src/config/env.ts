@@ -58,6 +58,9 @@ export const env = {
   // Producao / Zebra
   ZEBRA_DPI: Number(optional('ZEBRA_DPI', '203')),
   ZEBRA_PRINTER_NAME: optional('ZEBRA_PRINTER_NAME', ''),
+  ZEBRA_HOST: optional('ZEBRA_HOST', ''),
+  ZEBRA_PORT: Number(optional('ZEBRA_PORT', '9100')),
+  ZEBRA_TCP_TIMEOUT_MS: Number(optional('ZEBRA_TCP_TIMEOUT_MS', '3000')),
 
   // Servidor
   PORT: Number(optional('PORT', '3001')),
