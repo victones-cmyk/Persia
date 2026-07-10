@@ -22,6 +22,12 @@ enum StatusOrcamento {
   cancelado
 }
 
+enum StatusOrdemProducao {
+  criada
+  impressa
+  cancelada
+}
+
 enum TipoProduto {
   persiana_rolo_blackout
   persiana_rolo_screen
@@ -60,6 +66,7 @@ model Usuario {
   criado_em        DateTime    @default(now()) @db.Timestamptz
   atualizado_em    DateTime    @updatedAt @db.Timestamptz
   orcamentos       Orcamento[] @relation("OrcamentosVendedor")
+  ordens_producao  OrdemProducao[]
   log_acoes        LogAcao[]
 
   @@map("usuarios")
@@ -74,6 +81,10 @@ model Orcamento {
   loja                  Loja            @relation(fields: [loja_id], references: [id])
   gc_orcamento_id       String?         @db.VarChar(50)
   gc_codigo             String?         @db.VarChar(50) // "código" enviado = Nº exibido no GestãoClick
+  gc_pedido_id          String?         @db.VarChar(50)
+  gc_pedido_codigo      String?         @db.VarChar(50)
+  pedido_confirmado_em  DateTime?       @db.Timestamptz
+  pedido_entrega_em     DateTime?       @db.Date
   gc_produto_id         String?         @db.VarChar(50)
   status                StatusOrcamento @default(rascunho)
   nome_cliente          String          @db.VarChar(150)
@@ -101,11 +112,34 @@ model Orcamento {
   erro_gc               String?
   criado_em             DateTime        @default(now()) @db.Timestamptz
   atualizado_em         DateTime        @updatedAt @db.Timestamptz
+  ordens_producao       OrdemProducao[]
 
   @@index([usuario_id, criado_em(sort: Desc)])
   @@index([status])
   @@index([gc_orcamento_id])
   @@map("orcamentos")
+}
+
+model OrdemProducao {
+  id                 String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo             String              @unique @db.VarChar(30)
+  orcamento_id       String              @db.Uuid
+  orcamento          Orcamento           @relation(fields: [orcamento_id], references: [id])
+  usuario_id         String              @db.Uuid
+  usuario            Usuario             @relation(fields: [usuario_id], references: [id])
+  item_index         Int
+  gc_pedido_id       String?             @db.VarChar(50)
+  gc_pedido_codigo   String              @db.VarChar(50)
+  tipo_produto       TipoProduto
+  status             StatusOrdemProducao @default(criada)
+  item_snapshot_json Json
+  criado_em          DateTime            @default(now()) @db.Timestamptz
+  impresso_em        DateTime?           @db.Timestamptz
+
+  @@unique([orcamento_id, item_index])
+  @@index([orcamento_id])
+  @@index([gc_pedido_codigo])
+  @@map("ordens_producao")
 }
 
 model Configuracao {

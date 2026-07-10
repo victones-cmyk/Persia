@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEye, faPen, faRotateRight, faXmark, faCopy } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faEye, faPen, faRotateRight, faXmark, faCopy, faIndustry } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL } from '../lib/formatacao';
@@ -15,6 +15,7 @@ import type { OrcamentoListItem, Paginacao, StatusOrcamento } from '../lib/orcam
 import { lerFiltrosOrcamento, salvarFiltrosOrcamento } from '../lib/filtrosSessao';
 import { parseBR } from '../lib/dataBR';
 import { PeriodoRange } from '../components/PeriodoRange';
+import { ProducaoModal } from '../components/ProducaoModal';
 
 const FILTROS: { valor: '' | StatusOrcamento; label: string }[] = [
   { valor: '', label: 'Todos' },
@@ -107,6 +108,7 @@ export function Orcamentos() {
   const [carregando, setCarregando] = useState(true);
   const [acaoEmId, setAcaoEmId] = useState<string | null>(null);
   const [cancelarId, setCancelarId] = useState<string | null>(null);
+  const [producaoOrc, setProducaoOrc] = useState<OrcamentoListItem | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const carregar = useCallback(async () => {
@@ -275,19 +277,21 @@ export function Orcamentos() {
 
       {/* Tabela */}
       <div className="card p-0 table-scroll">
-        <table className="data-table" style={{ minWidth: 980 }}>
+        <table className="data-table" style={{ minWidth: 1080 }}>
           <colgroup>
             <col style={{ width: 180 }} />
+            <col style={{ width: 120 }} />
             <col />
             <col style={{ width: 110 }} />
             <col style={{ width: 130 }} />
             <col style={{ width: 120 }} />
             <col style={{ width: 100 }} />
-            <col style={{ width: 184 }} />
+            <col style={{ width: 220 }} />
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
               <Th>Nº GestãoClick</Th>
+              <Th>Nº Pedido</Th>
               <Th>Cliente</Th>
               <Th>Tipo</Th>
               <Th>Valor Final</Th>
@@ -302,14 +306,14 @@ export function Orcamentos() {
             {carregando && orcamentos.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} style={{ borderTop: '1px solid #dee2e6' }}>
-                  <td colSpan={7} style={{ padding: 12 }}>
+                  <td colSpan={8} style={{ padding: 12 }}>
                     <div className="skeleton" style={{ height: 18 }} />
                   </td>
                 </tr>
               ))
             ) : orcamentos.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: 24, textAlign: 'center', color: '#6c757d' }}>
+                <td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6c757d' }}>
                   Nenhum orçamento encontrado.
                 </td>
               </tr>
@@ -318,6 +322,9 @@ export function Orcamentos() {
                 <tr key={o.id} style={{ borderTop: '1px solid #dee2e6' }} className="hover:bg-neutral-100">
                   <td style={{ padding: 12 }} className="font-mono tabular-nums text-sm-ui" title="Nº do orçamento no GestãoClick">
                     {o.gc_codigo ?? o.gc_orcamento_id ?? '—'}
+                  </td>
+                  <td style={{ padding: 12 }} className="font-mono tabular-nums text-sm-ui" title="Nº do pedido/venda">
+                    {o.gc_pedido_codigo ?? '—'}
                   </td>
                   <td style={{ padding: 12 }} className="td-strong">{o.nome_cliente}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{tipoLabel(o.tipo_produto)}</td>
@@ -328,6 +335,14 @@ export function Orcamentos() {
                     <div className="table-actions-row">
                       <button className="btn btn-info btn-xs" onClick={() => navigate(`/orcamentos/${o.id}`)} title="Visualizar">
                         <FontAwesomeIcon icon={faEye} />
+                      </button>
+                      <button
+                        className="btn btn-default btn-xs"
+                        disabled={o.status !== 'enviado'}
+                        onClick={() => setProducaoOrc(o)}
+                        title={o.status === 'enviado' ? 'Gerar ordem de produção' : 'Produção apenas para orçamentos enviados'}
+                      >
+                        <FontAwesomeIcon icon={faIndustry} />
                       </button>
                       <button className="btn btn-default btn-xs text-primary" disabled={acaoEmId === o.id} onClick={() => duplicar(o.id)} title="Duplicar como rascunho">
                         <FontAwesomeIcon icon={faCopy} />
@@ -395,6 +410,13 @@ export function Orcamentos() {
         perigo
         onConfirmar={() => cancelarId && void executarCancelar(cancelarId)}
         onCancelar={() => setCancelarId(null)}
+      />
+
+      <ProducaoModal
+        aberto={producaoOrc !== null}
+        orcamento={producaoOrc}
+        onFechar={() => setProducaoOrc(null)}
+        onAtualizar={carregar}
       />
     </div>
   );

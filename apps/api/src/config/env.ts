@@ -55,6 +55,10 @@ export const env = {
   GC_DEBUG_LOG: optional('GC_DEBUG_LOG', 'false') === 'true',
   GC_TIMEOUT_MS: Number(optional('GC_TIMEOUT_MS', '10000')),
 
+  // Producao / Zebra
+  ZEBRA_DPI: Number(optional('ZEBRA_DPI', '203')),
+  ZEBRA_PRINTER_NAME: optional('ZEBRA_PRINTER_NAME', ''),
+
   // Servidor
   PORT: Number(optional('PORT', '3001')),
   NODE_ENV: optional('NODE_ENV', 'development'),
