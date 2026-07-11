@@ -35,13 +35,14 @@ export function TecidoSearch({
 
   const selecionado = tecidos.find((t) => t.id === value) ?? null;
 
-  // Sincroniza o texto quando a seleção muda POR FORA (ex.: chip de alternativo).
+  // Sincroniza o texto quando a seleção vem de fora (duplicação, edição de rascunho,
+  // chip de alternativo). O value pode chegar pronto já na montagem do componente.
   useEffect(() => {
-    if (value !== lastEmitted.current) {
-      const t = value ? tecidos.find((x) => x.id === value) : null;
-      setTermo(t ? t.nome : '');
-      lastEmitted.current = value;
-    }
+    const t = value ? tecidos.find((x) => x.id === value) : null;
+    if (value && t && termo !== t.nome) setTermo(t.nome);
+    if (!value && lastEmitted.current !== value) setTermo('');
+    lastEmitted.current = value;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, tecidos]);
 
   // Ao recarregar a lista (troca de tipo) sem seleção, limpa o texto digitado.

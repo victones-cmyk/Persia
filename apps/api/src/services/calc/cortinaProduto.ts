@@ -4,6 +4,7 @@ import type { FixacaoCortina, ModeloCortina } from './cortina';
 import { MODELOS_CORTINA_LABEL } from './cortinaLabels';
 
 type CamadaProdutoCortina = {
+  nome?: string | null;
   modelo?: ModeloCortina | null;
   tecido_nome: string;
   franzido?: number | string | null;
@@ -21,6 +22,14 @@ function numeroBR(n: number, casas = 2): string {
 
 function textoLimpo(s: string | null | undefined): string {
   return String(s ?? '').trim().replace(/\s+/g, ' ');
+}
+
+function descricaoInline(partes: Array<string | null | undefined>): string {
+  return partes.map((p) => textoLimpo(p)).filter(Boolean).join(' | ');
+}
+
+function nomeCamada(camada: CamadaProdutoCortina, index: number): string {
+  return textoLimpo(camada.nome) || (index === 0 ? 'Frente' : `Camada ${index + 1}`);
 }
 
 function modeloLimpo(modelo: string): string {
@@ -64,19 +73,17 @@ export function descricaoProdutoCortina(params: {
   aberturas?: number | string | null;
   camadas: CamadaProdutoCortina[];
 }): string {
-  const linhas = [
+  const partes = [
     `Fixação: ${FIXACAO_LABEL[params.fixacao] ?? params.fixacao}`,
     `Abertura: ${aberturaLabel(params.aberturas)}`,
-    'Cortina:',
   ];
 
   params.camadas.forEach((camada, i) => {
-    if (i > 0) linhas.push('');
-    linhas.push(`${i === 0 ? 'Frente' : `Camada ${i + 1}`}: ${modeloLabel(camada.modelo)}`);
-    linhas.push(`Tecido: ${textoLimpo(camada.tecido_nome)}`);
+    partes.push(`${nomeCamada(camada, i)}: ${modeloLabel(camada.modelo)}`);
+    partes.push(`Tecido: ${textoLimpo(camada.tecido_nome)}`);
     const franzido = franzidoLabel(camada.franzido);
-    if (franzido) linhas.push(`Franzido: ${franzido}`);
+    if (franzido) partes.push(`Franzido: ${franzido}`);
   });
 
-  return linhas.join('\n');
+  return descricaoInline(partes);
 }

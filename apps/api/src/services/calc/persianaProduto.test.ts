@@ -20,11 +20,7 @@ describe('produto sintetico de persiana', () => {
     });
 
     expect(nome).toBe('Persiana Sala Rolo Blackout L:1,80m x A:2,40m');
-    expect(descricao).toBe(`Acionamento: Com Bandô
-Acessórios: Branco
-Tecido: TEX-101 BLACKOUT 70% DE VEDAÇÃO LISO LARGURA: 2,80m COR: 02 – MARROM
-Rolamento: Normal
-Comando: Direito
-Tamanho Comando: 1,80m`);
+    expect(descricao).toBe('Acionamento: Com Bandô | Acessórios: Branco | Tecido: TEX-101 BLACKOUT 70% DE VEDAÇÃO LISO LARGURA: 2,80m COR: 02 – MARROM | Rolamento: Normal | Comando: Direito | Tamanho Comando: 1,80m');
+    expect(descricao).not.toContain('\n');
   });
 });

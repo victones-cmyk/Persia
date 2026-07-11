@@ -21,7 +21,7 @@ import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
 import { descricaoProdutoCortina, nomeProdutoCortina } from '../services/calc/cortinaProduto';
 
-interface CamadaEntrada { tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave'; metodo_altura?: 'emenda' | 'barra_postica' }
+interface CamadaEntrada { nome?: string; tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave'; metodo_altura?: 'emenda' | 'barra_postica' }
 interface AcessorioEntrada { item: string; produto_id?: string; quantidade?: number }
 export interface CortinaEntrada {
   ambiente?: string;
@@ -84,6 +84,8 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     aberturas: c.aberturas !== undefined && c.aberturas !== '' ? Number(c.aberturas) : undefined,
   });
 
+  const nomeCamada = (i: number) => String(c.camadas[i]?.nome ?? '').trim() || (i === 0 ? 'Frente' : `Camada ${i + 1}`);
+
   // Tecido (SOB MEDIDA): por camada.
   let valorTotal = 0;
   let valorCusto = 0;
@@ -94,6 +96,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     valorCusto = roundHalfUp(valorCusto + cam.metragem * t.preco_custo);
     return { 
       tecido_id: t.id, 
+      nome: nomeCamada(i),
       tecido_nome: t.nome, 
       modelo: c.camadas[i]?.modelo ?? c.modelo,
       metragem: cam.metragem, 
@@ -167,6 +170,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     aberturas: c.aberturas,
     camadas: camadasSnap.map((cs, i) => ({
       modelo: c.camadas[i]?.modelo ?? c.modelo,
+      nome: cs.nome,
       tecido_nome: cs.tecido_nome,
       franzido: c.camadas[i]?.franzido,
     })),

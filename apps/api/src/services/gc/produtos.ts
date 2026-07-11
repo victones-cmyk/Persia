@@ -45,7 +45,11 @@ export function nomeProdutoGc(nome: string): string {
 }
 
 function descricaoProdutoGc(descricao: string | undefined): string | undefined {
-  const limpa = descricao?.trim();
+  const limpa = descricao
+    ?.replace(/\r?\n+/g, ' | ')
+    .replace(/\s*\|\s*/g, ' | ')
+    .replace(/\s+/g, ' ')
+    .trim();
   return limpa || undefined;
 }
 

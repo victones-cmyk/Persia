@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faTrash, faSpinner, faCircleInfo, faCopy } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faTrash, faSpinner, faCircleInfo, faCopy, faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
 import { TecidoSearch } from './TecidoSearch';
@@ -36,7 +36,7 @@ export interface CortinaResumo {
     tamanho_barra?: number;
     tipo_barra?: 'simples' | 'dupla';
     aberturas?: number;
-    camadas: { tecido_id: string; modelo: ModeloCortina; franzido?: number; metodo_altura?: MetodoAlturaCortina }[];
+    camadas: { nome?: string; tecido_id: string; modelo: ModeloCortina; franzido?: number; metodo_altura?: MetodoAlturaCortina }[];
     acessorios: { item: string; categoria: CategoriaAcessorio | null; produto_id: string; quantidade: number; preco: number }[];
     nome_produto: string;
     ja_possui_varao?: boolean;
@@ -44,9 +44,10 @@ export interface CortinaResumo {
   } | null;
 }
 
-interface CamadaState { id: string; tecidoId: string; modelo: ModeloCortinaOpcao | ''; franzido: string; metodoAltura: MetodoAlturaCortina; }
+interface CamadaState { id: string; nome: string; tecidoId: string; modelo: ModeloCortinaOpcao | ''; franzido: string; metodoAltura: MetodoAlturaCortina; }
 
-const novaCamada = (modelo: ModeloCortinaOpcao | '' = ''): CamadaState => ({ id: crypto.randomUUID(), tecidoId: '', modelo, franzido: '', metodoAltura: 'emenda' });
+const nomePadraoCamada = (index: number): string => (index === 0 ? 'Frente' : `Camada ${index + 1}`);
+const novaCamada = (modelo: ModeloCortinaOpcao | '' = '', index = 0): CamadaState => ({ id: crypto.randomUUID(), nome: nomePadraoCamada(index), tecidoId: '', modelo, franzido: '', metodoAltura: 'emenda' });
 const calcCache = new Map<string, { expiraEm: number; valor: CalcCortinaCompletaResp }>();
 const calcEmVoo = new Map<string, Promise<CalcCortinaCompletaResp>>();
 
@@ -123,6 +124,7 @@ export function CortinaCard({
     if (base && base.length > 0) {
       return base.map((c, i) => ({
         id: crypto.randomUUID(),
+        nome: (c as { nome?: string }).nome ?? nomePadraoCamada(i),
         tecidoId: (c as { tecidoId?: string; tecido_id?: string }).tecidoId ?? (c as { tecido_id?: string }).tecido_id ?? '',
         modelo: modeloCamadaInicial(i),
         franzido: (c as { franzido?: number | string }).franzido != null ? String((c as { franzido?: number | string }).franzido) : '',
@@ -156,8 +158,9 @@ export function CortinaCard({
     setTipoBarra(calc.tipo_barra_default || '');
     setAberturas(calc.aberturas_default != null ? String(calc.aberturas_default) : '');
     
-    const novasCamadas = calc.camadas.map((cam) => ({
+    const novasCamadas = calc.camadas.map((cam, i) => ({
       id: crypto.randomUUID(),
+      nome: cam.nome || nomePadraoCamada(i),
       tecidoId: '',
       modelo: modeloCortinaParaOpcao(cam.modelo_default),
       franzido: cam.franzido_default != null ? String(cam.franzido_default) : '',
@@ -177,6 +180,7 @@ export function CortinaCard({
   const [calc, setCalc] = useState<CalcCortinaCompletaResp | null>(null);
   const [calculando, setCalculando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [minimizado, setMinimizado] = useState(false);
 
   // Modelos escolhidos nas camadas → fixações comuns. Ajusta a fixação se ficar inválida.
   const modelosSelecionados = camadas.map((c) => c.modelo).filter((m): m is ModeloCortinaOpcao => m !== '');
@@ -258,6 +262,8 @@ export function CortinaCard({
   const tamanhoBarraNum = tamanhoBarra === '' ? undefined : Number(tamanhoBarra) / 100;
   const tipoBarraVal = tipoBarra || undefined;
   const franzidoDe = (c: CamadaState) => (c.franzido === '' ? undefined : Number(c.franzido));
+  const modeloDisplay = (modeloCortinaNome || MODELOS_CORTINA.find((x) => x.value === camadas[0]?.modelo)?.label || '').replace(/^Cortina\s+/i, '').trim();
+  const nomeProdutoPreview = ['Cortina', ambiente.trim(), modeloDisplay].filter(Boolean).join(' ') + ` L:${formatNum(Number(largura), 2)}m X A:${formatNum(Number(altura), 2)}m`;
 
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seqCalc = useRef(0);
@@ -280,7 +286,7 @@ export function CortinaCard({
         modelo: camadas[0]?.modelo ? normalizarModeloCortina(camadas[0].modelo) : undefined, fixacao, desconto, largura: Number(largura), altura: Number(altura),
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
-        camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : undefined, franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
+        camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : undefined, franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
       };
       try {
         const r = await postCalculoCortinaCacheado(assinatura, payload);
@@ -343,8 +349,6 @@ export function CortinaCard({
     if (instSel) total += instSel.preco;
 
     // Nome curto; o servidor recalcula e envia os detalhes técnicos na descrição.
-    const modeloDisplay = (modeloCortinaNome || MODELOS_CORTINA.find((x) => x.value === camadas[0]?.modelo)?.label || '').replace(/^Cortina\s+/i, '').trim();
-    const nomeProduto = ['Cortina', ambiente.trim(), modeloDisplay].filter(Boolean).join(' ') + ` L:${formatNum(Number(largura), 2)}m X A:${formatNum(Number(altura), 2)}m`;
     return {
       total: Math.round(total * 100) / 100,
       completo,
@@ -353,13 +357,13 @@ export function CortinaCard({
         modelo_cortina_nome: modeloCortinaNome || undefined,
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
-        camadas: camadas.map((c) => ({ tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : 'franzido', franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
-        acessorios: acessoriosPayload, nome_produto: nomeProduto, ja_possui_varao: jaPossuiVarao,
+        camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : 'franzido', franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
+        acessorios: acessoriosPayload, nome_produto: nomeProdutoPreview, ja_possui_varao: jaPossuiVarao,
         instalacao_id: instalacaoId || null,
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, modeloCortinaNome, JSON.stringify(camadas.map((c) => ({ modelo: c.modelo, metodoAltura: c.metodoAltura })))]);
+  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, nomeProdutoPreview, JSON.stringify(camadas.map((c) => ({ nome: c.nome, modelo: c.modelo, metodoAltura: c.metodoAltura })))]);
 
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
 
@@ -374,7 +378,7 @@ export function CortinaCard({
     onSnapshotRef.current?.({
       ambiente, modelo: modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao,
       modeloCortinaNome,
-      camadas: camadas.map((c) => ({ tecidoId: c.tecidoId, franzido: c.franzido, modelo: c.modelo, metodoAltura: c.metodoAltura })),
+      camadas: camadas.map((c) => ({ nome: c.nome, tecidoId: c.tecidoId, franzido: c.franzido, modelo: c.modelo, metodoAltura: c.metodoAltura })),
       acessorioSel, qtdManual, instalacaoId,
     });
   }, [ambiente, modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, modeloCortinaNome, camadas, acessorioSel, qtdManual, instalacaoId]);
@@ -382,20 +386,45 @@ export function CortinaCard({
   const setCamada = (id: string, patch: Partial<CamadaState>) =>
     setCamadas((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
 
+  const duplicarEColapsar = () => {
+    setMinimizado(true);
+    onDuplicar?.();
+  };
+
   return (
     <div className="card p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
+      <div className={`flex items-center justify-between ${minimizado ? 'mb-0' : 'mb-3'}`}>
+        <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
+          <button
+            type="button"
+            className="btn btn-default btn-xs"
+            onClick={() => setMinimizado((v) => !v)}
+            aria-expanded={!minimizado}
+            title={minimizado ? 'Expandir cortina' : 'Minimizar cortina'}
+          >
+            <FontAwesomeIcon icon={minimizado ? faChevronRight : faChevronDown} />
+          </button>
           <span className="badge badge-secondary">Cortina {indice + 1}</span>
+          <span className="truncate text-sm-ui font-semibold text-neutral-800" title={nomeProdutoPreview}>{nomeProdutoPreview}</span>
           {calc && calc.n_camadas > 1 && <span className="badge" style={{ background: 'var(--neutral-200)' }}>{calc.n_camadas} camadas</span>}
           {calculando && <FontAwesomeIcon icon={faSpinner} spin className="text-neutral-400" />}
         </div>
-        {podeRemover && (
-          <button type="button" className="text-error hover:opacity-80 text-xs-ui flex items-center gap-1" onClick={onRemover} title="Remover cortina">
-            <FontAwesomeIcon icon={faTrash} /> Remover
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {minimizado && onDuplicar && (
+            <button type="button" className="text-primary hover:opacity-80 text-xs-ui flex items-center gap-1" onClick={duplicarEColapsar} title="Duplicar cortina">
+              <FontAwesomeIcon icon={faCopy} /> Duplicar
+            </button>
+          )}
+          {podeRemover && (
+            <button type="button" className="text-error hover:opacity-80 text-xs-ui flex items-center gap-1" onClick={onRemover} title="Remover cortina">
+              <FontAwesomeIcon icon={faTrash} /> Remover
+            </button>
+          )}
+        </div>
       </div>
+
+      {minimizado ? null : (
+        <>
 
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div className="col-span-2 md:col-span-1">
@@ -476,7 +505,7 @@ export function CortinaCard({
         <div className="flex items-center justify-between mb-1">
           <label className="form-label mb-0">Camadas (modelo + tecido)<span className="label-required">*</span></label>
           {camadas.length < 3 && (
-            <button type="button" className="btn btn-default btn-xs" onClick={() => setCamadas((cs) => [...cs, novaCamada()])}>
+            <button type="button" className="btn btn-default btn-xs" onClick={() => setCamadas((cs) => [...cs, novaCamada('', cs.length)])}>
               <FontAwesomeIcon icon={faPlus} /> Adicionar tecido
             </button>
           )}
@@ -488,7 +517,14 @@ export function CortinaCard({
             return (
               <div key={c.id} className="rounded-sm border border-neutral-300 p-2" style={{ background: 'var(--neutral-50)' }}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-2xs-ui font-bold text-neutral-600">{i === 0 ? 'Frente' : `Camada ${i + 1}`}</span>
+                  <input
+                    className="input font-bold text-neutral-700"
+                    style={{ height: 26, width: 180, maxWidth: '70%', fontSize: 11, padding: '2px 6px' }}
+                    value={c.nome}
+                    onChange={(e) => setCamada(c.id, { nome: e.target.value })}
+                    placeholder={nomePadraoCamada(i)}
+                    aria-label={`Nome da camada ${i + 1}`}
+                  />
                   {camadas.length > 1 && (
                     <button type="button" className="text-error hover:opacity-80 text-2xs-ui flex items-center gap-1" onClick={() => setCamadas((cs) => cs.filter((x) => x.id !== c.id))} title="Remover tecido">
                       <FontAwesomeIcon icon={faTrash} /> Remover
@@ -538,7 +574,7 @@ export function CortinaCard({
           <div className="space-y-1">
             {calc.camadas.map((cam, i) => (
               <div key={i} className="grid grid-cols-12 gap-2 items-center text-xs-ui border-b border-neutral-100 py-1 last:border-b-0">
-                <div className="col-span-6 text-neutral-700">{i === 0 ? 'Frente' : `Camada ${i + 1}`}: {cam.tecido.nome}</div>
+                <div className="col-span-6 text-neutral-700">{camadas[i]?.nome.trim() || nomePadraoCamada(i)}: {cam.tecido.nome}</div>
                 <div className="col-span-3 font-mono tabular-nums text-right text-neutral-600">
                   {formatNum(cam.metragem, 2)} m{cam.metodo === 'emenda' ? ' (emenda)' : cam.metodo === 'barra_postica' ? ' (barra postiça)' : ''}
                 </div>
@@ -650,10 +686,12 @@ export function CortinaCard({
 
       {onDuplicar && (
         <div className="mt-4 pt-3 border-t border-neutral-200 flex justify-end">
-          <button type="button" className="btn btn-default btn-sm text-primary flex items-center gap-1.5" onClick={onDuplicar} title="Duplicar esta cortina">
+          <button type="button" className="btn btn-default btn-sm text-primary flex items-center gap-1.5" onClick={duplicarEColapsar} title="Duplicar esta cortina">
             <FontAwesomeIcon icon={faCopy} /> Duplicar Cortina
           </button>
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -28,6 +28,7 @@ interface CortinaSnapshotProducao {
   altura?: number;
   n_camadas?: number;
   camadas?: Array<{
+    nome?: string;
     tecido_nome?: string;
     modelo?: string | null;
     metodo?: string | null;
@@ -48,12 +49,12 @@ function numeroProducao(v: unknown): string {
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function camadaLabel(index: number): string {
-  return index === 0 ? 'Frente' : `Camada ${index + 1}`;
+function camadaLabel(index: number, nome?: string): string {
+  return nome?.trim() || (index === 0 ? 'Frente' : `Camada ${index + 1}`);
 }
 
 function componenteTecidoCortina(cam: NonNullable<CortinaSnapshotProducao['camadas']>[number], index: number) {
-  const label = camadaLabel(index);
+  const label = camadaLabel(index, cam.nome);
   const tecido = cam.tecido_nome ?? '-';
   const metragem = Number(cam.metragem ?? 0);
   const tiras = Number(cam.tiras ?? 0);
@@ -93,7 +94,7 @@ function componenteTecidoCortina(cam: NonNullable<CortinaSnapshotProducao['camad
 }
 
 function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
-  const tecidos = c.camadas?.map((cam, i) => `${i === 0 ? 'Frente' : `Camada ${i + 1}`}: ${cam.tecido_nome ?? '-'}`).join(' | ');
+  const tecidos = c.camadas?.map((cam, i) => `${camadaLabel(i, cam.nome)}: ${cam.tecido_nome ?? '-'}`).join(' | ');
   const instalacao = (c.acessorios ?? []).find((a) => {
     const item = `${a.item ?? ''} ${a.produto_nome ?? ''}`.toLowerCase();
     return item.includes('instal');
@@ -109,6 +110,7 @@ function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
     altura_m: Number(c.altura ?? 0),
     n_camadas: c.n_camadas,
     camadas: c.camadas?.map((cam) => ({
+      nome: cam.nome,
       modelo: cam.modelo ?? c.modelo,
       tecido_nome: cam.tecido_nome,
       metodo: cam.metodo,
@@ -123,7 +125,7 @@ function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
     descricao_produto: [
       c.fixacao ? `Fixacao: ${c.fixacao}` : null,
       c.n_camadas ? `Camadas: ${c.n_camadas}` : null,
-      ...(c.camadas ?? []).map((cam, i) => `${i === 0 ? 'Frente' : `Camada ${i + 1}`}: ${cam.tecido_nome ?? '-'} - ${cam.metragem ?? 0} m`),
+      ...(c.camadas ?? []).map((cam, i) => `${camadaLabel(i, cam.nome)}: ${cam.tecido_nome ?? '-'} - ${cam.metragem ?? 0} m`),
     ].filter(Boolean).join('\n'),
     componentes: [
       ...(c.camadas ?? []).map(componenteTecidoCortina),

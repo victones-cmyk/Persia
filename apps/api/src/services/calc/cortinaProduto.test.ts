@@ -21,6 +21,7 @@ describe('produto sintetico de cortina', () => {
           franzido: 2.7,
         },
         {
+          nome: 'Forro',
           modelo: 'franzido',
           tecido_nome: 'TEX-202 BLACKOUT 70% DE VEDAÇÃO LISO LARGURA: 2,80m COR: 01 – BRANCO',
           franzido: 2,
@@ -29,15 +30,7 @@ describe('produto sintetico de cortina', () => {
     });
 
     expect(nome).toBe('Cortina Sala Wave L:2,50m X A:2,70m');
-    expect(descricao).toBe(`Fixação: Trilho
-Abertura: Sem abertura
-Cortina:
-Frente: Wave
-Tecido: TEX-101 BLACKOUT 70% DE VEDAÇÃO LISO LARGURA: 2,80m COR: 02 – MARROM
-Franzido: 2,7x
-
-Camada 2: Franzido
-Tecido: TEX-202 BLACKOUT 70% DE VEDAÇÃO LISO LARGURA: 2,80m COR: 01 – BRANCO
-Franzido: 2x`);
+    expect(descricao).toBe('Fixação: Trilho | Abertura: Sem abertura | Frente: Wave | Tecido: TEX-101 BLACKOUT 70% DE VEDAÇÃO LISO LARGURA: 2,80m COR: 02 – MARROM | Franzido: 2,7x | Forro: Franzido | Tecido: TEX-202 BLACKOUT 70% DE VEDAÇÃO LISO LARGURA: 2,80m COR: 01 – BRANCO | Franzido: 2x');
+    expect(descricao).not.toContain('\n');
   });
 });

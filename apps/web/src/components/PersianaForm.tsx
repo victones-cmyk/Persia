@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner, faPlus, faTrash, faCopy } from '@fortawesome/free-solid-svg-icons';
+import { faSpinner, faPlus, faTrash, faCopy, faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 import { api } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
 import { roundHalfUp, formatBRL, formatNum, formatQtd } from '../lib/formatacao';
@@ -172,6 +172,7 @@ export function PersianaForm({
   const [removerIdx, setRemoverIdx] = useState<number | null>(null);
   // Resultado calculado por item (índice → resultado), para o breakdown "Ver componentes".
   const [resultPorIdx, setResultPorIdx] = useState<Record<number, ResultadoPersiana>>({});
+  const [itensMinimizados, setItensMinimizados] = useState<Set<string>>(new Set());
 
   // Carrega os tecidos de um tipo (uma vez por tipo).
   function garantirTecidos(tipo: string) {
@@ -255,11 +256,27 @@ export function PersianaForm({
       ...orig,
       id: crypto.randomUUID(),
     };
+    setItensMinimizados((prev) => new Set([...prev, orig.id]));
     setItens((prev) => {
       const next = [...prev];
       next.splice(idx + 1, 0, copia);
       return next;
     });
+  }
+
+  function toggleMinimizado(id: string) {
+    setItensMinimizados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function nomeProdutoItem(it: ItemForm): string {
+    const produto = (calculadoras.find((c) => c.id === it.tipo)?.nome || it.tipo || '').replace(/^Persiana\s+/i, '').trim();
+    const partes = ['Persiana', it.ambiente.trim(), produto].filter(Boolean);
+    return `${partes.join(' ')} L:${formatNum(Number(it.largura), 2)}m x A:${formatNum(Number(it.altura), 2)}m`;
   }
 
   const itemValido = (it: ItemForm) =>
@@ -363,22 +380,50 @@ export function PersianaForm({
         {itens.map((it, idx) => {
           const tecidosDoItem = it.tipo ? tecidosPorTipo[it.tipo] : undefined;
           const carregandoTecidos = it.tipo ? tiposCarregando.includes(it.tipo) && !tecidosDoItem : false;
+          const minimizado = itensMinimizados.has(it.id);
+          const nomeProduto = nomeProdutoItem(it);
           return (
           <div key={it.id} className="rounded-sm border border-neutral-300 p-3" style={{ background: 'var(--neutral-50)' }}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs-ui font-bold text-neutral-600">Item {idx + 1}</span>
-              {itens.length > 1 && (
+            <div className={`flex items-center justify-between ${minimizado ? 'mb-0' : 'mb-2'}`}>
+              <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
                 <button
                   type="button"
-                  className="text-error hover:opacity-80 text-xs-ui flex items-center gap-1"
-                  onClick={() => setRemoverIdx(idx)}
-                  title="Remover item"
+                  className="btn btn-default btn-xs"
+                  onClick={() => toggleMinimizado(it.id)}
+                  aria-expanded={!minimizado}
+                  title={minimizado ? 'Expandir item' : 'Minimizar item'}
                 >
-                  <FontAwesomeIcon icon={faTrash} /> Remover
+                  <FontAwesomeIcon icon={minimizado ? faChevronRight : faChevronDown} />
                 </button>
-              )}
+                <span className="text-xs-ui font-bold text-neutral-600 whitespace-nowrap">Item {idx + 1}</span>
+                <span className="truncate text-sm-ui font-semibold text-neutral-800" title={nomeProduto}>{nomeProduto}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {minimizado && (
+                  <button
+                    type="button"
+                    className="text-primary hover:opacity-80 text-xs-ui flex items-center gap-1"
+                    onClick={() => duplicarItem(idx)}
+                    title="Duplicar item"
+                  >
+                    <FontAwesomeIcon icon={faCopy} /> Duplicar
+                  </button>
+                )}
+                {itens.length > 1 && (
+                  <button
+                    type="button"
+                    className="text-error hover:opacity-80 text-xs-ui flex items-center gap-1"
+                    onClick={() => setRemoverIdx(idx)}
+                    title="Remover item"
+                  >
+                    <FontAwesomeIcon icon={faTrash} /> Remover
+                  </button>
+                )}
+              </div>
             </div>
 
+            {minimizado ? null : (
+              <>
             {/* Ambiente + Produto Sob Medida */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
@@ -546,6 +591,8 @@ export function PersianaForm({
                 <FontAwesomeIcon icon={faCopy} /> Duplicar Item
               </button>
             </div>
+              </>
+            )}
           </div>
           );
         })}

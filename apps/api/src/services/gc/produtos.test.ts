@@ -52,7 +52,7 @@ describe('payload de produto sintetico', () => {
       url: '/api/produtos',
       data: expect.objectContaining({
         nome: 'Sala, Cortina Wave TEX-101 2,00X2,50',
-        descricao: 'Fixação: Trilho\nAbertura: Sem abertura',
+        descricao: 'Fixação: Trilho | Abertura: Sem abertura',
         codigo_interno: expect.stringMatching(/^\d+$/),
         url: expect.stringMatching(/^\d+$/),
       }),

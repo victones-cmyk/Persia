@@ -30,6 +30,7 @@ export interface ItemProducaoSnapshot {
   desconto?: string | null;
   n_camadas?: number;
   camadas?: Array<{
+    nome?: string | null;
     modelo?: string | null;
     tecido_nome?: string | null;
     metodo?: string | null;

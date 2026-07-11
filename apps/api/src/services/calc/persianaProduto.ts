@@ -15,6 +15,10 @@ function produtoLimpo(produto: string): string {
   return textoLimpo(produto).replace(/^persiana\s+/i, '');
 }
 
+function descricaoInline(partes: Array<string | null | undefined>): string {
+  return partes.map((p) => textoLimpo(p)).filter(Boolean).join(' | ');
+}
+
 export function nomeProdutoPersiana(params: {
   ambiente?: string | null;
   produto_sob_medida: string;
@@ -35,18 +39,18 @@ export function descricaoProdutoPersiana(params: {
   comando?: string | null;
   tc: number;
 }): string {
-  const linhas = [
+  const partes = [
     `Acionamento: ${ACIONAMENTO_LABEL[params.acionamento] ?? params.acionamento}`,
     `Acessórios: ${textoLimpo(params.cor_acessorio) || '-'}`,
     `Tecido: ${textoLimpo(params.tecido_nome)}`,
   ];
 
   const rolamento = textoLimpo(params.rolamento);
-  if (rolamento) linhas.push(`Rolamento: ${rolamento}`);
+  if (rolamento) partes.push(`Rolamento: ${rolamento}`);
 
   const comando = textoLimpo(params.comando);
-  if (comando) linhas.push(`Comando: ${comando}`);
+  if (comando) partes.push(`Comando: ${comando}`);
 
-  linhas.push(`Tamanho Comando: ${numeroBR(params.tc)}m`);
-  return linhas.join('\n');
+  partes.push(`Tamanho Comando: ${numeroBR(params.tc)}m`);
+  return descricaoInline(partes);
 }
