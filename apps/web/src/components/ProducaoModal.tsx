@@ -23,10 +23,34 @@ interface ProducaoPayload {
   itens: ItemProducao[];
 }
 
+interface MedicaoItem {
+  index: number;
+  largura: number;
+  altura: number;
+}
+
+interface PreviaMedicao {
+  valor_original: number;
+  valor_conferido: number;
+  diferenca: number;
+  alterados: number[];
+}
+
 function medida(v: unknown): string {
   const n = Number(v);
   if (!Number.isFinite(n)) return '-';
   return `${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m`;
+}
+
+function dinheiro(v: unknown): string {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 'R$ 0,00';
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function numeroInput(v: unknown): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : '';
 }
 
 function produtoLabel(item: ItemSnapshot): string {
@@ -48,9 +72,13 @@ export function ProducaoModal({
   const [pedido, setPedido] = useState('');
   const [entrega, setEntrega] = useState('');
   const [selecionados, setSelecionados] = useState<number[]>([]);
+  const [medidasFinais, setMedidasFinais] = useState<Record<number, { largura: string; altura: string }>>({});
+  const [previa, setPrevia] = useState<PreviaMedicao | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [gerando, setGerando] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
+  const [gerandoAjuste, setGerandoAjuste] = useState(false);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
@@ -65,6 +93,11 @@ export function ProducaoModal({
       setPedido(r.orcamento.gc_pedido_codigo ?? '');
       setEntrega(r.orcamento.pedido_entrega_em ? r.orcamento.pedido_entrega_em.slice(0, 10) : '');
       setSelecionados(r.itens.filter((it) => !it.ordem).map((it) => it.index));
+      setMedidasFinais(Object.fromEntries(r.itens.map(({ index, item }) => [index, {
+        largura: numeroInput(item.largura_m),
+        altura: numeroInput(item.altura_m),
+      }])));
+      setPrevia(null);
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao carregar os itens.');
     } finally {
@@ -79,6 +112,8 @@ export function ProducaoModal({
       setPedido('');
       setEntrega('');
       setSelecionados([]);
+      setMedidasFinais({});
+      setPrevia(null);
       setErro(null);
       setSucesso(null);
     }
@@ -88,6 +123,20 @@ export function ProducaoModal({
   const podeGerar = useMemo(() => {
     return dados?.orcamento.status === 'enviado' && pedido.trim().length > 0 && selecionados.length > 0;
   }, [dados?.orcamento.status, pedido, selecionados.length]);
+
+  const medicoes = useMemo<MedicaoItem[]>(() => {
+    if (!dados) return [];
+    return dados.itens.flatMap(({ index, item }) => {
+      const final = medidasFinais[index];
+      const largura = Number(final?.largura?.replace(',', '.'));
+      const altura = Number(final?.altura?.replace(',', '.'));
+      const originalL = Number(item.largura_m);
+      const originalA = Number(item.altura_m);
+      if (!(largura > 0) || !(altura > 0)) return [];
+      if (Math.abs(largura - originalL) < 0.005 && Math.abs(altura - originalA) < 0.005) return [];
+      return [{ index, largura, altura }];
+    });
+  }, [dados, medidasFinais]);
 
   if (!aberto || !orcamento) return null;
 
@@ -114,7 +163,7 @@ export function ProducaoModal({
       if (pedido.trim() !== dados?.orcamento.gc_pedido_codigo || entrega !== (dados?.orcamento.pedido_entrega_em?.slice(0, 10) ?? '')) {
         await api.put(`/orcamentos/${orcamento.id}/pedido`, { gc_pedido_codigo: pedido.trim(), pedido_entrega_em: entrega || null });
       }
-      await api.post(`/orcamentos/${orcamento.id}/ordens-producao`, { itens: selecionados });
+      await api.post(`/orcamentos/${orcamento.id}/ordens-producao`, { itens: selecionados, medicoes });
       await carregar();
       onAtualizar();
     } catch (e) {
@@ -126,6 +175,67 @@ export function ProducaoModal({
 
   function toggle(index: number) {
     setSelecionados((prev) => prev.includes(index) ? prev.filter((v) => v !== index) : [...prev, index]);
+  }
+
+  function alterarMedida(index: number, campo: 'largura' | 'altura', valor: string) {
+    setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', [campo]: valor } }));
+    setPrevia(null);
+  }
+
+  async function recalcularMedicao() {
+    if (!orcamento) return;
+    setRecalculando(true);
+    setErro(null);
+    try {
+      const r = await api.post<{ previa: PreviaMedicao }>(`/orcamentos/${orcamento.id}/producao/medicao/preview`, { medicoes });
+      setPrevia(r.previa);
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Falha ao recalcular as medidas.');
+    } finally {
+      setRecalculando(false);
+    }
+  }
+
+  async function gerarVendaAjuste() {
+    if (!orcamento || !previa || !(previa.diferenca > 0)) return;
+    setGerandoAjuste(true);
+    setErro(null);
+    setSucesso(null);
+    try {
+      const r = await api.post<{ venda: { gc_pedido_codigo: string | null } }>(`/orcamentos/${orcamento.id}/producao/medicao/venda-ajuste`, { medicoes });
+      setSucesso(`Venda complementar criada no GestãoClick${r.venda.gc_pedido_codigo ? `: ${r.venda.gc_pedido_codigo}` : '.'}`);
+      onAtualizar();
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Falha ao gerar venda complementar.');
+    } finally {
+      setGerandoAjuste(false);
+    }
+  }
+
+  function camposMedida(index: number, item: ItemSnapshot, bloqueado: boolean) {
+    const final = medidasFinais[index] ?? { largura: numeroInput(item.largura_m), altura: numeroInput(item.altura_m) };
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+        <input
+          className="input"
+          value={final.largura}
+          disabled={bloqueado}
+          onChange={(e) => alterarMedida(index, 'largura', e.target.value)}
+          aria-label={`Largura final item ${index + 1}`}
+          inputMode="decimal"
+          style={{ height: 34, padding: '6px 8px' }}
+        />
+        <input
+          className="input"
+          value={final.altura}
+          disabled={bloqueado}
+          onChange={(e) => alterarMedida(index, 'altura', e.target.value)}
+          aria-label={`Altura final item ${index + 1}`}
+          inputMode="decimal"
+          style={{ height: 34, padding: '6px 8px' }}
+        />
+      </div>
+    );
   }
 
   function abrirPdf(id: string) {
@@ -233,8 +343,9 @@ export function ProducaoModal({
             <colgroup>
               <col style={{ width: 42 }} />
               <col style={{ width: '31%' }} />
-              <col style={{ width: '27%' }} />
-              <col style={{ width: 146 }} />
+              <col style={{ width: '21%' }} />
+              <col style={{ width: 128 }} />
+              <col style={{ width: 150 }} />
               <col style={{ width: 190 }} />
             </colgroup>
             <thead>
@@ -242,15 +353,16 @@ export function ProducaoModal({
                 <th style={{ width: 42, padding: 10 }} />
                 <th style={{ padding: 10, textAlign: 'left' }}>Produto</th>
                 <th style={{ padding: 10, textAlign: 'left' }}>Tecido</th>
-                <th style={{ padding: 10, textAlign: 'left', width: 140 }}>Medidas</th>
+                <th style={{ padding: 10, textAlign: 'left', width: 128 }}>Medida vendida</th>
+                <th style={{ padding: 10, textAlign: 'left', width: 150 }}>Medida final</th>
                 <th style={{ padding: 10, textAlign: 'left', width: 190 }}>Documentos</th>
               </tr>
             </thead>
             <tbody>
               {carregando ? (
-                <tr><td colSpan={5} style={{ padding: 16 }}>Carregando itens...</td></tr>
+                <tr><td colSpan={6} style={{ padding: 16 }}>Carregando itens...</td></tr>
               ) : (dados?.itens.length ?? 0) === 0 ? (
-                <tr><td colSpan={5} style={{ padding: 16, color: '#6c757d' }}>Nenhum produto encontrado no orçamento.</td></tr>
+                <tr><td colSpan={6} style={{ padding: 16, color: '#6c757d' }}>Nenhum produto encontrado no orçamento.</td></tr>
               ) : (
                 dados?.itens.map(({ index, item, ordem }) => (
                   <tr key={index} style={{ borderTop: '1px solid #dee2e6' }}>
@@ -270,6 +382,9 @@ export function ProducaoModal({
                     <td style={{ padding: 10, overflowWrap: 'anywhere' }} className="text-sm-ui">{item.tecido_nome}</td>
                     <td style={{ padding: 10 }} className="font-mono text-sm-ui">
                       {medida(item.largura_m)} x {medida(item.altura_m)}
+                    </td>
+                    <td style={{ padding: 10 }}>
+                      {camposMedida(index, item, Boolean(ordem) || orcamento.status !== 'enviado')}
                     </td>
                     <td style={{ padding: 10 }}>
                       {ordem ? (
@@ -307,6 +422,10 @@ export function ProducaoModal({
                     <div className="text-sm-ui text-neutral-600" style={{ overflowWrap: 'anywhere' }}>{produtoLabel(item)}</div>
                     <div className="text-sm-ui mt-1" style={{ overflowWrap: 'anywhere' }}>{item.tecido_nome}</div>
                     <div className="font-mono text-sm-ui mt-1">{medida(item.largura_m)} x {medida(item.altura_m)}</div>
+                    <div className="mt-2">
+                      <div className="text-2xs-ui font-bold uppercase text-neutral-500 mb-1">Medida final</div>
+                      {camposMedida(index, item, Boolean(ordem) || orcamento.status !== 'enviado')}
+                    </div>
                     <div className="mt-2">{ordem ? documentos(ordem) : <span className="text-sm-ui text-neutral-500">Ainda não gerada</span>}</div>
                   </div>
                 </div>
@@ -325,12 +444,35 @@ export function ProducaoModal({
             Selecionar pendentes
           </button>
           <div className="flex flex-wrap gap-2 justify-end">
+            <button type="button" className="btn btn-default" disabled={orcamento.status !== 'enviado' || recalculando || !dados} onClick={() => void recalcularMedicao()}>
+              {recalculando ? 'Recalculando...' : 'Recalcular diferença'}
+            </button>
             <button type="button" className="btn btn-default" onClick={onFechar}>Cancelar</button>
             <button type="button" className="btn btn-success" disabled={!podeGerar || gerando} onClick={gerarOrdens}>
               {gerando ? 'Gerando...' : 'Gerar OS e Etiquetas'}
             </button>
           </div>
         </div>
+        {previa && (
+          <div className="mt-3" style={{ border: '1px solid #dee2e6', borderRadius: 3, padding: 12, background: '#f8f9fa' }}>
+            <div className="flex flex-wrap justify-between gap-2">
+              <span>Valor vendido: <strong>{dinheiro(previa.valor_original)}</strong></span>
+              <span>Valor conferido: <strong>{dinheiro(previa.valor_conferido)}</strong></span>
+              <span>Diferença: <strong className={previa.diferenca > 0 ? 'text-danger' : previa.diferenca < 0 ? 'text-success' : ''}>{dinheiro(previa.diferenca)}</strong></span>
+            </div>
+            {previa.alterados.length > 0 && (
+              <div className="text-xs-ui text-neutral-600 mt-1">Itens alterados: {previa.alterados.map((i) => i + 1).join(', ')}</div>
+            )}
+            {previa.diferenca > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+                <span className="text-sm-ui text-neutral-700">Para cobrar a diferença, gere uma venda complementar no GestãoClick antes ou depois de liberar a OS.</span>
+                <button type="button" className="btn btn-warning btn-sm" disabled={gerandoAjuste} onClick={() => void gerarVendaAjuste()}>
+                  {gerandoAjuste ? 'Gerando...' : 'Gerar venda complementar'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

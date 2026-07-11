@@ -61,6 +61,10 @@ export function montarPayloadVenda(payloadOrcamento: unknown): Record<string, un
 
 export async function criarVendaDePayload(payloadOrcamento: unknown): Promise<ResultadoVenda> {
   const payload = montarPayloadVenda(payloadOrcamento);
+  return criarVendaComPayload(payload);
+}
+
+export async function criarVendaComPayload(payload: Record<string, unknown>): Promise<ResultadoVenda> {
   const env = await gcRequest<GcEnvelope<VendaCriada>>({
     method: 'POST',
     url: '/api/vendas',

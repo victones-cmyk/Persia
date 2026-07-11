@@ -18,8 +18,10 @@ import {
   baixarPdfOrdem,
   baixarZplEtiqueta,
   criarOrdensProducao,
+  gerarVendaAjusteMedicao,
   getProducaoOrcamento,
   imprimirEtiquetaOrdem,
+  preverMedicaoProducao,
 } from '../controllers/producaoController';
 
 const router = Router();
@@ -33,6 +35,8 @@ router.get('/ordens-producao/:id/pdf', baixarPdfOrdem);
 router.get('/ordens-producao/:id/etiqueta.zpl', baixarZplEtiqueta);
 router.post('/ordens-producao/:id/imprimir-etiqueta', imprimirEtiquetaOrdem);
 router.get('/:id/producao', getProducaoOrcamento);
+router.post('/:id/producao/medicao/preview', preverMedicaoProducao);
+router.post('/:id/producao/medicao/venda-ajuste', gerarVendaAjusteMedicao);
 router.put('/:id/pedido', atualizarPedidoOrcamento);
 router.post('/:id/gerar-venda', gerarVendaOrcamento);
 router.post('/:id/ordens-producao', criarOrdensProducao);

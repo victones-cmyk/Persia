@@ -5,6 +5,21 @@ import { Prisma, type Orcamento, type OrdemProducao } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { env } from '../config/env';
+import { roundHalfUp } from '../services/calc/arredondamento';
+import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
+import { criarProduto, deletarProduto } from '../services/gc/produtos';
+import { criarVendaComPayload } from '../services/gc/vendas';
+import { resolverLoja } from '../lib/resolverLoja';
+import {
+  recalcularPersianasDeEntrada,
+  snapshotsDe,
+  type ItemEntrada,
+  type ItemSnapshot,
+} from './orcamentoController';
+import {
+  recalcularCortinasDeEntrada,
+  type CortinaEntrada,
+} from './orcamentoCortinaController';
 import {
   gerarPdfOrdemProducao,
   gerarZplEtiqueta,
@@ -41,6 +56,20 @@ interface CortinaSnapshotProducao {
   acessorios?: Array<{ item?: string; produto_nome?: string; quantidade?: number; preco?: number; subtotal?: number }>;
   valor_total?: number;
   nome_produto?: string;
+}
+
+interface AjusteMedida {
+  index: number;
+  largura: number;
+  altura: number;
+}
+
+interface PreviaMedicao {
+  itens: ItemProducaoSnapshot[];
+  valor_original: number;
+  valor_conferido: number;
+  diferenca: number;
+  alterados: number[];
 }
 
 function numeroProducao(v: unknown): string {
@@ -152,6 +181,127 @@ function itensDoOrcamento(orc: Pick<Orcamento, 'itens_json'>): ItemProducaoSnaps
     ...(obj.persiana?.itens ?? []),
     ...(obj.cortinas ?? []).map(cortinaParaItem),
   ];
+}
+
+function valorItemProducao(item: ItemProducaoSnapshot): number {
+  const obj = item as ItemProducaoSnapshot & { valor_final?: unknown; valor_total?: unknown };
+  const n = Number(obj.valor_final ?? obj.valor_total ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function totalItens(itens: ItemProducaoSnapshot[]): number {
+  return roundHalfUp(itens.reduce((s, item) => s + valorItemProducao(item), 0));
+}
+
+function validarMedicoes(body: unknown): AjusteMedida[] {
+  const raw = (body as { medicoes?: unknown } | null)?.medicoes;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((m) => {
+    const obj = m && typeof m === 'object' ? m as Record<string, unknown> : {};
+    const index = Number(obj.index);
+    const largura = Number(obj.largura);
+    const altura = Number(obj.altura);
+    if (!Number.isInteger(index) || index < 0 || !(largura > 0) || !(altura > 0)) {
+      throw new AppError(400, 'MEDICAO_INVALIDA', 'Informe medidas finais validas para todos os itens alterados.');
+    }
+    return { index, largura, altura };
+  });
+}
+
+function medicoesPorIndex(medicoes: AjusteMedida[], total: number): Map<number, AjusteMedida> {
+  const map = new Map<number, AjusteMedida>();
+  for (const m of medicoes) {
+    if (m.index >= total) throw new AppError(400, 'ITEM_INVALIDO', 'Produto selecionado invalido.');
+    map.set(m.index, m);
+  }
+  return map;
+}
+
+function aplicarMedida<T extends { largura?: unknown; altura?: unknown }>(item: T, ajuste?: AjusteMedida): T {
+  if (!ajuste) return item;
+  return { ...item, largura: ajuste.largura, altura: ajuste.altura };
+}
+
+async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Promise<PreviaMedicao> {
+  const itensAtuais = itensDoOrcamento(orc);
+  if (itensAtuais.length === 0) throw new AppError(409, 'SEM_ITENS', 'Este orcamento nao possui itens para producao.');
+  const ajustes = medicoesPorIndex(medicoes, itensAtuais.length);
+  const valorOriginal = totalItens(itensAtuais) || Number(orc.valor_final);
+
+  if (ajustes.size === 0) {
+    return {
+      itens: itensAtuais,
+      valor_original: roundHalfUp(valorOriginal),
+      valor_conferido: roundHalfUp(valorOriginal),
+      diferenca: 0,
+      alterados: [],
+    };
+  }
+
+  const entrada = orc.entrada_json as {
+    tipo?: string;
+    itens?: ItemEntrada[];
+    cortinas?: CortinaEntrada[];
+    rt_pct?: number;
+  } | null;
+  if (!entrada) {
+    throw new AppError(409, 'SEM_ENTRADA_ORIGINAL', 'Nao foi possivel recalcular: este orcamento nao possui entrada original salva.');
+  }
+
+  if (orc.tipo_produto === 'cortina') {
+    const cortinasEntrada = entrada.cortinas ?? [];
+    if (cortinasEntrada.length === 0) throw new AppError(409, 'SEM_ENTRADA_ORIGINAL', 'Orcamento de cortina sem entrada original.');
+    const ajustadas = cortinasEntrada.map((c, index) => aplicarMedida(c, ajustes.get(index)));
+    const preparadas = await recalcularCortinasDeEntrada(ajustadas, Number(entrada.rt_pct) || 0);
+    const itens = preparadas.map((p) => cortinaParaItem(p.snapshot as CortinaSnapshotProducao));
+    return {
+      itens,
+      valor_original: roundHalfUp(valorOriginal),
+      valor_conferido: totalItens(itens),
+      diferenca: roundHalfUp(totalItens(itens) - valorOriginal),
+      alterados: Array.from(ajustes.keys()).sort((a, b) => a - b),
+    };
+  }
+
+  if (orc.tipo_produto === 'misto') {
+    const persianasEntrada = entrada.itens ?? [];
+    const cortinasEntrada = entrada.cortinas ?? [];
+    const persianasAjustadas = persianasEntrada.map((it, index) => aplicarMedida(it, ajustes.get(index)));
+    const cortinasAjustadas = cortinasEntrada.map((c, index) => aplicarMedida(c, ajustes.get(persianasEntrada.length + index)));
+    const rtPct = Number(entrada.rt_pct) || 0;
+    const persPrep = persianasAjustadas.length > 0
+      ? await recalcularPersianasDeEntrada(isTipoPersiana(entrada.tipo ?? '') ? (entrada.tipo as TipoPersiana) : null, persianasAjustadas, rtPct)
+      : [];
+    const cortPrep = cortinasAjustadas.length > 0
+      ? await recalcularCortinasDeEntrada(cortinasAjustadas, rtPct)
+      : [];
+    const persSnaps = snapshotsDe(persPrep, []);
+    const itens = [
+      ...(persSnaps as unknown as ItemProducaoSnapshot[]),
+      ...cortPrep.map((p) => cortinaParaItem(p.snapshot as CortinaSnapshotProducao)),
+    ];
+    return {
+      itens,
+      valor_original: roundHalfUp(valorOriginal),
+      valor_conferido: totalItens(itens),
+      diferenca: roundHalfUp(totalItens(itens) - valorOriginal),
+      alterados: Array.from(ajustes.keys()).sort((a, b) => a - b),
+    };
+  }
+
+  const itensEntrada = entrada.itens ?? [];
+  if (itensEntrada.length === 0) throw new AppError(409, 'SEM_ENTRADA_ORIGINAL', 'Orcamento de persiana sem entrada original.');
+  const ajustados = itensEntrada.map((it, index) => aplicarMedida(it, ajustes.get(index)));
+  const preparados = await recalcularPersianasDeEntrada(isTipoPersiana(entrada.tipo ?? '') ? (entrada.tipo as TipoPersiana) : null, ajustados, Number(entrada.rt_pct) || 0);
+  const idsAtuais = ((orc.itens_json as unknown as ItemSnapshot[] | null) ?? []).map((s) => s.gc_produto_id ?? null);
+  const itens = snapshotsDe(preparados, idsAtuais.filter((id): id is string => Boolean(id))) as unknown as ItemProducaoSnapshot[];
+  return {
+    itens,
+    valor_original: roundHalfUp(valorOriginal),
+    valor_conferido: totalItens(itens),
+    diferenca: roundHalfUp(totalItens(itens) - valorOriginal),
+    alterados: Array.from(ajustes.keys()).sort((a, b) => a - b),
+  };
 }
 
 function pedidoCodigo(orc: Pick<Orcamento, 'gc_pedido_codigo'>): string {
@@ -289,7 +439,8 @@ export async function atualizarPedidoOrcamento(req: Request, res: Response): Pro
 export async function criarOrdensProducao(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   validarOrcamentoParaProducao(orc);
-  const itens = itensDoOrcamento(orc);
+  const previa = await recalcularMedicao(orc, validarMedicoes(req.body));
+  const itens = previa.itens;
   if (itens.length === 0) throw new AppError(409, 'SEM_ITENS', 'Este orcamento nao possui itens para producao.');
 
   const indicesRaw = (req.body as { itens?: unknown } | null)?.itens;
@@ -325,12 +476,97 @@ export async function criarOrdensProducao(req: Request, res: Response): Promise<
       }));
     }
     await tx.logAcao.create({
-      data: { usuario_id: req.session.usuario!.id, acao: 'ordens_producao_criadas', detalhe: { orcamento_id: orc.id, itens: indices } },
+      data: { usuario_id: req.session.usuario!.id, acao: 'ordens_producao_criadas', detalhe: { orcamento_id: orc.id, itens: indices, medicao: previa } as unknown as Prisma.InputJsonValue },
     });
     return out;
   });
 
   res.status(201).json({ ordens: criadas });
+}
+
+export async function preverMedicaoProducao(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  validarOrcamentoParaProducao(orc);
+  const previa = await recalcularMedicao(orc, validarMedicoes(req.body));
+  res.json({ previa });
+}
+
+export async function gerarVendaAjusteMedicao(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  validarOrcamentoParaProducao(orc);
+  if (!orc.gc_cliente_id) throw new AppError(409, 'SEM_CLIENTE', 'Orcamento sem cliente vinculado ao GestaoClick.');
+  const respostaAtual = orc.resposta_gc && typeof orc.resposta_gc === 'object' && !Array.isArray(orc.resposta_gc)
+    ? orc.resposta_gc as Prisma.JsonObject
+    : {};
+  if (respostaAtual.venda_ajuste_medicao) {
+    throw new AppError(409, 'AJUSTE_JA_GERADO', 'Este orcamento ja possui venda complementar de medicao tecnica.');
+  }
+
+  const previa = await recalcularMedicao(orc, validarMedicoes(req.body));
+  if (!(previa.diferenca > 0)) {
+    throw new AppError(400, 'SEM_DIFERENCA_POSITIVA', 'A venda complementar so e gerada quando existe diferenca positiva.');
+  }
+
+  const pedido = pedidoCodigo(orc);
+  const nome = `Diferenca de valores do pedido ${pedido} apos medicao tecnica`;
+  const descricao = [
+    `Pedido original: ${pedido}`,
+    `Orcamento: ${orc.gc_codigo ?? orc.gc_orcamento_id ?? '-'}`,
+    `Valor original: R$ ${previa.valor_original.toFixed(2)}`,
+    `Valor conferido: R$ ${previa.valor_conferido.toFixed(2)}`,
+    `Diferenca: R$ ${previa.diferenca.toFixed(2)}`,
+  ].join(' | ');
+  const loja = await resolverLoja(orc.loja_id);
+  let produtoId: string | null = null;
+  try {
+    const produto = await criarProduto({
+      nome,
+      descricao,
+      valor_custo: 0,
+      valor_venda: previa.diferenca,
+    });
+    produtoId = produto.criado ? produto.gc_produto_id : null;
+    const payload: Record<string, unknown> = {
+      tipo: 'produto',
+      cliente_id: orc.gc_cliente_id,
+      data: new Date().toISOString().slice(0, 10),
+      produtos: [{
+        produto_id: produto.gc_produto_id,
+        quantidade: 1,
+        valor_venda: previa.diferenca,
+        valor_custo: 0,
+      }],
+    };
+    if (env.GC_USUARIO_INTEGRACAO_ID) payload.usuario_id = env.GC_USUARIO_INTEGRACAO_ID;
+    if (req.session.usuario?.gc_usuario_id) payload.vendedor_id = req.session.usuario.gc_usuario_id;
+    if (loja.gc_loja_id) payload.loja_id = loja.gc_loja_id;
+
+    const venda = await criarVendaComPayload(payload);
+    await prisma.orcamento.update({
+      where: { id: orc.id },
+      data: {
+        resposta_gc: {
+          ...respostaAtual,
+          venda_ajuste_medicao: venda.resposta,
+          payload_venda_ajuste_medicao: venda.payload,
+        } as Prisma.InputJsonValue,
+        erro_gc: null,
+      },
+    });
+    await prisma.logAcao.create({
+      data: {
+        usuario_id: req.session.usuario!.id,
+        acao: 'venda_ajuste_medicao_gc',
+        detalhe: { orcamento_id: orc.id, pedido, diferenca: previa.diferenca, gc_pedido_id: venda.gc_pedido_id, gc_pedido_codigo: venda.gc_pedido_codigo },
+      },
+    });
+    res.json({ venda, previa });
+  } catch (err) {
+    if (produtoId) {
+      try { await deletarProduto(produtoId); } catch { /* ignora limpeza */ }
+    }
+    throw err;
+  }
 }
 
 async function carregarOrdemAutorizada(req: Request) {
