@@ -72,6 +72,20 @@ interface PreviaMedicao {
   alterados: number[];
 }
 
+function diferencaRelevante(v: number): boolean {
+  return Math.abs(v) >= 0.01;
+}
+
+function respostaGcObj(orc: Pick<Orcamento, 'resposta_gc'>): Prisma.JsonObject {
+  return orc.resposta_gc && typeof orc.resposta_gc === 'object' && !Array.isArray(orc.resposta_gc)
+    ? orc.resposta_gc as Prisma.JsonObject
+    : {};
+}
+
+function vendaAjusteMedicaoGerada(orc: Pick<Orcamento, 'resposta_gc'>): boolean {
+  return Boolean(respostaGcObj(orc).venda_ajuste_medicao);
+}
+
 function numeroProducao(v: unknown): string {
   const n = Number(v);
   if (!Number.isFinite(n)) return '-';
@@ -407,6 +421,7 @@ export async function getProducaoOrcamento(req: Request, res: Response): Promise
       gc_pedido_codigo: orc.gc_pedido_codigo,
       pedido_confirmado_em: orc.pedido_confirmado_em,
       pedido_entrega_em: orc.pedido_entrega_em,
+      ajuste_medicao_gerado: vendaAjusteMedicaoGerada(orc),
     },
     itens: itens.map((item, index) => ({
       index,
@@ -444,6 +459,14 @@ export async function criarOrdensProducao(req: Request, res: Response): Promise<
   const previa = await recalcularMedicao(orc, validarMedicoes(req.body));
   const itens = previa.itens;
   if (itens.length === 0) throw new AppError(409, 'SEM_ITENS', 'Este orcamento nao possui itens para producao.');
+  const absorverDiferenca = (req.body as { absorver_diferenca?: unknown } | null)?.absorver_diferenca === true;
+  const ajusteGerado = vendaAjusteMedicaoGerada(orc);
+  if (diferencaRelevante(previa.diferenca) && !absorverDiferenca && !ajusteGerado) {
+    throw new AppError(409, 'DIFERENCA_NAO_AUTORIZADA', 'A diferenca da medicao deve ser absorvida por um admin ou cobrada em venda complementar antes de gerar a OS.');
+  }
+  if (absorverDiferenca && req.session.usuario?.perfil !== 'admin') {
+    throw new AppError(403, 'APENAS_ADMIN', 'Apenas administradores podem absorver diferenca de medicao.');
+  }
 
   const indicesRaw = (req.body as { itens?: unknown } | null)?.itens;
   const indices = Array.isArray(indicesRaw)
@@ -478,7 +501,7 @@ export async function criarOrdensProducao(req: Request, res: Response): Promise<
       }));
     }
     await tx.logAcao.create({
-      data: { usuario_id: req.session.usuario!.id, acao: 'ordens_producao_criadas', detalhe: { orcamento_id: orc.id, itens: indices, medicao: previa } as unknown as Prisma.InputJsonValue },
+      data: { usuario_id: req.session.usuario!.id, acao: 'ordens_producao_criadas', detalhe: { orcamento_id: orc.id, itens: indices, medicao: previa, diferenca_absorvida: absorverDiferenca, venda_ajuste_medicao_gerada: ajusteGerado } as unknown as Prisma.InputJsonValue },
     });
     return out;
   });
@@ -497,9 +520,7 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
   const orc = await carregarOrcamentoAutorizado(req);
   validarOrcamentoParaProducao(orc);
   if (!orc.gc_cliente_id) throw new AppError(409, 'SEM_CLIENTE', 'Orcamento sem cliente vinculado ao GestaoClick.');
-  const respostaAtual = orc.resposta_gc && typeof orc.resposta_gc === 'object' && !Array.isArray(orc.resposta_gc)
-    ? orc.resposta_gc as Prisma.JsonObject
-    : {};
+  const respostaAtual = respostaGcObj(orc);
   if (respostaAtual.venda_ajuste_medicao) {
     throw new AppError(409, 'AJUSTE_JA_GERADO', 'Este orcamento ja possui venda complementar de medicao tecnica.');
   }

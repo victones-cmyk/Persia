@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFilePdf, faTag } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import type { ItemSnapshot, OrcamentoListItem } from '../lib/orcamentoTypes';
+import { useAuth } from '../hooks/useAuth';
 
 interface OrdemProducao {
   id: string;
@@ -19,7 +20,7 @@ interface ItemProducao {
 }
 
 interface ProducaoPayload {
-  orcamento: OrcamentoListItem;
+  orcamento: OrcamentoListItem & { ajuste_medicao_gerado?: boolean };
   itens: ItemProducao[];
 }
 
@@ -68,12 +69,15 @@ export function ProducaoModal({
   onFechar: () => void;
   onAtualizar: () => void;
 }) {
+  const { usuario } = useAuth();
+  const isAdmin = usuario?.perfil === 'admin';
   const [dados, setDados] = useState<ProducaoPayload | null>(null);
   const [pedido, setPedido] = useState('');
   const [entrega, setEntrega] = useState('');
   const [selecionados, setSelecionados] = useState<number[]>([]);
   const [medidasFinais, setMedidasFinais] = useState<Record<number, { largura: string; altura: string }>>({});
   const [previa, setPrevia] = useState<PreviaMedicao | null>(null);
+  const [diferencaAbsorvida, setDiferencaAbsorvida] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [gerando, setGerando] = useState(false);
@@ -98,6 +102,7 @@ export function ProducaoModal({
         altura: numeroInput(item.altura_m),
       }])));
       setPrevia(null);
+      setDiferencaAbsorvida(false);
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao carregar os itens.');
     } finally {
@@ -114,15 +119,12 @@ export function ProducaoModal({
       setSelecionados([]);
       setMedidasFinais({});
       setPrevia(null);
+      setDiferencaAbsorvida(false);
       setErro(null);
       setSucesso(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, orcamento?.id]);
-
-  const podeGerar = useMemo(() => {
-    return dados?.orcamento.status === 'enviado' && pedido.trim().length > 0 && selecionados.length > 0;
-  }, [dados?.orcamento.status, pedido, selecionados.length]);
 
   const medicoes = useMemo<MedicaoItem[]>(() => {
     if (!dados) return [];
@@ -137,6 +139,15 @@ export function ProducaoModal({
       return [{ index, largura, altura }];
     });
   }, [dados, medidasFinais]);
+
+  const temMedidaAlterada = medicoes.length > 0;
+  const temDiferencaCalculada = previa ? Math.abs(Number(previa.diferenca)) >= 0.01 : false;
+  const precisaAutorizarDiferenca = temMedidaAlterada && (!previa || temDiferencaCalculada);
+  const diferencaAutorizada = !precisaAutorizarDiferenca || diferencaAbsorvida || Boolean(dados?.orcamento.ajuste_medicao_gerado);
+
+  const podeGerar = useMemo(() => {
+    return dados?.orcamento.status === 'enviado' && pedido.trim().length > 0 && selecionados.length > 0 && diferencaAutorizada;
+  }, [dados?.orcamento.status, pedido, selecionados.length, diferencaAutorizada]);
 
   if (!aberto || !orcamento) return null;
 
@@ -163,7 +174,7 @@ export function ProducaoModal({
       if (pedido.trim() !== dados?.orcamento.gc_pedido_codigo || entrega !== (dados?.orcamento.pedido_entrega_em?.slice(0, 10) ?? '')) {
         await api.put(`/orcamentos/${orcamento.id}/pedido`, { gc_pedido_codigo: pedido.trim(), pedido_entrega_em: entrega || null });
       }
-      await api.post(`/orcamentos/${orcamento.id}/ordens-producao`, { itens: selecionados, medicoes });
+      await api.post(`/orcamentos/${orcamento.id}/ordens-producao`, { itens: selecionados, medicoes, absorver_diferenca: diferencaAbsorvida });
       await carregar();
       onAtualizar();
     } catch (e) {
@@ -180,6 +191,7 @@ export function ProducaoModal({
   function alterarMedida(index: number, campo: 'largura' | 'altura', valor: string) {
     setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', [campo]: valor } }));
     setPrevia(null);
+    setDiferencaAbsorvida(false);
   }
 
   async function recalcularMedicao() {
@@ -189,6 +201,7 @@ export function ProducaoModal({
     try {
       const r = await api.post<{ previa: PreviaMedicao }>(`/orcamentos/${orcamento.id}/producao/medicao/preview`, { medicoes });
       setPrevia(r.previa);
+      setDiferencaAbsorvida(false);
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao recalcular as medidas.');
     } finally {
@@ -204,6 +217,7 @@ export function ProducaoModal({
     try {
       const r = await api.post<{ venda: { gc_pedido_codigo: string | null } }>(`/orcamentos/${orcamento.id}/producao/medicao/venda-ajuste`, { medicoes });
       setSucesso(`Venda complementar criada no GestãoClick${r.venda.gc_pedido_codigo ? `: ${r.venda.gc_pedido_codigo}` : '.'}`);
+      setDados((atual) => atual ? { ...atual, orcamento: { ...atual.orcamento, ajuste_medicao_gerado: true } } : atual);
       onAtualizar();
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao gerar venda complementar.');
@@ -471,7 +485,31 @@ export function ProducaoModal({
                 </button>
               </div>
             )}
+            {Math.abs(previa.diferenca) >= 0.01 && !dados?.orcamento.ajuste_medicao_gerado && (
+              <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
+                <span className="text-sm-ui text-neutral-700">
+                  {diferencaAbsorvida
+                    ? `Diferença absorvida pela loja: ${dinheiro(previa.diferenca)}. OS liberada por administrador.`
+                    : 'Para seguir sem venda complementar, um administrador deve absorver a diferença.'}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-info btn-sm"
+                  disabled={!isAdmin || diferencaAbsorvida}
+                  title={isAdmin ? 'Autorizar geração da OS absorvendo a diferença' : 'Apenas administradores podem absorver diferença'}
+                  onClick={() => setDiferencaAbsorvida(true)}
+                >
+                  {diferencaAbsorvida ? 'Diferença absorvida' : 'Absorver diferença'}
+                </button>
+              </div>
+            )}
+            {dados?.orcamento.ajuste_medicao_gerado && (
+              <div className="text-sm-ui text-neutral-700 mt-2">Diferença já cobrada em venda complementar no GestãoClick. OS liberada.</div>
+            )}
           </div>
+        )}
+        {temMedidaAlterada && !previa && (
+          <div className="text-xs-ui text-neutral-500 mt-2">Recalcule a diferença para liberar a OS com medidas alteradas.</div>
         )}
       </div>
     </div>
