@@ -11,6 +11,7 @@ interface OrdemProducao {
   item_index: number;
   gc_pedido_codigo: string;
   status: 'criada' | 'impressa' | 'cancelada';
+  item_snapshot_json?: ItemSnapshot;
 }
 
 interface ItemProducao {
@@ -226,8 +227,11 @@ export function ProducaoModal({
     }
   }
 
-  function camposMedida(index: number, item: ItemSnapshot, bloqueado: boolean) {
-    const final = medidasFinais[index] ?? { largura: numeroInput(item.largura_m), altura: numeroInput(item.altura_m) };
+  function camposMedida(index: number, item: ItemSnapshot, bloqueado: boolean, ordem?: OrdemProducao | null) {
+    const itemFinal = ordem?.item_snapshot_json ?? item;
+    const final = bloqueado
+      ? { largura: numeroInput(itemFinal.largura_m), altura: numeroInput(itemFinal.altura_m) }
+      : (medidasFinais[index] ?? { largura: numeroInput(item.largura_m), altura: numeroInput(item.altura_m) });
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         <input
@@ -398,7 +402,7 @@ export function ProducaoModal({
                       {medida(item.largura_m)} x {medida(item.altura_m)}
                     </td>
                     <td style={{ padding: 10 }}>
-                      {camposMedida(index, item, Boolean(ordem) || orcamento.status !== 'enviado')}
+                      {camposMedida(index, item, Boolean(ordem) || orcamento.status !== 'enviado', ordem)}
                     </td>
                     <td style={{ padding: 10 }}>
                       {ordem ? (
@@ -438,7 +442,7 @@ export function ProducaoModal({
                     <div className="font-mono text-sm-ui mt-1">{medida(item.largura_m)} x {medida(item.altura_m)}</div>
                     <div className="mt-2">
                       <div className="text-2xs-ui font-bold uppercase text-neutral-500 mb-1">Medida final</div>
-                      {camposMedida(index, item, Boolean(ordem) || orcamento.status !== 'enviado')}
+                      {camposMedida(index, item, Boolean(ordem) || orcamento.status !== 'enviado', ordem)}
                     </div>
                     <div className="mt-2">{ordem ? documentos(ordem) : <span className="text-sm-ui text-neutral-500">Ainda não gerada</span>}</div>
                   </div>
