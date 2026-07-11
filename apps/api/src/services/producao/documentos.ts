@@ -41,6 +41,9 @@ export interface ItemProducaoSnapshot {
   }>;
   nome_produto?: string;
   descricao_produto?: string;
+  valor_final?: number;
+  valor_total?: number;
+  valor_custo?: number;
   qtd_venda?: number;
   qtd_producao?: number;
   etiqueta_embalagem_serial?: number;

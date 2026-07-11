@@ -151,6 +151,8 @@ function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
     instalacao_nome: instalacao?.produto_nome ?? null,
     qtd_producao: c.camadas?.[0]?.metragem,
     nome_produto: c.nome_produto ?? `Cortina ${c.modelo ?? ''}`.trim(),
+    valor_total: Number(c.valor_total ?? 0),
+    valor_final: Number(c.valor_total ?? 0),
     descricao_produto: [
       c.fixacao ? `Fixacao: ${c.fixacao}` : null,
       c.n_camadas ? `Camadas: ${c.n_camadas}` : null,
