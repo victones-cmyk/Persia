@@ -102,6 +102,7 @@ describe('Calculadoras Service', () => {
     await carregarCalculadoras(mockPrisma);
 
     expect(getCalculadoras().map((c) => c.id)).toContain('calc_inativa');
-    expect(getCalculadorasAtivas().map((c) => c.id)).toEqual(['calc_ativa']);
+    expect(getCalculadorasAtivas().map((c) => c.id)).toContain('calc_ativa');
+    expect(getCalculadorasAtivas().map((c) => c.id)).not.toContain('calc_inativa');
   });
 });

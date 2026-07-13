@@ -17,6 +17,7 @@ import {
   type CamadaCortina,
 } from '../services/calc/cortina';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
+import { exigeLarguraTecido } from '../services/calc/calculadoras';
 import type { TecidoGc } from '../services/gc/tecidos';
 import {
   tecidosParaTipo,
@@ -88,13 +89,13 @@ export async function calcularPersianaController(req: Request, res: Response): P
     throw new AppError(400, 'MEDIDAS_INVALIDAS', 'Largura e altura devem ser positivas.');
   }
 
-  const tecido = await buscarTecidoGc(String(tecido_id));
+  const tecido = await buscarTecidoGc(String(tecido_id), tipo);
   if (!tecido) {
     throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido.');
   }
 
   // RN-01: a largura não pode exceder a largura do rolo do tecido.
-  if (larguraN > tecido.dimensao_m) {
+  if (exigeLarguraTecido(tipo) && larguraN > tecido.dimensao_m) {
     const alternativos = (await tecidosParaTipo(tipo))
       .filter((t) => t.dimensao_m >= larguraN)
       .map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m }));
@@ -179,13 +180,13 @@ export async function calcularPersianaLoteController(req: Request, res: Response
       resultados.push({ ok: false, index: i, error: 'MEDIDAS_INVALIDAS', message: 'Largura e altura devem ser positivas.' });
       continue;
     }
-    const tecido = await buscarTecidoGc(String(it.tecido_id));
+    const tecido = await buscarTecidoGc(String(it.tecido_id), tipo);
     if (!tecido) {
       resultados.push({ ok: false, index: i, error: 'TECIDO_INVALIDO', message: 'Selecione um tecido válido.' });
       continue;
     }
     // RN-01: largura não pode exceder a largura do rolo do tecido.
-    if (larguraN > tecido.dimensao_m) {
+    if (exigeLarguraTecido(tipo) && larguraN > tecido.dimensao_m) {
       resultados.push({
         ok: false,
         index: i,

@@ -113,33 +113,34 @@ const CACHE_TTL_MS = 60 * 1000;
 let cache: { tecidos: TecidoGc[]; expiresAt: number } | null = null;
 const cachePorGrupo = new Map<string, { tecidos: TecidoGc[]; expiresAt: number }>();
 
-function produtoParaTecido(p: GcProduto): TecidoGc | null {
+function produtoParaTecido(p: GcProduto, exigirLargura = true): TecidoGc | null {
   const dimensao = dimensaoDoProduto(p);
-  if (dimensao === null) return null;
+  if (dimensao === null && exigirLargura) return null;
   const preco = precoByTier(p, 'varejo');
   return {
     id: p.id,
     nome: p.nome,
-    dimensao_m: dimensao,
+    dimensao_m: dimensao ?? 0,
     preco_venda: preco.venda,
     preco_custo: preco.custo,
     grupo_id: String(p.grupo_id ?? ''),
   };
 }
 
-async function tecidosDoGrupo(grupoId: string): Promise<TecidoGc[]> {
-  const cached = cachePorGrupo.get(grupoId);
+async function tecidosDoGrupo(grupoId: string, exigirLargura = true): Promise<TecidoGc[]> {
+  const cacheKey = `${grupoId}:${exigirLargura ? 'largura' : 'sem_largura'}`;
+  const cached = cachePorGrupo.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) return cached.tecidos;
 
   const produtos = await listarProdutos({ grupo_id: grupoId, ativo: 1 });
-  const tecidos = produtos.map(produtoParaTecido).filter((t): t is TecidoGc => t !== null);
-  cachePorGrupo.set(grupoId, { tecidos, expiresAt: Date.now() + CACHE_TTL_MS });
+  const tecidos = produtos.map((p) => produtoParaTecido(p, exigirLargura)).filter((t): t is TecidoGc => t !== null);
+  cachePorGrupo.set(cacheKey, { tecidos, expiresAt: Date.now() + CACHE_TTL_MS });
   return tecidos;
 }
 
-async function tecidosDosGrupos(grupoIds: string[]): Promise<TecidoGc[]> {
+async function tecidosDosGrupos(grupoIds: string[], exigirLargura = true): Promise<TecidoGc[]> {
   const grupos = [...new Set(grupoIds.map((g) => String(g).trim()).filter(Boolean))];
-  const todos = (await Promise.all(grupos.map(tecidosDoGrupo))).flat();
+  const todos = (await Promise.all(grupos.map((grupoId) => tecidosDoGrupo(grupoId, exigirLargura)))).flat();
   const porId = new Map<string, TecidoGc>();
   for (const tecido of todos) porId.set(tecido.id, tecido);
   return [...porId.values()];
@@ -150,7 +151,7 @@ async function tecidosPersiana(): Promise<TecidoGc[]> {
   if (cache && cache.expiresAt > Date.now()) return cache.tecidos;
 
   const produtos = await listarProdutos({ grupo_id: GRUPO_TECIDOS_PERSIANA, ativo: 1 });
-  const tecidos = produtos.map(produtoParaTecido).filter((t): t is TecidoGc => t !== null);
+  const tecidos = produtos.map((p) => produtoParaTecido(p)).filter((t): t is TecidoGc => t !== null);
   cache = { tecidos, expiresAt: Date.now() + CACHE_TTL_MS };
   return tecidos;
 }
@@ -163,7 +164,7 @@ async function tecidosPersiana(): Promise<TecidoGc[]> {
 export async function tecidosParaTipo(tipo: TipoPersiana): Promise<TecidoGc[]> {
   const calc = encontrarCalculadora(tipo);
   if (calc?.tecido_grupo_ids?.length) {
-    return tecidosDosGrupos(calc.tecido_grupo_ids);
+    return tecidosDosGrupos(calc.tecido_grupo_ids, calc.largura_tecido_obrigatoria !== false);
   }
   const todos = await tecidosPersiana();
   const subgrupo = SUBGRUPO_DO_TIPO[tipo];
@@ -171,9 +172,13 @@ export async function tecidosParaTipo(tipo: TipoPersiana): Promise<TecidoGc[]> {
 }
 
 /** Busca um tecido de persiana pelo id. */
-export async function buscarTecidoGc(id: string): Promise<TecidoGc | undefined> {
-  const gruposConfigurados = getCalculadoras().flatMap((c) => c.tecido_grupo_ids ?? []);
-  const todos = [...await tecidosPersiana(), ...await tecidosDosGrupos(gruposConfigurados)];
+export async function buscarTecidoGc(id: string, tipo?: TipoPersiana | null): Promise<TecidoGc | undefined> {
+  const calc = tipo ? encontrarCalculadora(tipo) : undefined;
+  const gruposConfigurados = calc?.tecido_grupo_ids?.length
+    ? calc.tecido_grupo_ids
+    : getCalculadoras().flatMap((c) => c.tecido_grupo_ids ?? []);
+  const exigirLargura = calc ? calc.largura_tecido_obrigatoria !== false : false;
+  const todos = [...await tecidosPersiana(), ...await tecidosDosGrupos(gruposConfigurados, exigirLargura)];
   return todos.find((t) => t.id === id);
 }
 

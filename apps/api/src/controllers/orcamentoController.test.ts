@@ -34,7 +34,10 @@ vi.mock('../services/calc/persianaPrecoGc', () => ({
 vi.mock('../services/calc/persianaPreco', () => ({
   ReceitaPendenteError: class ReceitaPendenteError extends Error {},
 }));
-vi.mock('../services/calc/calculadoras', () => ({ encontrarCalculadora: mocks.encontrarCalculadora }));
+vi.mock('../services/calc/calculadoras', () => ({
+  encontrarCalculadora: mocks.encontrarCalculadora,
+  exigeLarguraTecido: vi.fn(() => true),
+}));
 vi.mock('../services/gc/produtos', () => ({ criarProduto: vi.fn(), deletarProduto: vi.fn() }));
 vi.mock('../services/gc/orcamentos', () => ({ criarOrcamento: vi.fn() }));
 

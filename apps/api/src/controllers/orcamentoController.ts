@@ -12,7 +12,7 @@ import { ReceitaPendenteError } from '../services/calc/persianaPreco';
 import { precoPersianaItem, mapasDePrecoComponentes, componentesSnapshot } from '../services/calc/persianaPrecoGc';
 import { componenteInstalacao } from '../services/calc/instalacaoCalc';
 import { valorComRt, componenteRt } from '../services/calc/rtCalc';
-import { encontrarCalculadora } from '../services/calc/calculadoras';
+import { encontrarCalculadora, exigeLarguraTecido } from '../services/calc/calculadoras';
 
 import { indiceInstalacoes } from '../services/gc/instalacao';
 import {
@@ -152,7 +152,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
       throw new AppError(400, 'MEDIDAS_INVALIDAS', 'Largura e altura devem ser positivas em todos os itens.');
     }
     // RN-01: largura não pode exceder a largura do rolo do tecido.
-    if (largura > tecido.dimensao_m) {
+    if (exigeLarguraTecido(tipo) && largura > tecido.dimensao_m) {
       throw new AppError(400, 'RN01_LARGURA_EXCEDIDA', `O tecido ${tecido.nome} suporta até ${tecido.dimensao_m.toFixed(2).replace('.', ',')} m.`);
     }
 
@@ -354,7 +354,8 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   for (const it of itensEntrada) {
     const id = String(it.tecido_id);
     if (!tecidos.has(id)) {
-      const t = await buscarTecidoGc(id);
+      const tipo = isTipoPersiana(it.tipo ?? '') ? (it.tipo as TipoPersiana) : tipoFallback;
+      const t = await buscarTecidoGc(id, tipo);
       if (!t) throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido em todos os itens.');
       tecidos.set(id, t);
     }
@@ -495,7 +496,8 @@ export async function recalcularPersianasDeEntrada(
   for (const it of itens) {
     const id = String(it.tecido_id);
     if (!tecidos.has(id)) {
-      const t = await buscarTecidoGc(id);
+      const tipo = isTipoPersiana(it.tipo ?? '') ? (it.tipo as TipoPersiana) : tipoFallback;
+      const t = await buscarTecidoGc(id, tipo);
       if (!t) throw new AppError(400, 'TECIDO_INVALIDO', 'Tecido não encontrado ao recalcular o orçamento.');
       tecidos.set(id, t);
     }

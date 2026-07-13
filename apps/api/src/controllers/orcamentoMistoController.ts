@@ -60,7 +60,8 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   for (const it of itensEntrada) {
     const id = String(it.tecido_id);
     if (!tecidos.has(id)) {
-      const t = await buscarTecidoGc(id);
+      const tipoItem = isTipoPersiana(it.tipo ?? '') ? (it.tipo as TipoPersiana) : tipo;
+      const t = await buscarTecidoGc(id, tipoItem);
       if (!t) throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido em todas as persianas.');
       tecidos.set(id, t);
     }

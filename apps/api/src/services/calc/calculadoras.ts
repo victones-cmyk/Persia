@@ -29,6 +29,8 @@ export interface CalculadoraPersiana {
   familia: FamiliaPersiana;
   /** Grupos/subgrupos de tecido do GestãoClick permitidos nesta calculadora. */
   tecido_grupo_ids?: string[];
+  /** Quando falso, permite tecidos/produtos do GC sem o campo LARGURA cadastrado. */
+  largura_tecido_obrigatoria?: boolean;
   margem: number;
   dobrar_altura: boolean;
   base_venda: 'dimensao' | 'largura';
@@ -167,13 +169,41 @@ export const CALCULADORAS_DEFAULT: CalculadoraPersiana[] = [
       sem_bando: RECEITAS_PERSIANA.romana?.sem_bando,
     },
   },
+  {
+    id: 'persiana_vertical',
+    nome: 'Persiana Vertical',
+    db_tipo_produto: 'persiana_rolo_blackout',
+    codigo_gc: '',
+    familia: 'vertical',
+    tecido_grupo_ids: [],
+    largura_tecido_obrigatoria: false,
+    margem: 0,
+    dobrar_altura: false,
+    base_venda: 'largura',
+    fator_venda: 1.0,
+    mao_de_obra: 'MÃO DE OBRA PERSIANA VERTICAL',
+    ativo: true,
+    receitas: {
+      sem_bando: { componentes: [], tecido_qtd: 'LARGURA*ALTURA' },
+    },
+  },
 ];
 
 // ---- Armazenamento em memória (cache) ----
 let calculadorasCached: CalculadoraPersiana[] = [];
 
 function normalizarCalculadoras(calculadoras: CalculadoraPersiana[]): CalculadoraPersiana[] {
-  return calculadoras.map((c) => ({ ...c, ativo: c.ativo !== false }));
+  return calculadoras.map((c) => ({
+    ...c,
+    ativo: c.ativo !== false,
+    largura_tecido_obrigatoria: c.largura_tecido_obrigatoria !== false,
+  }));
+}
+
+function anexarDefaultsAusentes(calculadoras: CalculadoraPersiana[]): CalculadoraPersiana[] {
+  const ids = new Set(calculadoras.map((c) => c.id));
+  const faltantes = CALCULADORAS_DEFAULT.filter((c) => c.id === 'persiana_vertical' && !ids.has(c.id));
+  return faltantes.length > 0 ? [...calculadoras, ...faltantes] : calculadoras;
 }
 
 export function getCalculadoras(): CalculadoraPersiana[] {
@@ -188,12 +218,25 @@ export function encontrarCalculadora(id: string): CalculadoraPersiana | undefine
   return getCalculadoras().find((c) => c.id === id);
 }
 
+export function exigeLarguraTecido(tipo: string): boolean {
+  const calc = encontrarCalculadora(tipo);
+  return calc?.largura_tecido_obrigatoria !== false;
+}
+
 /** Carrega do banco no boot; se não houver registro (ou se o registro existente for legado sem codigo_gc), popula com as novas. */
 export async function carregarCalculadoras(prisma: PrismaClient): Promise<void> {
   try {
     const config = await prisma.configuracao.findUnique({ where: { chave: CHAVE_CALCULADORAS } });
-    if (config?.valor && JSON.parse(config.valor)[0]?.codigo_gc) {
-      calculadorasCached = normalizarCalculadoras(JSON.parse(config.valor));
+    const salvas = config?.valor ? JSON.parse(config.valor) : null;
+    if (salvas?.[0]?.codigo_gc !== undefined) {
+      const carregadas = anexarDefaultsAusentes(salvas);
+      calculadorasCached = normalizarCalculadoras(carregadas);
+      if (carregadas.length !== salvas.length && 'update' in prisma.configuracao) {
+        await (prisma.configuracao as unknown as { update: (args: unknown) => Promise<unknown> }).update({
+          where: { chave: CHAVE_CALCULADORAS },
+          data: { valor: JSON.stringify(calculadorasCached) },
+        });
+      }
     } else {
       // Popula ou sobrescreve com os novos defaults
       calculadorasCached = normalizarCalculadoras([...CALCULADORAS_DEFAULT]);

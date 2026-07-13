@@ -299,6 +299,7 @@ export function AdminCalculadoras() {
       codigo_gc: '',
       familia: 'rolo_bk_translucido',
       tecido_grupo_ids: [],
+      largura_tecido_obrigatoria: true,
       margem: 0.15,
       dobrar_altura: false,
       base_venda: 'dimensao',
@@ -748,6 +749,7 @@ export function AdminCalculadoras() {
                       <p><strong>Família:</strong> {FAMILIAS.find((f) => f.value === c.familia)?.label ?? c.familia}</p>
                       <p><strong>Tipo-base BD:</strong> {DB_TIPOS_PRODUTO.find((d) => d.value === c.db_tipo_produto)?.label ?? c.db_tipo_produto}</p>
                       <p><strong>Grupos tecido GC:</strong> {c.tecido_grupo_ids?.length ? c.tecido_grupo_ids.join(', ') : 'Padrão'}</p>
+                      <p><strong>Largura do tecido:</strong> {c.largura_tecido_obrigatoria === false ? 'Não obrigatória' : 'Obrigatória'}</p>
                       <p><strong>Variantes Ativas:</strong> {VARIANTES.filter((v) => c.receitas[v.key] !== undefined).map((v) => v.label).join(', ')}</p>
                     </div>
                   </div>
@@ -1006,6 +1008,19 @@ export function AdminCalculadoras() {
                     />
                     <label htmlFor="dobrar-alt" className="text-sm-ui font-semibold text-neutral-700 cursor-pointer">
                       Dobrar Altura no Cálculo (Double Vision)
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <input
+                      id="largura-tecido-obrigatoria"
+                      type="checkbox"
+                      checked={editandoCalc.largura_tecido_obrigatoria !== false}
+                      onChange={(e) => setEditandoCalc({ ...editandoCalc, largura_tecido_obrigatoria: e.target.checked })}
+                      style={{ accentColor: 'var(--action-add)', width: 18, height: 18 }}
+                    />
+                    <label htmlFor="largura-tecido-obrigatoria" className="text-sm-ui font-semibold text-neutral-700 cursor-pointer">
+                      Exigir largura cadastrada no tecido do GestãoClick
                     </label>
                   </div>
                 </div>

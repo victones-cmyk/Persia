@@ -169,7 +169,7 @@ export function TecidoSearch({
                 style={{ background: i === destaque ? 'var(--neutral-100)' : undefined }}
               >
                 <span className="text-neutral-800">{t.nome}</span>
-                <span className="text-xs-ui text-neutral-500"> — {formatNum(t.dimensao_m)} m</span>
+                <span className="text-xs-ui text-neutral-500"> — {t.dimensao_m > 0 ? `${formatNum(t.dimensao_m)} m` : 'sem largura cadastrada'}</span>
               </button>
             ))
           )}

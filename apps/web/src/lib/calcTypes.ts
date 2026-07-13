@@ -23,6 +23,7 @@ export interface CalculadoraPersiana {
   codigo_gc: string;
   familia: FamiliaPersiana;
   tecido_grupo_ids?: string[];
+  largura_tecido_obrigatoria?: boolean;
   margem: number;
   dobrar_altura: boolean;
   base_venda: 'dimensao' | 'largura';
