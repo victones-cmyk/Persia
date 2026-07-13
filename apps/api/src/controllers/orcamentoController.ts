@@ -136,7 +136,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
   preparados: ItemPreparado[];
   valorBrutoTotal: number;
 }> {
-  const { precos, custos } = await mapasDePrecoComponentes();
+  const { precos, custos, componentesPorNome } = await mapasDePrecoComponentes();
   const idxInst = await indiceInstalacoes();
   const preparados: ItemPreparado[] = [];
   let valorBrutoTotal = 0;
@@ -168,6 +168,9 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
         preco_tecido_custo: tecido.preco_custo,
         precos,
         custos,
+        componentesPorNome,
+        cor_acessorio: it.cor_acessorio,
+        cor_base: (it.base || it.cor_acessorio) as Cor,
       });
     } catch (err) {
       if (err instanceof ReceitaPendenteError) throw new AppError(400, 'RECEITA_PENDENTE', err.message);

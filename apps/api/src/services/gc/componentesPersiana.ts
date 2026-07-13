@@ -25,7 +25,7 @@ function precoCustoVarejo(p: GcProduto): { preco: number; custo: number } {
   };
 }
 
-export interface PrecoComponente { nome: string; preco: number; custo: number }
+export interface PrecoComponente { codigo_interno: string; nome: string; preco: number; custo: number }
 
 let cache: { idx: Map<string, PrecoComponente>; expira: number } | null = null;
 
@@ -39,7 +39,7 @@ export async function indicePrecosComponentes(): Promise<Map<string, PrecoCompon
       const ci = String(p.codigo_interno ?? '').trim();
       if (ci && !idx.has(ci)) {
         const { preco, custo } = precoCustoVarejo(p);
-        idx.set(ci, { nome: p.nome, preco, custo });
+        idx.set(ci, { codigo_interno: ci, nome: p.nome, preco, custo });
       }
     }
   }

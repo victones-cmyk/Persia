@@ -77,7 +77,7 @@ function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: num
 
 /** POST /api/calcular/persiana — recebe o formulário, retorna breakdown + valor_bruto. */
 export async function calcularPersianaController(req: Request, res: Response): Promise<void> {
-  const { tipo, largura, altura, acionamento, tc, tecido_id, instalacao_id } = req.body ?? {};
+  const { tipo, largura, altura, acionamento, tc, tecido_id, instalacao_id, cor_acessorio, base } = req.body ?? {};
 
   if (!isTipoPersiana(tipo)) {
     throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
@@ -107,7 +107,7 @@ export async function calcularPersianaController(req: Request, res: Response): P
     return;
   }
 
-  const { precos, custos } = await mapasDePrecoComponentes();
+  const { precos, custos, componentesPorNome } = await mapasDePrecoComponentes();
   const inst = instalacao_id ? (await indiceInstalacoes()).get(String(instalacao_id)) ?? null : null;
   try {
     const item = precoPersianaItem({
@@ -120,6 +120,9 @@ export async function calcularPersianaController(req: Request, res: Response): P
       preco_tecido_custo: tecido.preco_custo,
       precos,
       custos,
+      componentesPorNome,
+      cor_acessorio,
+      cor_base: base || cor_acessorio,
     });
     res.json({
       resultado: montarResultado(item, tecido, larguraN, alturaN, inst),
@@ -157,7 +160,7 @@ export async function calcularPersianaLoteController(req: Request, res: Response
     return compatCache.get(tipo)!.filter((t) => t.dimensao_m >= larguraN);
   };
 
-  const { precos, custos } = await mapasDePrecoComponentes();
+  const { precos, custos, componentesPorNome } = await mapasDePrecoComponentes();
   const idxInst = await indiceInstalacoes();
   const resultados = [];
   let totalBruto = 0;
@@ -205,6 +208,9 @@ export async function calcularPersianaLoteController(req: Request, res: Response
         preco_tecido_custo: tecido.preco_custo,
         precos,
         custos,
+        componentesPorNome,
+        cor_acessorio: it.cor_acessorio,
+        cor_base: it.base || it.cor_acessorio,
       });
       const resultado = montarResultado(item, tecido, larguraN, alturaN, inst);
       totalBruto = roundHalfUp(totalBruto + resultado.valor);

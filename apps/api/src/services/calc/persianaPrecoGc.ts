@@ -8,18 +8,33 @@ import { calcularPrecoPersiana, type ResultadoPrecoPersiana } from './persianaPr
 import { indicePrecosComponentes } from '../gc/componentesPersiana';
 import { getRegras } from './regras';
 import { roundHalfUp } from './arredondamento';
-import type { TipoPersiana, Acionamento } from './tipos';
+import type { TipoPersiana, Acionamento, Cor } from './tipos';
 
 /** Mapas codigo_interno → preço de VENDA e de CUSTO (VAREJO) dos componentes. */
-export async function mapasDePrecoComponentes(): Promise<{ precos: Map<string, number>; custos: Map<string, number> }> {
+function chaveNome(nome: string): string {
+  return nome
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+export async function mapasDePrecoComponentes(): Promise<{
+  precos: Map<string, number>;
+  custos: Map<string, number>;
+  componentesPorNome: Map<string, { codigo_interno: string; nome: string; preco: number; custo: number }>;
+}> {
   const idx = await indicePrecosComponentes();
   const precos = new Map<string, number>();
   const custos = new Map<string, number>();
+  const componentesPorNome = new Map<string, { codigo_interno: string; nome: string; preco: number; custo: number }>();
   for (const [k, v] of idx) {
     precos.set(k, v.preco);
     custos.set(k, v.custo);
+    componentesPorNome.set(chaveNome(v.nome), v);
   }
-  return { precos, custos };
+  return { precos, custos, componentesPorNome };
 }
 
 /** TC padrão (RN-04): usa o valor informado ou altura × tc_fator (regra parametrizável). */
@@ -50,9 +65,21 @@ export function precoPersianaItem(args: {
   preco_tecido_custo?: number;
   precos: Map<string, number>;
   custos: Map<string, number>;
+  componentesPorNome?: Map<string, { codigo_interno: string; nome: string; preco: number; custo: number }>;
+  cor_acessorio?: Cor | null;
+  cor_base?: Cor | null;
 }): PrecoPersianaItem {
   const tc = tcPadrao(args.altura, args.tc);
-  const base = { tipo: args.tipo, acionamento: args.acionamento, largura: args.largura, altura: args.altura, tc };
+  const base = {
+    tipo: args.tipo,
+    acionamento: args.acionamento,
+    largura: args.largura,
+    altura: args.altura,
+    tc,
+    componentesPorNome: args.componentesPorNome,
+    cor_acessorio: args.cor_acessorio,
+    cor_base: args.cor_base,
+  };
   const venda = calcularPrecoPersiana({ ...base, preco_tecido: args.preco_tecido, precos: args.precos });
   const custo = calcularPrecoPersiana({ ...base, preco_tecido: args.preco_tecido_custo ?? 0, precos: args.custos });
   return { venda, tc, valor: venda.valor, valor_custo: custo.valor };

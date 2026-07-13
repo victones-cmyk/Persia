@@ -8,7 +8,7 @@ import { evalQuantidade, type VarsQtd } from './formula';
 import { roundHalfUp } from './arredondamento';
 import { RECEITAS_PERSIANA, type VariantePersiana } from './persianaReceitas.data';
 import { encontrarCalculadora, type FamiliaPersiana } from './calculadoras';
-import type { TipoPersiana, Acionamento } from './tipos';
+import type { TipoPersiana, Acionamento, Cor } from './tipos';
 
 /** Família (receita) a partir do tipo de persiana. */
 export function familiaDoTipo(tipo: TipoPersiana): FamiliaPersiana {
@@ -74,6 +74,11 @@ export interface LinhaCustoPersiana {
   preco: number;
   subtotal: number;
 }
+export interface ComponentePrecoLookup {
+  codigo_interno: string;
+  nome: string;
+  preco: number;
+}
 export interface ResultadoPrecoPersiana {
   familia: FamiliaPersiana;
   variante: VariantePersiana;
@@ -90,6 +95,54 @@ export interface EntradaPrecoPersiana {
   tc: number;
   preco_tecido: number; // R$ por unidade conforme a fórmula da família (altura ou m²)
   precos: Map<string, number>; // codigo_interno → preço VAREJO do componente
+  componentesPorNome?: Map<string, ComponentePrecoLookup>;
+  cor_acessorio?: Cor | null;
+  cor_base?: Cor | null;
+}
+
+const COR_UPPER: Record<Cor, string> = {
+  Branco: 'BRANCO',
+  Bege: 'BEGE',
+  Cinza: 'CINZA',
+  Preto: 'PRETO',
+};
+
+function chaveNome(nome: string): string {
+  return nome
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+function ehComponenteBase(descricao: string): boolean {
+  return /\b(?:BASE|TAMPA DA BASE|EIXO DOUBLE VISION)\b/i.test(descricao);
+}
+
+function trocarCorDescricao(descricao: string, cor: Cor | null | undefined): string {
+  if (!cor) return descricao;
+  const alvo = COR_UPPER[cor];
+  return descricao
+    .replace(/\bCOR\s+(?:BRANCO|BEGE|CINZA|PRETO)\b/gi, `COR ${alvo}`)
+    .replace(/\b(?:BRANCO|BEGE|CINZA|PRETO)\b(?=\s*$)/gi, alvo);
+}
+
+function resolverComponenteColorido(
+  componente: { codigo_interno: string; descricao: string },
+  e: EntradaPrecoPersiana,
+): { codigo_interno: string; descricao: string; preco: number } {
+  const cor = ehComponenteBase(componente.descricao) ? e.cor_base : e.cor_acessorio;
+  const descricao = trocarCorDescricao(componente.descricao, cor);
+  const encontrado = e.componentesPorNome?.get(chaveNome(descricao));
+  if (encontrado) {
+    return { codigo_interno: encontrado.codigo_interno, descricao: encontrado.nome, preco: encontrado.preco };
+  }
+  return {
+    codigo_interno: componente.codigo_interno,
+    descricao,
+    preco: e.precos.get(componente.codigo_interno) ?? 0,
+  };
 }
 
 export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPersiana {
@@ -116,9 +169,10 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
   let total = 0;
   const itens: LinhaCustoPersiana[] = receita.componentes.map((c) => {
     const q = evalQuantidade(c.qtd, vars);
-    const preco = e.precos.get(c.codigo_interno) ?? 0;
+    const componente = resolverComponenteColorido(c, e);
+    const preco = componente.preco;
     total += q * preco;
-    return { codigo_interno: c.codigo_interno, descricao: c.descricao, quantidade: roundHalfUp(q, 4), preco, subtotal: roundHalfUp(q * preco) };
+    return { codigo_interno: componente.codigo_interno, descricao: componente.descricao, quantidade: roundHalfUp(q, 4), preco, subtotal: roundHalfUp(q * preco) };
   });
 
   const qTec = evalQuantidade(receita.tecido_qtd, vars);
@@ -133,4 +187,3 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
 
   return { familia, variante, itens, tecido, valor: roundHalfUp(total) };
 }
-

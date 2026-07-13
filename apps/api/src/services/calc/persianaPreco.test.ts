@@ -13,6 +13,34 @@ describe('evalQuantidade (avaliador com parênteses)', () => {
 });
 
 describe('calcularPrecoPersiana — bate com a planilha do Victor', () => {
+  it('usa componentes da cor escolhida quando existem no indice do GestaoClick', () => {
+    const componentesPorNome = new Map<string, { codigo_interno: string; nome: string; preco: number }>([
+      ['KIT COMANDO 38MM COR BEGE', { codigo_interno: 'KIT-BEGE', nome: 'KIT COMANDO 38MM COR BEGE', preco: 42 }],
+      ['BASE CONICA COR BEGE', { codigo_interno: 'BASE-BEGE', nome: 'BASE CONICA COR BEGE', preco: 19.5 }],
+      ['TAMPA DA BASE CONICA COR BEGE', { codigo_interno: 'TAMPA-BASE-BEGE', nome: 'TAMPA DA BASE CONICA COR BEGE', preco: 0.9 }],
+    ]);
+
+    const r = calcularPrecoPersiana({
+      tipo: 'persiana_rolo_blackout',
+      acionamento: 'com_barra',
+      largura: 2,
+      altura: 1.8,
+      tc: 1.5,
+      preco_tecido: 0,
+      precos: new Map(),
+      componentesPorNome,
+      cor_acessorio: 'Bege',
+      cor_base: 'Bege',
+    });
+
+    expect(r.itens).toEqual(expect.arrayContaining([
+      expect.objectContaining({ codigo_interno: 'KIT-BEGE', descricao: 'KIT COMANDO 38MM COR BEGE' }),
+      expect.objectContaining({ codigo_interno: 'BASE-BEGE', descricao: 'BASE CONICA COR BEGE' }),
+      expect.objectContaining({ codigo_interno: 'TAMPA-BASE-BEGE', descricao: 'TAMPA DA BASE CONICA COR BEGE' }),
+    ]));
+    expect(r.itens.some((i) => /KIT COMANDO 38MM COR BRANCO/.test(i.descricao))).toBe(false);
+  });
+
   it('rolo_bk_translucido/com_bando = R$ 654.32', () => {
     const precos = new Map<string, number>([['5014037651965',25],['9232349342193',42],['4650887475882',25],['2048469075809',6.9],['2067932865600',7],['6797020744804',57],['888818154157',7],['3267387682319',1.1],['9811648898558',19.5],['7620761718926',0.9],['6268408018170',3],['989396838987',0.3],['4627438942116',0.3],['5752963489736',8],['4366261029463',10],['3211432323511',4],['1069063700105',1.94]]);
     const r = calcularPrecoPersiana({ tipo: 'persiana_rolo_blackout', acionamento: 'com_bando', largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 132.54, precos });
