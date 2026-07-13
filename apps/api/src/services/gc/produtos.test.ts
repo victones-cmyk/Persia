@@ -39,7 +39,7 @@ describe('payload de produto sintetico', () => {
     expect(urlProdutoUnica('1783190400000001')).toBe('persia-1783190400000001');
   });
 
-  it('envia codigo interno numerico unico sem alterar o nome', async () => {
+  it('envia codigo interno numerico unico e serial no nome', async () => {
     await criarProduto({
       nome: 'Sala, Cortina Wave TEX-101 2,00X2,50',
       descricao: 'Fixação: Trilho\nAbertura: Sem abertura',
@@ -51,7 +51,7 @@ describe('payload de produto sintetico', () => {
       method: 'POST',
       url: '/api/produtos',
       data: expect.objectContaining({
-        nome: 'Sala, Cortina Wave TEX-101 2,00X2,50',
+        nome: expect.stringMatching(/^Sala, Cortina Wave TEX-101 2,00X2,50 #\d{8}$/),
         descricao: 'Fixação: Trilho | Abertura: Sem abertura',
         codigo_interno: expect.stringMatching(/^\d+$/),
         url: expect.stringMatching(/^persia-\d+$/),
@@ -72,8 +72,9 @@ describe('payload de produto sintetico', () => {
     }));
     expect(gcRequest).toHaveBeenCalledTimes(2);
     expect(vi.mocked(gcRequest).mock.calls[1][0]).toEqual(expect.objectContaining({ method: 'POST', url: '/api/produtos' }));
-    expect(vi.mocked(gcRequest).mock.calls[0][0].data.nome).toBe('Sala, Cortina Wave TEX-101 2,00X2,50');
+    expect(vi.mocked(gcRequest).mock.calls[0][0].data.nome).toMatch(/^Sala, Cortina Wave TEX-101 2,00X2,50 #\d{8}$/);
     expect(vi.mocked(gcRequest).mock.calls[1][0].data.nome).toMatch(/^Sala, Cortina Wave TEX-101 2,00X2,50 #\d{8}$/);
+    expect(vi.mocked(gcRequest).mock.calls[1][0].data.nome).not.toBe(vi.mocked(gcRequest).mock.calls[0][0].data.nome);
   });
 
   it('tenta novamente quando a mensagem de URL duplicada vem dentro do JSON do GestaoClick', async () => {
@@ -90,7 +91,8 @@ describe('payload de produto sintetico', () => {
     expect(primeiraUrl).toMatch(/^persia-\d+$/);
     expect(segundaUrl).toMatch(/^persia-\d+$/);
     expect(segundaUrl).not.toBe(primeiraUrl);
-    expect(vi.mocked(gcRequest).mock.calls[0][0].data.nome).toBe('Sala, Cortina Wave TEX-101 2,00X2,50');
+    expect(vi.mocked(gcRequest).mock.calls[0][0].data.nome).toMatch(/^Sala, Cortina Wave TEX-101 2,00X2,50 #\d{8}$/);
     expect(vi.mocked(gcRequest).mock.calls[1][0].data.nome).toMatch(/^Sala, Cortina Wave TEX-101 2,00X2,50 #\d{8}$/);
+    expect(vi.mocked(gcRequest).mock.calls[1][0].data.nome).not.toBe(vi.mocked(gcRequest).mock.calls[0][0].data.nome);
   });
 });

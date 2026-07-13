@@ -72,7 +72,7 @@ export async function criarProduto(p: NovoProdutoGc): Promise<ResultadoProduto> 
 
   for (let tentativa = 0; tentativa < 3; tentativa += 1) {
     const codigo_interno = novoCodigoInterno();
-    const nome = tentativa === 0 ? nomeBase : nomeProdutoGcComCodigo(nomeBase, codigo_interno);
+    const nome = nomeProdutoGcComCodigo(nomeBase, codigo_interno);
     const payload = {
       nome,
       ...(descricao ? { descricao } : {}),
