@@ -64,6 +64,12 @@ function itemVazio(): ItemForm {
 
 const ehMotorizado = (ac: string) => ac === 'motorizado_com_bando' || ac === 'motorizado_sem_bando';
 const COMANDOS_VERTICAL = ['Lateral', 'Lateral invertido', 'Central', 'Central com junção'] as const;
+const ACIONAMENTOS_POR_VARIANTE: Array<{ receita: keyof CalculadoraPersiana['receitas']; value: Acionamento; label: string }> = [
+  { receita: 'com_bando', value: 'com_bando', label: 'Com Bandô' },
+  { receita: 'sem_bando', value: 'com_barra', label: 'Sem Bandô' },
+  { receita: 'motor_com_bando', value: 'motorizado_com_bando', label: 'Motorizado com Bandô' },
+  { receita: 'motor_sem_bando', value: 'motorizado_sem_bando', label: 'Motorizado sem Bandô' },
+];
 
 function normalizarRolamento(valor: string | null | undefined): string {
   if (valor === 'Dianteiro') return 'Normal';
@@ -219,14 +225,25 @@ export function PersianaForm({
     setItens((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
 
+  function opcoesAcionamentoDaCalculadora(calc: CalculadoraPersiana | undefined): { value: Acionamento; label: string }[] {
+    if (!calc) return ACIONAMENTOS;
+    const opcoes = ACIONAMENTOS_POR_VARIANTE
+      .filter((op) => calc.receitas?.[op.receita] !== undefined)
+      .map(({ value, label }) => ({ value, label }));
+    return opcoes.length > 0 ? opcoes : ACIONAMENTOS;
+  }
+
   function onTipoChange(idx: number, novoTipo: TipoPersiana | '') {
     garantirTecidos(novoTipo);
     const calc = calculadoras.find((c) => c.id === novoTipo);
     const vertical = calc?.familia === 'vertical';
+    const acionamentoAtual = itens[idx]?.acionamento;
+    const acionamentoValido = acionamentoAtual && opcoesAcionamentoDaCalculadora(calc).some((op) => op.value === acionamentoAtual);
     // Trocar de tipo invalida o tecido escolhido (a lista muda).
     atualizar(idx, {
       tipo: novoTipo,
       tecido_id: '',
+      ...(acionamentoValido ? {} : { acionamento: '', instalacao_id: '', instManual: false }),
       ...(vertical ? { cor: '', rolamento: '', base: '', comando: '' } : {}),
     });
     setErros((p) => { const n = { ...p }; delete n[idx]; return n; });
@@ -301,6 +318,7 @@ export function PersianaForm({
     && it.tecido_id !== ''
     && (ehVertical(it) || it.cor !== '')
     && it.acionamento !== ''
+    && opcoesAcionamentoDaCalculadora(calculadoraDoItem(it)).some((op) => op.value === it.acionamento)
     && Number(it.largura) > 0
     && Number(it.altura) > 0;
   // Só os itens completos entram no cálculo; itens incompletos bloqueiam o envio.
@@ -406,6 +424,7 @@ export function PersianaForm({
           const nomeProduto = nomeProdutoItem(it);
           const vertical = ehVertical(it);
           const opcoesComando = vertical ? COMANDOS_VERTICAL : COMANDOS;
+          const opcoesAcionamento = opcoesAcionamentoDaCalculadora(calculadoraDoItem(it));
           return (
           <div key={it.id} className="rounded-sm border border-neutral-300 p-3" style={{ background: 'var(--neutral-50)' }}>
             <div className={`flex items-center justify-between ${minimizado ? 'mb-0' : 'mb-2'}`}>
@@ -493,7 +512,7 @@ export function PersianaForm({
                 <label className="form-label" htmlFor={`acionamento-persiana-${idx}`}>Acionamento<span className="label-required">*</span></label>
                 <select id={`acionamento-persiana-${idx}`} className="input" value={it.acionamento} onChange={(e) => onAcionamentoChange(idx, e.target.value as Acionamento)}>
                   <option value="">—</option>
-                  {ACIONAMENTOS.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+                  {opcoesAcionamento.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
               </div>
             </div>
