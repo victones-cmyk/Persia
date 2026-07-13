@@ -8,7 +8,7 @@ import { RECEITAS_PERSIANA } from './persianaReceitas.data';
 
 export const CHAVE_CALCULADORAS = 'calculadoras_persiana';
 
-export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana' | 'romana_tela_solar';
+export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana' | 'romana_tela_solar' | 'vertical';
 
 export interface ComponenteCalculadora {
   codigo_interno: string;
@@ -27,6 +27,8 @@ export interface CalculadoraPersiana {
   db_tipo_produto: string; // Mapeamento para o enum TipoProduto do prisma
   codigo_gc: string; // ID do produto no GestãoClick (e.g. '2591')
   familia: FamiliaPersiana;
+  /** Grupos/subgrupos de tecido do GestãoClick permitidos nesta calculadora. */
+  tecido_grupo_ids?: string[];
   margem: number;
   dobrar_altura: boolean;
   base_venda: 'dimensao' | 'largura';

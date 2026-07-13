@@ -12,6 +12,7 @@
 
 import { listarProdutos, type GcProduto } from './catalogos';
 import type { TipoPersiana } from '../calc/tipos';
+import { encontrarCalculadora, getCalculadoras } from '../calc/calculadoras';
 
 export interface TecidoGc {
   id: string;
@@ -110,26 +111,46 @@ export function precoByTier(p: GcProduto, tier: PriceTier): { venda: number; cus
 // Cache server-side dos tecidos de persiana (curto: novos tecidos do GC aparecem em até 1 min).
 const CACHE_TTL_MS = 60 * 1000;
 let cache: { tecidos: TecidoGc[]; expiresAt: number } | null = null;
+const cachePorGrupo = new Map<string, { tecidos: TecidoGc[]; expiresAt: number }>();
+
+function produtoParaTecido(p: GcProduto): TecidoGc | null {
+  const dimensao = dimensaoDoProduto(p);
+  if (dimensao === null) return null;
+  const preco = precoByTier(p, 'varejo');
+  return {
+    id: p.id,
+    nome: p.nome,
+    dimensao_m: dimensao,
+    preco_venda: preco.venda,
+    preco_custo: preco.custo,
+    grupo_id: String(p.grupo_id ?? ''),
+  };
+}
+
+async function tecidosDoGrupo(grupoId: string): Promise<TecidoGc[]> {
+  const cached = cachePorGrupo.get(grupoId);
+  if (cached && cached.expiresAt > Date.now()) return cached.tecidos;
+
+  const produtos = await listarProdutos({ grupo_id: grupoId, ativo: 1 });
+  const tecidos = produtos.map(produtoParaTecido).filter((t): t is TecidoGc => t !== null);
+  cachePorGrupo.set(grupoId, { tecidos, expiresAt: Date.now() + CACHE_TTL_MS });
+  return tecidos;
+}
+
+async function tecidosDosGrupos(grupoIds: string[]): Promise<TecidoGc[]> {
+  const grupos = [...new Set(grupoIds.map((g) => String(g).trim()).filter(Boolean))];
+  const todos = (await Promise.all(grupos.map(tecidosDoGrupo))).flat();
+  const porId = new Map<string, TecidoGc>();
+  for (const tecido of todos) porId.set(tecido.id, tecido);
+  return [...porId.values()];
+}
 
 /** Todos os tecidos de PERSIANA (grupo 235486), preço VAREJO. */
 async function tecidosPersiana(): Promise<TecidoGc[]> {
   if (cache && cache.expiresAt > Date.now()) return cache.tecidos;
 
   const produtos = await listarProdutos({ grupo_id: GRUPO_TECIDOS_PERSIANA, ativo: 1 });
-  const tecidos: TecidoGc[] = [];
-  for (const p of produtos) {
-    const dimensao = dimensaoDoProduto(p);
-    if (dimensao === null) continue; // sem largura não dá para calcular (RN-01/RN-02)
-    const preco = precoByTier(p, 'varejo');
-    tecidos.push({
-      id: p.id,
-      nome: p.nome,
-      dimensao_m: dimensao,
-      preco_venda: preco.venda,
-      preco_custo: preco.custo,
-      grupo_id: String(p.grupo_id ?? ''),
-    });
-  }
+  const tecidos = produtos.map(produtoParaTecido).filter((t): t is TecidoGc => t !== null);
   cache = { tecidos, expiresAt: Date.now() + CACHE_TTL_MS };
   return tecidos;
 }
@@ -140,6 +161,10 @@ async function tecidosPersiana(): Promise<TecidoGc[]> {
  * 4 subgrupos de material. O grupo coringa "PERSIANA FD" fica de fora (Victor 19/06).
  */
 export async function tecidosParaTipo(tipo: TipoPersiana): Promise<TecidoGc[]> {
+  const calc = encontrarCalculadora(tipo);
+  if (calc?.tecido_grupo_ids?.length) {
+    return tecidosDosGrupos(calc.tecido_grupo_ids);
+  }
   const todos = await tecidosPersiana();
   const subgrupo = SUBGRUPO_DO_TIPO[tipo];
   return todos.filter((t) => t.grupo_id === subgrupo);
@@ -147,7 +172,8 @@ export async function tecidosParaTipo(tipo: TipoPersiana): Promise<TecidoGc[]> {
 
 /** Busca um tecido de persiana pelo id. */
 export async function buscarTecidoGc(id: string): Promise<TecidoGc | undefined> {
-  const todos = await tecidosPersiana();
+  const gruposConfigurados = getCalculadoras().flatMap((c) => c.tecido_grupo_ids ?? []);
+  const todos = [...await tecidosPersiana(), ...await tecidosDosGrupos(gruposConfigurados)];
   return todos.find((t) => t.id === id);
 }
 
@@ -186,4 +212,5 @@ export async function buscarTecidoCortinaGc(id: string): Promise<TecidoGc | unde
 export function invalidarCacheTecidos(): void {
   cache = null;
   cacheCortina = null;
+  cachePorGrupo.clear();
 }

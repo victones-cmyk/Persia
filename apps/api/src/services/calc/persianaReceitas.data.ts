@@ -4,7 +4,7 @@
 // qtd = fórmula de QUANTIDADE (sem preço); custo = qtd × preço (GC, pelo codigo_interno).
 // Preço final da persiana = soma de tudo, a VAREJO (Victor v.5.1). Romana: pendente.
 
-export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana' | 'romana_tela_solar';
+export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana' | 'romana_tela_solar' | 'vertical';
 // Manual (KIT COMANDO) e motorizada (KIT MOTOR), cada uma com/sem bandô.
 // Motor cobre rolo_bk_translucido e double_vision (planilhas v.2, 26/06/2026).
 // tela_solar e romana motor: pendentes do Victor.

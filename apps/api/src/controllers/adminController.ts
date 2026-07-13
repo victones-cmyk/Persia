@@ -6,7 +6,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { validarSenha } from '../lib/senha';
-import { listarFuncionarios } from '../services/gc/catalogos';
+import { listarFuncionarios, listarGruposProdutos, listarProdutos } from '../services/gc/catalogos';
 import { getRegras, salvarRegras, REGRAS_DEFAULT } from '../services/calc/regras';
 import { composicaoCalculo } from '../services/calc/composicao';
 import { getCalculadoras, salvarCalculadoras } from '../services/calc/calculadoras';
@@ -92,6 +92,35 @@ export async function atualizarCalculadorasCortina(req: Request, res: Response):
     data: { usuario_id: sessao.id, acao: 'calculadoras_cortina_atualizadas', detalhe: {} },
   });
   res.json({ calculadoras: salvas });
+}
+
+export async function listarGruposProdutosGc(_req: Request, res: Response): Promise<void> {
+  try {
+    const grupos = (await listarGruposProdutos())
+      .map((g) => ({ id: String(g.id), grupo_pai_id: g.grupo_pai_id ? String(g.grupo_pai_id) : null, nome: g.nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    res.json({ grupos, gc_offline: false });
+  } catch {
+    res.json({ grupos: [], gc_offline: true });
+  }
+}
+
+export async function listarProdutosGc(req: Request, res: Response): Promise<void> {
+  try {
+    const grupoId = typeof req.query.grupo_id === 'string' ? req.query.grupo_id.trim() : '';
+    const produtos = (await listarProdutos({ ...(grupoId ? { grupo_id: grupoId } : {}), ativo: 1 }))
+      .map((p) => ({
+        id: String(p.id),
+        nome: p.nome,
+        codigo_interno: String(p.codigo_interno ?? ''),
+        grupo_id: String(p.grupo_id ?? ''),
+        nome_grupo: p.nome_grupo,
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    res.json({ produtos, gc_offline: false });
+  } catch {
+    res.json({ produtos: [], gc_offline: true });
+  }
 }
 
 

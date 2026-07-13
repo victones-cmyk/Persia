@@ -3,7 +3,7 @@
 
 export type TipoPersiana = string;
 
-export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana' | 'romana_tela_solar';
+export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana' | 'romana_tela_solar' | 'vertical';
 
 export interface ComponenteCalculadora {
   codigo_interno: string;
@@ -22,6 +22,7 @@ export interface CalculadoraPersiana {
   db_tipo_produto: string;
   codigo_gc: string;
   familia: FamiliaPersiana;
+  tecido_grupo_ids?: string[];
   margem: number;
   dobrar_altura: boolean;
   base_venda: 'dimensao' | 'largura';
@@ -98,7 +99,7 @@ export interface LinhaCustoPersiana {
 export interface ResultadoPersiana {
   tipo?: TipoPersiana;
   codigo_gc?: string;
-  familia?: 'rolo' | 'romana';
+  familia?: string;
   largura: number;
   altura: number;
   dimensao: number;

@@ -20,6 +20,7 @@ import {
   faCopy,
   faBan,
   faCircleCheck,
+  faMagnifyingGlass,
 } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
@@ -43,6 +44,7 @@ const FAMILIAS = [
   { value: 'tela_solar', label: 'Tela Solar' },
   { value: 'romana', label: 'Romana' },
   { value: 'romana_tela_solar', label: 'Romana Tela Solar' },
+  { value: 'vertical', label: 'Vertical' },
 ];
 
 const VARIANTES = [
@@ -66,6 +68,8 @@ const FIXACOES_CORTINA = [
 ];
 
 type VarianteKey = (typeof VARIANTES)[number]['key'];
+interface GrupoProdutoGc { id: string; grupo_pai_id: string | null; nome: string }
+interface ProdutoGcResumo { id: string; nome: string; codigo_interno: string; grupo_id: string; nome_grupo: string }
 
 export function AdminCalculadoras() {
   const { showToast } = useToast();
@@ -76,6 +80,13 @@ export function AdminCalculadoras() {
   // Dados
   const [calculadorasPersiana, setCalculadorasPersiana] = useState<CalculadoraPersiana[]>([]);
   const [calculadorasCortina, setCalculadorasCortina] = useState<CalculadoraCortina[]>([]);
+  const [gruposGc, setGruposGc] = useState<GrupoProdutoGc[]>([]);
+  const [produtosGc, setProdutosGc] = useState<ProdutoGcResumo[]>([]);
+  const [gcOffline, setGcOffline] = useState(false);
+  const [grupoProdutosSelecionado, setGrupoProdutosSelecionado] = useState('');
+  const [buscaGrupoGc, setBuscaGrupoGc] = useState('');
+  const [buscaProdutoGc, setBuscaProdutoGc] = useState('');
+  const [carregandoCatalogoGc, setCarregandoCatalogoGc] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [restaurarAberto, setRestaurarAberto] = useState(false);
@@ -107,9 +118,48 @@ export function AdminCalculadoras() {
     }
   }
 
+  async function carregarGruposGc() {
+    if (gruposGc.length > 0 || carregandoCatalogoGc) return;
+    setCarregandoCatalogoGc(true);
+    try {
+      const r = await api.get<{ grupos: GrupoProdutoGc[]; gc_offline?: boolean }>('/admin/gc/grupos-produtos');
+      setGruposGc(r.grupos);
+      setGcOffline(Boolean(r.gc_offline));
+    } catch (e) {
+      setGcOffline(true);
+      showToast('error', 'Falha ao carregar grupos do GestãoClick', e instanceof ApiError ? e.message : '');
+    } finally {
+      setCarregandoCatalogoGc(false);
+    }
+  }
+
+  async function carregarProdutosGc(grupoId: string) {
+    setGrupoProdutosSelecionado(grupoId);
+    if (!grupoId) {
+      setProdutosGc([]);
+      return;
+    }
+    setCarregandoCatalogoGc(true);
+    try {
+      const r = await api.get<{ produtos: ProdutoGcResumo[]; gc_offline?: boolean }>(`/admin/gc/produtos?grupo_id=${encodeURIComponent(grupoId)}`);
+      setProdutosGc(r.produtos);
+      setGcOffline(Boolean(r.gc_offline));
+    } catch (e) {
+      setGcOffline(true);
+      showToast('error', 'Falha ao carregar produtos do GestãoClick', e instanceof ApiError ? e.message : '');
+    } finally {
+      setCarregandoCatalogoGc(false);
+    }
+  }
+
   useEffect(() => {
     carregar();
   }, []);
+
+  useEffect(() => {
+    if (editandoCalc) void carregarGruposGc();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editandoCalc]);
 
   // Salva a lista inteira de persiana de volta no servidor
   async function salvarPersianas(lista: CalculadoraPersiana[]) {
@@ -187,6 +237,7 @@ export function AdminCalculadoras() {
       db_tipo_produto: 'persiana_rolo_blackout',
       codigo_gc: '',
       familia: 'rolo_bk_translucido',
+      tecido_grupo_ids: [],
       margem: 0.15,
       dobrar_altura: false,
       base_venda: 'dimensao',
@@ -499,6 +550,29 @@ export function AdminCalculadoras() {
     atualizarReceita(vKey, { componentes: comps });
   }
 
+  function gruposTecidoCalc(): string[] {
+    return editandoCalc?.tecido_grupo_ids ?? [];
+  }
+
+  function adicionarGrupoTecido(grupoId: string) {
+    if (!editandoCalc) return;
+    const id = grupoId.trim();
+    if (!id) return;
+    const atuais = gruposTecidoCalc();
+    if (atuais.includes(id)) return;
+    setEditandoCalc({ ...editandoCalc, tecido_grupo_ids: [...atuais, id] });
+  }
+
+  function removerGrupoTecido(grupoId: string) {
+    if (!editandoCalc) return;
+    setEditandoCalc({ ...editandoCalc, tecido_grupo_ids: gruposTecidoCalc().filter((id) => id !== grupoId) });
+  }
+
+  function nomeGrupoGc(id: string): string {
+    const grupo = gruposGc.find((g) => g.id === id);
+    return grupo ? `${grupo.id} - ${grupo.nome}` : id;
+  }
+
   // Helpers para camadas de cortina
   function adicionarCamadaCortina() {
     if (!editandoCortina) return;
@@ -540,6 +614,14 @@ export function AdminCalculadoras() {
   }
 
   const editorAberto = editandoCalc !== null || editandoCortina !== null;
+  const termoGrupo = buscaGrupoGc.trim().toLowerCase();
+  const gruposFiltrados = gruposGc
+    .filter((g) => !termoGrupo || `${g.id} ${g.nome} ${g.grupo_pai_id ?? ''}`.toLowerCase().includes(termoGrupo))
+    .slice(0, 80);
+  const termoProduto = buscaProdutoGc.trim().toLowerCase();
+  const produtosFiltrados = produtosGc
+    .filter((p) => !termoProduto || `${p.id} ${p.codigo_interno} ${p.nome} ${p.nome_grupo}`.toLowerCase().includes(termoProduto))
+    .slice(0, 80);
 
   return (
     <div>
@@ -603,7 +685,8 @@ export function AdminCalculadoras() {
                     </div>
                     <div className="space-y-1 mb-4 text-xs-ui text-neutral-500">
                       <p><strong>Família:</strong> {FAMILIAS.find((f) => f.value === c.familia)?.label ?? c.familia}</p>
-                      <p><strong>Mapeamento BD:</strong> {DB_TIPOS_PRODUTO.find((d) => d.value === c.db_tipo_produto)?.label ?? c.db_tipo_produto}</p>
+                      <p><strong>Tipo-base BD:</strong> {DB_TIPOS_PRODUTO.find((d) => d.value === c.db_tipo_produto)?.label ?? c.db_tipo_produto}</p>
+                      <p><strong>Grupos tecido GC:</strong> {c.tecido_grupo_ids?.length ? c.tecido_grupo_ids.join(', ') : 'Padrão'}</p>
                       <p><strong>Variantes Ativas:</strong> {VARIANTES.filter((v) => c.receitas[v.key] !== undefined).map((v) => v.label).join(', ')}</p>
                     </div>
                   </div>
@@ -680,6 +763,104 @@ export function AdminCalculadoras() {
                     <div className="helper-text">ID do Produto correspondente no GestãoClick para sincronizar vendas.</div>
                   </div>
 
+                  <div className="border border-neutral-300 rounded-sm bg-neutral-50 p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <h5 className="text-sm-ui font-bold text-neutral-800">Catálogo GestãoClick</h5>
+                        <div className="helper-text">Use os grupos para definir quais tecidos aparecem nesta calculadora.</div>
+                      </div>
+                      <button type="button" className="btn btn-default btn-xs" onClick={() => void carregarGruposGc()} disabled={carregandoCatalogoGc}>
+                        {carregandoCatalogoGc ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faRotateLeft} />} Atualizar
+                      </button>
+                    </div>
+
+                    {gcOffline && (
+                      <div className="text-xs-ui text-error font-semibold">GestãoClick indisponível para consulta de catálogo.</div>
+                    )}
+
+                    <div>
+                      <label className="form-label">Grupos/Subgrupos de Tecido</label>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {gruposTecidoCalc().map((id) => (
+                          <span key={id} className="badge badge-secondary flex items-center gap-2">
+                            {nomeGrupoGc(id)}
+                            <button type="button" className="text-error" onClick={() => removerGrupoTecido(id)} title="Remover grupo">
+                              <FontAwesomeIcon icon={faXmark} />
+                            </button>
+                          </span>
+                        ))}
+                        {gruposTecidoCalc().length === 0 && (
+                          <span className="text-xs-ui text-neutral-500">Sem grupo configurado: usa o filtro padrão do modelo base.</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          className="input input-xs"
+                          placeholder="Buscar grupo por nome ou ID"
+                          value={buscaGrupoGc}
+                          onChange={(e) => setBuscaGrupoGc(e.target.value)}
+                        />
+                        <span className="btn btn-default btn-xs" aria-hidden="true"><FontAwesomeIcon icon={faMagnifyingGlass} /></span>
+                      </div>
+                      {buscaGrupoGc.trim() && (
+                        <div className="mt-2 border border-neutral-300 bg-surface-card rounded-sm max-h-44 overflow-y-auto">
+                          {gruposFiltrados.length === 0 ? (
+                            <div className="px-2 py-2 text-xs-ui text-neutral-500">Nenhum grupo encontrado.</div>
+                          ) : gruposFiltrados.map((g) => (
+                            <button
+                              key={g.id}
+                              type="button"
+                              className="block w-full text-left px-2 py-1.5 text-xs-ui border-b border-neutral-200 hover:bg-neutral-100"
+                              onClick={() => {
+                                adicionarGrupoTecido(g.id);
+                                setBuscaGrupoGc('');
+                              }}
+                            >
+                              <span className="font-mono text-neutral-700">{g.id}</span>
+                              <span className="text-neutral-800"> - {g.nome}</span>
+                              {g.grupo_pai_id && <span className="text-neutral-500"> pai {g.grupo_pai_id}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="form-label">Consultar Produtos/Componentes</label>
+                      <div className="grid grid-cols-1 gap-2">
+                        <select
+                          className="input input-xs"
+                          value={grupoProdutosSelecionado}
+                          onChange={(e) => void carregarProdutosGc(e.target.value)}
+                        >
+                          <option value="">Selecione um grupo do GestãoClick…</option>
+                          {gruposGc.map((g) => (
+                            <option key={g.id} value={g.id}>{g.id} - {g.nome}</option>
+                          ))}
+                        </select>
+                        <input
+                          className="input input-xs"
+                          placeholder="Filtrar produtos por nome, ID ou código interno"
+                          value={buscaProdutoGc}
+                          onChange={(e) => setBuscaProdutoGc(e.target.value)}
+                          disabled={!grupoProdutosSelecionado}
+                        />
+                      </div>
+                      {grupoProdutosSelecionado && (
+                        <div className="mt-2 border border-neutral-300 bg-surface-card rounded-sm max-h-44 overflow-y-auto">
+                          {produtosFiltrados.length === 0 ? (
+                            <div className="px-2 py-2 text-xs-ui text-neutral-500">Nenhum produto carregado.</div>
+                          ) : produtosFiltrados.map((p) => (
+                            <div key={p.id} className="px-2 py-1.5 text-xs-ui border-b border-neutral-200">
+                              <div className="font-semibold text-neutral-800">{p.nome}</div>
+                              <div className="font-mono text-neutral-600">ID {p.id} · Código interno {p.codigo_interno || '-'}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="form-label">Família Física</label>
@@ -694,7 +875,7 @@ export function AdminCalculadoras() {
                       </select>
                     </div>
                     <div>
-                      <label className="form-label">Mapeamento BD</label>
+                      <label className="form-label">Tipo-base no Banco</label>
                       <select
                         className="input"
                         value={editandoCalc.db_tipo_produto}
@@ -704,6 +885,7 @@ export function AdminCalculadoras() {
                           <option key={d.value} value={d.value}>{d.label}</option>
                         ))}
                       </select>
+                      <div className="helper-text">Compatibilidade para salvar o orçamento. O ID real da calculadora continua podendo ser novo.</div>
                     </div>
                   </div>
 

@@ -14,6 +14,8 @@ import {
   atualizarCalculadoras,
   listarCalculadorasCortina,
   atualizarCalculadorasCortina,
+  listarGruposProdutosGc,
+  listarProdutosGc,
   getVersao,
   listarLojas,
 } from '../controllers/adminController';
@@ -41,5 +43,7 @@ router.put('/calculadoras', atualizarCalculadoras);
 router.get('/calculadoras-cortina', listarCalculadorasCortina);
 router.put('/calculadoras-cortina', atualizarCalculadorasCortina);
 
-export default router;
+router.get('/gc/grupos-produtos', listarGruposProdutosGc);
+router.get('/gc/produtos', listarProdutosGc);
 
+export default router;

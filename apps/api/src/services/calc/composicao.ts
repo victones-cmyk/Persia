@@ -48,23 +48,28 @@ function materialDoTipo(tipo: TipoPersiana): { id: string; nome: string } {
 }
 
 function composicaoPersiana(tipo: TipoPersiana): ComposicaoTipo {
+  const calc = encontrarCalculadora(tipo);
   const mat = materialDoTipo(tipo);
 
   // Modelo novo (Victor): o valor da persiana = soma de TODOS os componentes + tecido,
   // a VAREJO, com cada preço puxado do GestãoClick pelo código. Logo, todos os
   // componentes da receita AFETAM o preço (não há mais "lista técnica" que não conta).
-  const afeta_preco: ItemComposicao[] = [
-    {
+  const afeta_preco: ItemComposicao[] = calc?.tecido_grupo_ids?.length
+    ? calc.tecido_grupo_ids.map((id) => ({
+      rotulo: `Tecido — grupo ${id}`,
+      grupo_gc: 'Grupo configurado na calculadora',
+      grupo_gc_id: id,
+      obs: 'preço VAREJO do tecido escolhido',
+    }))
+    : [{
       rotulo: `Tecido — ${mat.nome}`,
       grupo_gc: `TECIDOS PARA PERSIANA › ${mat.nome}`,
       grupo_gc_id: mat.id,
       obs: 'preço do tecido escolhido (a tela solar é por m²)',
-    },
-  ];
+    }];
 
   // Receita representativa (com bandô; cai p/ sem bandô se não houver). Os componentes
   // variam um pouco conforme o acionamento (com/sem bandô, motor), mas todos entram no preço.
-  const calc = encontrarCalculadora(tipo);
   const familia = calc ? calc.familia : familiaDoTipo(tipo);
   const receita = calc
     ? (calc.receitas.com_bando ?? calc.receitas.sem_bando ?? calc.receitas.motor_com_bando ?? calc.receitas.motor_sem_bando)
