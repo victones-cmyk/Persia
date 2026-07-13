@@ -34,6 +34,7 @@ interface DiagnosticoProdutoLocal {
   valor_venda: string;
   preco_varejo: number;
   custo_varejo: number;
+  grupos_sync: string[];
   valores: { tipo_id?: unknown; nome_tipo?: unknown; valor_venda?: unknown; valor_custo?: unknown }[];
   sincronizado_em: string;
 }
@@ -197,18 +198,19 @@ export function AdminMateriasPrimas() {
               <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: '2px solid #dee2e6' }}>
-                    {['Produto', 'Grupo', 'Ativo', 'Valor raiz', 'Varejo', 'Tabelas'].map((h) => (
+                    {['Produto', 'Grupo atual', 'Grupos sync', 'Ativo', 'Valor raiz', 'Varejo', 'Tabelas'].map((h) => (
                       <th key={h} style={{ padding: 8, textAlign: 'left', fontWeight: 700 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {diagnostico.produtos_locais.length === 0 ? (
-                    <tr><td colSpan={6} style={{ padding: 12, color: '#6c757d' }}>Nenhum produto local encontrado para este código.</td></tr>
+                    <tr><td colSpan={7} style={{ padding: 12, color: '#6c757d' }}>Nenhum produto local encontrado para este código.</td></tr>
                   ) : diagnostico.produtos_locais.map((p) => (
                     <tr key={p.id} style={{ borderTop: '1px solid #dee2e6' }}>
                       <td style={{ padding: 8 }}>{p.nome}<div className="text-xs-ui text-neutral-500">{p.id}</div></td>
                       <td style={{ padding: 8 }}>{p.nome_grupo ?? p.grupo_id ?? '—'}</td>
+                      <td style={{ padding: 8 }}>{p.grupos_sync.join(', ') || '—'}</td>
                       <td style={{ padding: 8 }}>{p.ativo ? 'Sim' : 'Não'}</td>
                       <td style={{ padding: 8 }}>R$ {Number(p.valor_venda).toFixed(2).replace('.', ',')}</td>
                       <td style={{ padding: 8 }}>R$ {p.preco_varejo.toFixed(2).replace('.', ',')}</td>

@@ -51,6 +51,7 @@ export interface DiagnosticoProdutoLocal {
   valor_venda: string;
   preco_varejo: number;
   custo_varejo: number;
+  grupos_sync: string[];
   valores: { tipo_id?: unknown; nome_tipo?: unknown; valor_venda?: unknown; valor_custo?: unknown }[];
   sincronizado_em: string;
 }
@@ -140,12 +141,15 @@ export async function listarProdutosLocais(filtros: { grupo_id?: string; ativo?:
 
   const produtos = await prisma.gcProdutoLocal.findMany({
     where: {
-      ...(filtros.grupo_id ? { grupo_id: String(filtros.grupo_id) } : {}),
       ...(filtros.ativo !== undefined ? { ativo: filtros.ativo === 1 } : {}),
     },
     orderBy: { nome: 'asc' },
   });
-  return produtos.map(produtoLocalParaGc);
+  const grupoFiltro = filtros.grupo_id ? String(filtros.grupo_id) : null;
+  const filtrados = grupoFiltro
+    ? produtos.filter((p) => p.grupo_id === grupoFiltro || gruposSyncDoRaw(p.raw_json).includes(grupoFiltro))
+    : produtos;
+  return filtrados.map(produtoLocalParaGc);
 }
 
 function precoVarejoLocal(produto: { valor_venda: Prisma.Decimal; valores: Prisma.JsonValue | null }): { preco: number; custo: number } {
@@ -179,6 +183,7 @@ export async function diagnosticarProdutoLocal(codigo: string): Promise<Diagnost
       valor_venda: p.valor_venda.toString(),
       preco_varejo: preco.preco,
       custo_varejo: preco.custo,
+      grupos_sync: gruposSyncDoRaw(p.raw_json),
       valores: valores.map((v) => ({
         tipo_id: v.tipo_id,
         nome_tipo: v.nome_tipo,
@@ -205,14 +210,22 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
 
   try {
     const porId = new Map<string, GcProduto>();
+    const gruposPorProduto = new Map<string, Set<string>>();
     for (const grupoId of grupos) {
       const produtos = await listarProdutosRemoto({ grupo_id: grupoId, ativo: 1 });
-      for (const produto of produtos) porId.set(String(produto.id), produto);
+      for (const produto of produtos) {
+        const id = String(produto.id);
+        porId.set(id, produto);
+        if (!gruposPorProduto.has(id)) gruposPorProduto.set(id, new Set());
+        gruposPorProduto.get(id)!.add(grupoId);
+      }
     }
 
     const agora = new Date();
     let salvos = 0;
     for (const p of porId.values()) {
+      const gruposSync = [...(gruposPorProduto.get(String(p.id)) ?? new Set<string>())];
+      const rawComSync = { ...p, __catalogo_grupo_ids: gruposSync };
       await prisma.gcProdutoLocal.upsert({
         where: { id: String(p.id) },
         create: {
@@ -226,7 +239,7 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
           valor_venda: new Prisma.Decimal(Number(p.valor_venda) || 0),
           valores: jsonValue(p.valores ?? []),
           atributos: jsonValue(p.atributos ?? []),
-          raw_json: jsonValue(p),
+          raw_json: jsonValue(rawComSync),
           sincronizado_em: agora,
         },
         update: {
@@ -239,7 +252,7 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
           valor_venda: new Prisma.Decimal(Number(p.valor_venda) || 0),
           valores: jsonValue(p.valores ?? []),
           atributos: jsonValue(p.atributos ?? []),
-          raw_json: jsonValue(p),
+          raw_json: jsonValue(rawComSync),
           sincronizado_em: agora,
         },
       });
@@ -295,6 +308,12 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
 function gruposCatalogo(): string[] {
   const gruposCalculadoras = getCalculadoras().flatMap((c) => c.tecido_grupo_ids ?? []);
   return unique([...GRUPOS_CATALOGO, ...gruposCalculadoras].map(String).map((g) => g.trim()).filter(Boolean));
+}
+
+function gruposSyncDoRaw(rawJson: Prisma.JsonValue): string[] {
+  if (!rawJson || typeof rawJson !== 'object' || Array.isArray(rawJson)) return [];
+  const raw = rawJson as Record<string, unknown>;
+  return Array.isArray(raw.__catalogo_grupo_ids) ? raw.__catalogo_grupo_ids.map(String) : [];
 }
 
 export function sincronizarCatalogoLocal(): Promise<ResumoSyncCatalogo> {
