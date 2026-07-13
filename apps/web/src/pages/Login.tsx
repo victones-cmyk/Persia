@@ -1,6 +1,6 @@
 // apps/web/src/pages/Login.tsx
 // Tela de login (SRD §8): card centralizado sem sidebar.
-// Usuário + senha (min 6), botão "Entrar" (btn-primary) desabilitado enquanto inválido.
+// Usuário + senha (min 8), botão "Entrar" (btn-primary) desabilitado enquanto inválido.
 // O login é só um nome de usuário (não é e-mail real). Erro genérico de credenciais.
 
 import { useState, type FormEvent } from 'react';

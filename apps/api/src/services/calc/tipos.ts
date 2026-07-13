@@ -1,9 +1,11 @@
 // apps/api/src/services/calc/tipos.ts
 // Tipos e metadados do motor de cálculo de persiana (RN-02, RN-03, RN-07).
 
+import { getCalculadoras } from './calculadoras';
+
 export type TipoPersiana = string;
 
-export type Familia = 'rolo' | 'romana';
+export type Familia = 'rolo' | 'romana' | 'vertical';
 export type Cor = 'Branco' | 'Bege' | 'Cinza' | 'Preto';
 export type Acionamento =
   | 'com_bando'
@@ -80,14 +82,8 @@ export const ACIONAMENTO_LABEL: Record<Acionamento, string> = {
 };
 
 export function isTipoPersiana(t: string): boolean {
-  try {
-    const { getCalculadoras } = require('./calculadoras');
-    return getCalculadoras().some((c: any) => c.id === t);
-  } catch {
-    return t in META;
-  }
+  return getCalculadoras().some((c) => c.id === t);
 }
 
 /** % padrão do Tamanho do Comando = 75% da altura (Victor 17/06/2026; era 70%). Campo editável. */
 export const TC_FATOR = 0.75;
-

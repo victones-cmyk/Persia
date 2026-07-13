@@ -24,6 +24,7 @@ import { getGcHealth } from './services/gc/health';
 import { carregarRegras } from './services/calc/regras';
 import { carregarCalculadoras } from './services/calc/calculadoras';
 import { carregarCalculadorasCortina } from './services/calc/calculadorasCortina';
+import { iniciarAgendadorCatalogoLocal } from './services/gc/catalogoLocal';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -160,6 +161,7 @@ const server = app.listen(env.PORT, () => {
   // Carrega as calculadoras dinâmicas para a memória.
   void carregarCalculadoras(prisma);
   void carregarCalculadorasCortina(prisma);
+  iniciarAgendadorCatalogoLocal();
 });
 
 // Encerramento gracioso.

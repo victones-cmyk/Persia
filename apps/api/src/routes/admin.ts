@@ -17,6 +17,8 @@ import {
   atualizarCalculadorasCortina,
   listarGruposProdutosGc,
   listarProdutosGc,
+  getStatusCatalogoGc,
+  sincronizarCatalogoGc,
   getVersao,
   listarLojas,
 } from '../controllers/adminController';
@@ -47,5 +49,7 @@ router.put('/calculadoras-cortina', atualizarCalculadorasCortina);
 
 router.get('/gc/grupos-produtos', listarGruposProdutosGc);
 router.get('/gc/produtos', listarProdutosGc);
+router.get('/gc/catalogo-local/status', getStatusCatalogoGc);
+router.post('/gc/catalogo-local/sincronizar', sincronizarCatalogoGc);
 
 export default router;

@@ -151,6 +151,28 @@ model Configuracao {
   @@map("configuracoes")
 }
 
+model GcProdutoLocal {
+  id                String   @id @db.VarChar(50)
+  nome              String   @db.VarChar(255)
+  codigo_interno    String?  @db.VarChar(100)
+  ativo             Boolean  @default(true)
+  grupo_id          String?  @db.VarChar(50)
+  nome_grupo        String?  @db.VarChar(150)
+  largura           String?  @db.VarChar(50)
+  valor_venda       Decimal  @default(0) @db.Decimal(12, 2)
+  valores           Json?
+  atributos         Json?
+  raw_json          Json
+  sincronizado_em   DateTime @db.Timestamptz
+  criado_em         DateTime @default(now()) @db.Timestamptz
+  atualizado_em     DateTime @updatedAt @db.Timestamptz
+
+  @@index([grupo_id])
+  @@index([codigo_interno])
+  @@index([ativo])
+  @@map("gc_produtos_locais")
+}
+
 model LogAcao {
   id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   usuario_id String   @db.Uuid

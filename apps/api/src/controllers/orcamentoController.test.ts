@@ -35,6 +35,7 @@ vi.mock('../services/calc/persianaPreco', () => ({
   ReceitaPendenteError: class ReceitaPendenteError extends Error {},
 }));
 vi.mock('../services/calc/calculadoras', () => ({
+  getCalculadoras: vi.fn(() => [{ id: 'persiana_rolo_blackout' }]),
   encontrarCalculadora: mocks.encontrarCalculadora,
   exigeLarguraTecido: vi.fn(() => true),
 }));

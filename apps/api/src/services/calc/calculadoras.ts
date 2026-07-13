@@ -202,7 +202,7 @@ function normalizarCalculadoras(calculadoras: CalculadoraPersiana[]): Calculador
 
 function anexarDefaultsAusentes(calculadoras: CalculadoraPersiana[]): CalculadoraPersiana[] {
   const ids = new Set(calculadoras.map((c) => c.id));
-  const faltantes = CALCULADORAS_DEFAULT.filter((c) => c.id === 'persiana_vertical' && !ids.has(c.id));
+  const faltantes = CALCULADORAS_DEFAULT.filter((c) => !ids.has(c.id));
   return faltantes.length > 0 ? [...calculadoras, ...faltantes] : calculadoras;
 }
 

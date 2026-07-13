@@ -537,7 +537,8 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
   if (orc.tipo_produto === 'misto') { await reenviarMisto(orc, sessao, res); return; }
 
   const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; rt_pct?: number } | null;
-  const recalcular = Array.isArray(entrada?.itens) && entrada!.itens!.length > 0;
+  const itensEntrada = Array.isArray(entrada?.itens) ? entrada.itens : [];
+  const recalcular = itensEntrada.length > 0;
   const snaps = (orc.itens_json as unknown as ItemSnapshot[] | null) ?? [];
   if (!recalcular && snaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento sem itens para reenviar.');
 
@@ -545,11 +546,12 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
 
   try {
     // Recalcula a partir da entrada (preferido); cai para o snapshot só em registros legados.
+    const tipoFallback = isTipoPersiana(entrada?.tipo ?? '') ? (entrada?.tipo as TipoPersiana) : null;
     const preparados = recalcular
       ? await recalcularPersianasDeEntrada(
-          isTipoPersiana(entrada!.tipo ?? '') ? (entrada!.tipo as TipoPersiana) : null,
-          entrada!.itens!,
-          Number(entrada!.rt_pct) || 0,
+          tipoFallback,
+          itensEntrada,
+          Number(entrada?.rt_pct) || 0,
         )
       : null;
 

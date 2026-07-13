@@ -14,6 +14,7 @@ import { AdminUsuarios } from './pages/admin/AdminUsuarios';
 import { AdminLog } from './pages/admin/AdminLog';
 import { AdminRegras } from './pages/admin/AdminRegras';
 import { AdminCalculadoras } from './pages/admin/AdminCalculadoras';
+import { AdminMateriasPrimas } from './pages/admin/AdminMateriasPrimas';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
               <Route path="/admin/usuarios" element={<AdminUsuarios />} />
               <Route path="/admin/regras-calculo" element={<AdminRegras />} />
               <Route path="/admin/calculadoras" element={<AdminCalculadoras />} />
+              <Route path="/admin/materias-primas" element={<AdminMateriasPrimas />} />
               <Route path="/admin/log-acoes" element={<AdminLog />} />
             </Route>
           </Route>

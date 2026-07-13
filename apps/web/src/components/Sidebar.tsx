@@ -12,6 +12,7 @@ import {
   faClockRotateLeft,
   faSliders,
   faCalculator,
+  faDatabase,
 } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { useAuth } from '../hooks/useAuth';
@@ -35,6 +36,7 @@ const ITENS_ADMIN: Item[] = [
   { to: '/admin/usuarios', label: 'Usuários', icon: faUsers },
   { to: '/admin/regras-calculo', label: 'Regras de Cálculo', icon: faSliders },
   { to: '/admin/calculadoras', label: 'Calculadoras', icon: faCalculator },
+  { to: '/admin/materias-primas', label: 'Matérias-primas', icon: faDatabase },
   { to: '/admin/log-acoes', label: 'Log de Ações', icon: faClockRotateLeft },
 ];
 

@@ -17,7 +17,8 @@ import {
   type CamadaCortina,
 } from '../services/calc/cortina';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
-import { exigeLarguraTecido } from '../services/calc/calculadoras';
+import { exigeLarguraTecido, getCalculadorasAtivas } from '../services/calc/calculadoras';
+import { getCalculadorasCortinaAtivas } from '../services/calc/calculadorasCortina';
 import type { TecidoGc } from '../services/gc/tecidos';
 import {
   tecidosParaTipo,
@@ -422,11 +423,9 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
 }
 
 export async function listarCalculadorasController(_req: Request, res: Response): Promise<void> {
-  const { getCalculadorasAtivas } = require('../services/calc/calculadoras');
   res.json({ calculadoras: getCalculadorasAtivas() });
 }
 
 export async function listarCalculadorasCortinaController(_req: Request, res: Response): Promise<void> {
-  const { getCalculadorasCortinaAtivas } = require('../services/calc/calculadorasCortina');
   res.json({ calculadoras: getCalculadorasCortinaAtivas() });
 }

@@ -64,7 +64,9 @@ export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
   const fatorVenda = calc ? calc.fator_venda : (reg.tipos[e.tipo]?.fator_venda ?? meta.fatorVenda);
   const maoDeObra = calc ? calc.mao_de_obra : meta.maoDeObra;
   const codigoGc = calc ? calc.codigo_gc : meta.codigoGc;
-  const familia = calc ? (calc.familia.startsWith('romana') ? 'romana' as const : 'rolo' as const) : meta.familia;
+  const familia = calc
+    ? (calc.familia === 'vertical' ? 'vertical' as const : calc.familia.startsWith('romana') ? 'romana' as const : 'rolo' as const)
+    : meta.familia;
 
 
   if (!(e.largura > 0) || !(e.altura > 0) || !(e.dimensao > 0)) {
@@ -110,4 +112,3 @@ export function calcularPersiana(e: EntradaPersiana): ResultadoPersiana {
     componentes,
   };
 }
-

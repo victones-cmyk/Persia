@@ -31,13 +31,15 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const b = req.body ?? {};
   const apenasSalvar = b.apenas_salvar === true;
 
-  if (!isTipoPersiana(b.tipo)) throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
-  const tipo = b.tipo as TipoPersiana;
+  const tipoFallback = isTipoPersiana(b.tipo) ? (b.tipo as TipoPersiana) : null;
   const itensEntrada: ItemEntrada[] = Array.isArray(b.itens) ? b.itens : [];
   const cortinasEntrada: CortinaEntrada[] = Array.isArray(b.cortinas) ? b.cortinas : [];
   // Misto = exige ao menos 1 de cada (casos puros usam /orcamentos ou /orcamentos/cortina).
   if (itensEntrada.length === 0 || cortinasEntrada.length === 0) {
     throw new AppError(400, 'MISTO_INVALIDO', 'Orçamento misto exige ao menos 1 persiana e 1 cortina.');
+  }
+  if (!tipoFallback && !itensEntrada.every((it) => isTipoPersiana(it.tipo ?? ''))) {
+    throw new AppError(400, 'TIPO_INVALIDO', 'Selecione o produto sob medida de todas as persianas.');
   }
   if (!apenasSalvar && (!b.gc_cliente_id || !b.nome_cliente)) {
     throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
@@ -60,13 +62,13 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   for (const it of itensEntrada) {
     const id = String(it.tecido_id);
     if (!tecidos.has(id)) {
-      const tipoItem = isTipoPersiana(it.tipo ?? '') ? (it.tipo as TipoPersiana) : tipo;
+      const tipoItem = isTipoPersiana(it.tipo ?? '') ? (it.tipo as TipoPersiana) : tipoFallback;
       const t = await buscarTecidoGc(id, tipoItem);
       if (!t) throw new AppError(400, 'TECIDO_INVALIDO', 'Selecione um tecido válido em todas as persianas.');
       tecidos.set(id, t);
     }
   }
-  const { preparados: persPrep } = await prepararItens(tipo, itensEntrada, tecidos);
+  const { preparados: persPrep } = await prepararItens(tipoFallback, itensEntrada, tecidos);
 
   // --- Cortinas: recalcula cada uma ---
   const cortPrep: CortinaPreparada[] = [];
@@ -186,7 +188,9 @@ interface MistoItensJson { persiana?: { tipo: string; itens: ItemSnapshot[] }; c
 /** Reenvia um orçamento MISTO ao GestãoClick (replay do snapshot salvo). */
 export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
   const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; cortinas?: CortinaEntrada[]; rt_pct?: number } | null;
-  const recalcular = !!(entrada && ((entrada.itens?.length ?? 0) > 0 || (entrada.cortinas?.length ?? 0) > 0));
+  const itensEntrada = Array.isArray(entrada?.itens) ? entrada.itens : [];
+  const cortinasEntrada = Array.isArray(entrada?.cortinas) ? entrada.cortinas : [];
+  const recalcular = itensEntrada.length > 0 || cortinasEntrada.length > 0;
 
   // Snapshot (fallback legado, quando não há entrada_json).
   const itens = orc.itens_json as unknown as MistoItensJson | null;
@@ -197,11 +201,12 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
 
   // Recalcula a partir da entrada (preferido); garante valor derivado do servidor (RN-10).
   const rtPct = Number(entrada?.rt_pct) || 0;
-  const persPrep = recalcular && (entrada!.itens?.length ?? 0) > 0
-    ? await recalcularPersianasDeEntrada(isTipoPersiana(entrada!.tipo ?? '') ? (entrada!.tipo as TipoPersiana) : null, entrada!.itens!, rtPct)
+  const tipoFallback = isTipoPersiana(entrada?.tipo ?? '') ? (entrada?.tipo as TipoPersiana) : null;
+  const persPrep = itensEntrada.length > 0
+    ? await recalcularPersianasDeEntrada(tipoFallback, itensEntrada, rtPct)
     : null;
-  const cortPrep = recalcular && (entrada!.cortinas?.length ?? 0) > 0
-    ? await recalcularCortinasDeEntrada(entrada!.cortinas!, rtPct)
+  const cortPrep = cortinasEntrada.length > 0
+    ? await recalcularCortinasDeEntrada(cortinasEntrada, rtPct)
     : null;
 
   const produtos: LinhaProduto[] = recalcular

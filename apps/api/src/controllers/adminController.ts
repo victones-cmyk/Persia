@@ -15,6 +15,7 @@ import { auditarPrecoPersiana, type ReceitaPendenteError } from '../services/cal
 import { mapasDePrecoComponentes, tcPadrao } from '../services/calc/persianaPrecoGc';
 import type { Acionamento, Cor } from '../services/calc/tipos';
 import type { VariantePersiana } from '../services/calc/persianaReceitas.data';
+import { sincronizarCatalogoLocal, statusCatalogoLocal } from '../services/gc/catalogoLocal';
 
 // ---------------------------------------------------------------------------
 // Versão em produção (só admin) — usado para conferir o auto-deploy do Railway.
@@ -191,6 +192,26 @@ export async function listarProdutosGc(req: Request, res: Response): Promise<voi
   } catch {
     res.json({ produtos: [], gc_offline: true });
   }
+}
+
+export async function getStatusCatalogoGc(_req: Request, res: Response): Promise<void> {
+  res.json({ status: await statusCatalogoLocal() });
+}
+
+export async function sincronizarCatalogoGc(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const resumo = await sincronizarCatalogoLocal();
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: sessao.id,
+      acao: resumo.sucesso ? 'gc_catalogo_sincronizado' : 'gc_catalogo_sync_erro',
+      detalhe: JSON.parse(JSON.stringify(resumo)),
+    },
+  });
+  if (!resumo.sucesso) {
+    throw new AppError(502, 'GC_CATALOGO_SYNC', resumo.erro ?? 'Falha ao atualizar matérias-primas.');
+  }
+  res.json({ resumo, status: await statusCatalogoLocal() });
 }
 
 

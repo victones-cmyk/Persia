@@ -15,6 +15,7 @@ import { evalFormula } from './formula';
 import { roundHalfUp } from './arredondamento';
 import { getRegras } from './regras';
 import { encontrarCalculadora } from './calculadoras';
+import type { FamiliaPersiana } from './calculadoras';
 
 const COR_UPPER: Record<Cor, string> = {
   Branco: 'BRANCO',
@@ -28,13 +29,18 @@ function qtd(formula: string, largura: number, altura: number): number {
   return roundHalfUp(evalFormula(formula, { largura, altura }), 4);
 }
 
+function familiaLegada(familia: FamiliaPersiana): 'rolo' | 'romana' | 'vertical' {
+  if (familia === 'vertical') return 'vertical';
+  return familia.startsWith('romana') ? 'romana' : 'rolo';
+}
+
 // ---------------------------------------------------------------------------
 // RN-05 — Componentes fixos (todos os tipos)
 // ---------------------------------------------------------------------------
 export function componentesFixos(tipo: TipoPersiana, largura: number): ComponenteCalculado[] {
   const calc = encontrarCalculadora(tipo);
   const meta = META[tipo];
-  const familia = calc ? (calc.familia.startsWith('romana') ? 'romana' : 'rolo') : meta?.familia;
+  const familia = calc ? familiaLegada(calc.familia) : meta?.familia;
   const maoDeObra = calc ? calc.mao_de_obra : meta?.maoDeObra;
   const rolo = familia === 'rolo';
   const reg = getRegras().persiana;
@@ -82,7 +88,7 @@ export function componentesCondicionais(
 export function baseTampa(tipo: TipoPersiana, cor: Cor, largura: number): ComponenteCalculado[] {
   const calc = encontrarCalculadora(tipo);
   const meta = META[tipo];
-  const familia = calc ? (calc.familia.startsWith('romana') ? 'romana' : 'rolo') : meta?.familia;
+  const familia = calc ? familiaLegada(calc.familia) : meta?.familia;
   const corUp = COR_UPPER[cor];
   const reg = getRegras().persiana;
 
@@ -96,7 +102,7 @@ export function baseTampa(tipo: TipoPersiana, cor: Cor, largura: number): Compon
     : `TAMPA DA BASE CONICA COR ${corUp}`;
 
   // Fórmula da base: rolo e DV descontam (parametrizável); romana usa [Largura].
-  const formulaBase = familia === 'romana' ? '[Largura]' : `[Largura]-${reg.base_desconto_rolo}`;
+  const formulaBase = familia === 'rolo' ? `[Largura]-${reg.base_desconto_rolo}` : '[Largura]';
 
   return [
     { grupo: 'base', descricao: nomeBase, quantidade: qtd(formulaBase, largura, 0), unidade: 'm' },

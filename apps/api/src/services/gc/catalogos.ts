@@ -73,11 +73,18 @@ export function listarGruposProdutos(): Promise<GcGrupo[]> {
   return buscarTodasPaginas<GcGrupo>('/api/grupos_produtos', {});
 }
 
-export function listarProdutos(filtros: { grupo_id?: string; ativo?: 0 | 1 } = {}): Promise<GcProduto[]> {
+export function listarProdutosRemoto(filtros: { grupo_id?: string; ativo?: 0 | 1 } = {}): Promise<GcProduto[]> {
   const params: Record<string, string | number> = {};
   if (filtros.grupo_id) params.grupo_id = filtros.grupo_id;
   if (filtros.ativo !== undefined) params.ativo = filtros.ativo;
   return buscarTodasPaginas<GcProduto>('/api/produtos', params);
+}
+
+export async function listarProdutos(filtros: { grupo_id?: string; ativo?: 0 | 1 } = {}): Promise<GcProduto[]> {
+  const { listarProdutosLocais } = await import('./catalogoLocal');
+  const locais = await listarProdutosLocais(filtros);
+  if (locais && (!filtros.grupo_id || locais.length > 0)) return locais;
+  return listarProdutosRemoto(filtros);
 }
 
 export async function listarLojas(): Promise<GcLoja[]> {
