@@ -62,6 +62,17 @@ function produtoLocalParaGc(p: {
   atributos: Prisma.JsonValue | null;
   raw_json: Prisma.JsonValue;
 }): GcProduto {
+  const raw = p.raw_json && typeof p.raw_json === 'object' && !Array.isArray(p.raw_json) ? p.raw_json as Record<string, unknown> : {};
+  const valores = Array.isArray(p.valores)
+    ? p.valores
+    : Array.isArray(raw.valores)
+      ? raw.valores
+      : [];
+  const atributos = Array.isArray(p.atributos)
+    ? p.atributos
+    : Array.isArray(raw.atributos)
+      ? raw.atributos
+      : [];
   return {
     id: p.id,
     nome: p.nome,
@@ -71,8 +82,8 @@ function produtoLocalParaGc(p: {
     nome_grupo: p.nome_grupo ?? '',
     largura: p.largura ?? '',
     valor_venda: p.valor_venda.toString(),
-    valores: Array.isArray(p.valores) ? p.valores as GcProduto['valores'] : [],
-    atributos: Array.isArray(p.atributos) ? p.atributos as unknown as GcProduto['atributos'] : [],
+    valores: valores as unknown as GcProduto['valores'],
+    atributos: atributos as unknown as GcProduto['atributos'],
   };
 }
 

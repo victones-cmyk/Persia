@@ -37,9 +37,12 @@ export async function indicePrecosComponentes(): Promise<Map<string, PrecoCompon
     const produtos = await listarProdutos({ grupo_id: grupo, ativo: 1 });
     for (const p of produtos) {
       const ci = String(p.codigo_interno ?? '').trim();
-      if (ci && !idx.has(ci)) {
+      if (ci) {
         const { preco, custo } = precoCustoVarejo(p);
-        idx.set(ci, { codigo_interno: ci, nome: p.nome, preco, custo });
+        const atual = idx.get(ci);
+        if (!atual || (atual.preco <= 0 && preco > 0)) {
+          idx.set(ci, { codigo_interno: ci, nome: p.nome, preco, custo });
+        }
         idx.set(String(p.id), { codigo_interno: ci, nome: p.nome, preco, custo });
       }
     }
