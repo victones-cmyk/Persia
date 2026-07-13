@@ -46,6 +46,31 @@ function temCredenciais(): boolean {
 }
 
 const MAX_RETRY_429 = 3;
+const MAX_RETRY_5XX = 2;
+
+function statusTemporario(status: number): boolean {
+  return status === 502 || status === 503 || status === 504;
+}
+
+function respostaHtml(v: unknown): boolean {
+  return typeof v === 'string' && /<html[\s>]|<!doctype html/i.test(v);
+}
+
+function hostCloudflare(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const m = v.match(/<span[^>]*>\s*([^<]*\.[^<]*)\s*<\/span>\s*<h3[^>]*>[\s\S]*?Host/i);
+  return m?.[1]?.trim() || null;
+}
+
+function detalheUsuario(status: number, detalhe: unknown): string {
+  if (respostaHtml(detalhe)) {
+    const host = hostCloudflare(detalhe);
+    const alvo = host ? ` (${host})` : '';
+    return `GestãoClick indisponível${alvo}: servidor retornou HTTP ${status}. Tente reenviar em alguns minutos.`;
+  }
+  if (typeof detalhe === 'string') return detalhe;
+  return JSON.stringify(detalhe);
+}
 
 async function executar<T>(config: AxiosRequestConfig, tentativa = 0): Promise<T> {
   try {
@@ -58,8 +83,12 @@ async function executar<T>(config: AxiosRequestConfig, tentativa = 0): Promise<T
     const ax = err as AxiosError;
     const status = ax.response?.status ?? 0;
 
-    // 429: absorve e tenta de novo (a fila já espaça; backoff curto extra).
+    // 429/5xx temporário: absorve e tenta de novo (a fila já espaça; backoff curto extra).
     if (status === 429 && tentativa < MAX_RETRY_429) {
+      await new Promise((r) => setTimeout(r, 1000 * (tentativa + 1)));
+      return executar<T>(config, tentativa + 1);
+    }
+    if (statusTemporario(status) && tentativa < MAX_RETRY_5XX) {
       await new Promise((r) => setTimeout(r, 1000 * (tentativa + 1)));
       return executar<T>(config, tentativa + 1);
     }
@@ -73,10 +102,10 @@ async function executar<T>(config: AxiosRequestConfig, tentativa = 0): Promise<T
       `[gc] ERRO ${status} em ${metodo} ${url}:`,
       JSON.stringify(detalhe),
     );
-    throw new GcError(status, `${metodo} ${url}: ${JSON.stringify(detalhe)}`, {
+    throw new GcError(status, `${metodo} ${url}: ${detalheUsuario(status, detalhe)}`, {
       method: metodo,
       url,
-      response: ax.response?.data ?? null,
+      response: respostaHtml(ax.response?.data) ? detalheUsuario(status, ax.response?.data) : ax.response?.data ?? null,
     });
   }
 }
