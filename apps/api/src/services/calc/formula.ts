@@ -52,12 +52,12 @@ export function evalFormula(formula: string, vars: VarsFormula): number {
 // para "(LARGURA-0.025)*2", "LARGURA*(ALTURA+0.2)*1.2" etc. Sem eval/Function:
 // parser recursivo (expr → term → factor). Variáveis: LARGURA, ALTURA, TC e,
 // para a persiana romana, CAVALETES e HASTES (quantidades derivadas, calculadas
-// em persianaPreco.ts e injetadas aqui).
+// em persianaPreco.ts e injetadas aqui). Função suportada: MAX(a,b,...).
 // ---------------------------------------------------------------------------
 export interface VarsQtd { largura: number; altura: number; tc: number; cavaletes?: number; hastes?: number; }
 
 export function evalQuantidade(formula: string, vars: VarsQtd): number {
-  let subst = formula;
+  let subst = formula.toUpperCase();
   // Derivadas da romana primeiro (não são substring de LARGURA/ALTURA/TC).
   if (vars.cavaletes !== undefined) subst = subst.replace(/CAVALETES/g, `(${vars.cavaletes})`);
   if (vars.hastes !== undefined) subst = subst.replace(/HASTES/g, `(${vars.hastes})`);
@@ -66,8 +66,8 @@ export function evalQuantidade(formula: string, vars: VarsQtd): number {
     .replace(/ALTURA/g, `(${vars.altura})`)
     .replace(/\bTC\b/g, `(${vars.tc})`)
     .replace(/\s/g, '');
-  // Só dígitos, ponto, operadores e parênteses são permitidos após a substituição.
-  if (!/^[-+*/().\d]+$/.test(subst)) throw new Error(`Fórmula de quantidade inválida: ${formula}`);
+  // Só dígitos, ponto, operadores, parênteses, vírgula e MAX são permitidos após a substituição.
+  if (!/^[-+*/().,\dMAX]+$/.test(subst)) throw new Error(`Fórmula de quantidade inválida: ${formula}`);
 
   let i = 0;
   const peek = () => subst[i];
@@ -90,6 +90,17 @@ export function evalQuantidade(formula: string, vars: VarsQtd): number {
     return v;
   }
   function parseFactor(): number {
+    if (subst.slice(i, i + 4) === 'MAX(') {
+      i += 4; // consome "MAX("
+      const valores: number[] = [parseExpr()];
+      while (peek() === ',') {
+        i++; // consome ","
+        valores.push(parseExpr());
+      }
+      if (peek() !== ')') throw new Error(`MAX sem fechamento: ${formula}`);
+      i++; // consome ")"
+      return Math.max(...valores);
+    }
     if (peek() === '(') {
       i++; // consome '('
       const v = parseExpr();

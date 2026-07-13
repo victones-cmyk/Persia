@@ -1100,7 +1100,7 @@ export function AdminCalculadoras() {
                               <FontAwesomeIcon icon={faCircleInfo} /> Variáveis Permitidas:
                             </span>
                             <div className="flex flex-wrap gap-2 mt-2">
-                              {['LARGURA', 'ALTURA', 'TC', 'CAVALETES', 'HASTES'].map((item) => (
+                              {['LARGURA', 'ALTURA', 'TC', 'CAVALETES', 'HASTES', 'MAX(...)'].map((item) => (
                                 <span key={item} className="text-2xs-ui font-mono bg-neutral-200 px-1 py-0.5 rounded-sm text-neutral-700">
                                   {item}
                                 </span>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evalFormula } from './formula';
+import { evalFormula, evalQuantidade } from './formula';
 
 const V = { largura: 1.5, altura: 2 };
 
@@ -41,5 +41,24 @@ describe('evalFormula', () => {
     expect(() => evalFormula('[Largura]+', V)).toThrow();
     expect(() => evalFormula('*2', V)).toThrow();
     expect(() => evalFormula('', V)).toThrow();
+  });
+});
+
+describe('evalQuantidade', () => {
+  it('suporta MAX simples e aninhado', () => {
+    expect(evalQuantidade('MAX(ALTURA,1.2)', { largura: 1, altura: 0.9, tc: 0.7 })).toBe(1.2);
+    expect(evalQuantidade('MAX(ALTURA,1.2)', { largura: 1, altura: 1.8, tc: 1.35 })).toBe(1.8);
+  });
+
+  it('calcula quantidade da persiana vertical com altura e area minimas', () => {
+    const formula = 'MAX(LARGURA*MAX(ALTURA,1.2),1.5)';
+
+    expect(evalQuantidade(formula, { largura: 1, altura: 1, tc: 0.75 })).toBe(1.5);
+    expect(evalQuantidade(formula, { largura: 2, altura: 1, tc: 0.75 })).toBe(2.4);
+    expect(evalQuantidade(formula, { largura: 2, altura: 1.5, tc: 1.1 })).toBe(3);
+  });
+
+  it('rejeita MAX sem fechamento', () => {
+    expect(() => evalQuantidade('MAX(LARGURA,1.5', { largura: 1, altura: 1, tc: 0.75 })).toThrow();
   });
 });
