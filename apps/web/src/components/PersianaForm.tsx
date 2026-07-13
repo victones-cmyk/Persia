@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faPlus, faTrash, faCopy, faChevronDown, faChevronRight } from '@fortawesome/free-solid-svg-icons';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
 import { roundHalfUp, formatBRL, formatNum, formatQtd } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
@@ -400,10 +400,10 @@ export function PersianaForm({
       }
       onResult({ tipo: (comp[0].it.tipo || (calculadoras[0]?.id ?? 'persiana_rolo_blackout')) as TipoPersiana, itens: calculados, total_bruto: r.total_bruto, incompleto });
 
-    } catch {
+    } catch (e) {
       if (seq !== seqCalc.current) return;
       onResult(null);
-      setErroGeral('Não foi possível calcular. Tente novamente.');
+      setErroGeral(e instanceof ApiError ? e.message : 'Não foi possível calcular. Tente novamente.');
     } finally {
       if (seq !== seqCalc.current) return;
       setCalculando(false);

@@ -76,6 +76,14 @@ function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: num
   };
 }
 
+function mensagemErroFormula(err: unknown): string | null {
+  if (!(err instanceof Error)) return null;
+  if (/Fórmula|Formula|MAX|Parêntese|Número esperado|Sobra de tokens/i.test(err.message)) {
+    return err.message;
+  }
+  return null;
+}
+
 /** POST /api/calcular/persiana — recebe o formulário, retorna breakdown + valor_bruto. */
 export async function calcularPersianaController(req: Request, res: Response): Promise<void> {
   const { tipo, largura, altura, acionamento, tc, tecido_id, instalacao_id, cor_acessorio, base } = req.body ?? {};
@@ -132,6 +140,10 @@ export async function calcularPersianaController(req: Request, res: Response): P
   } catch (err) {
     if (err instanceof ReceitaPendenteError) {
       throw new AppError(400, 'RECEITA_PENDENTE', err.message);
+    }
+    const msgFormula = mensagemErroFormula(err);
+    if (msgFormula) {
+      throw new AppError(400, 'FORMULA_INVALIDA', msgFormula);
     }
     throw err;
   }
@@ -224,6 +236,8 @@ export async function calcularPersianaLoteController(req: Request, res: Response
     } catch (err) {
       if (err instanceof ReceitaPendenteError) {
         resultados.push({ ok: false, index: i, error: 'RECEITA_PENDENTE', message: err.message });
+      } else if (mensagemErroFormula(err)) {
+        resultados.push({ ok: false, index: i, error: 'FORMULA_INVALIDA', message: mensagemErroFormula(err)! });
       } else {
         throw err;
       }

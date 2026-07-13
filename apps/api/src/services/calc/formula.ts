@@ -65,6 +65,7 @@ export function evalQuantidade(formula: string, vars: VarsQtd): number {
     .replace(/LARGURA/g, `(${vars.largura})`)
     .replace(/ALTURA/g, `(${vars.altura})`)
     .replace(/\bTC\b/g, `(${vars.tc})`)
+    .replace(/(\d),(\d)/g, '$1.$2')
     .replace(/\s/g, '');
   // Só dígitos, ponto, operadores, parênteses, vírgula e MAX são permitidos após a substituição.
   if (!/^[-+*/().,\dMAX]+$/.test(subst)) throw new Error(`Fórmula de quantidade inválida: ${formula}`);

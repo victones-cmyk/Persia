@@ -58,6 +58,11 @@ describe('evalQuantidade', () => {
     expect(evalQuantidade(formula, { largura: 2, altura: 1.5, tc: 1.1 })).toBe(3);
   });
 
+  it('aceita virgula decimal em formulas MAX', () => {
+    const formula = 'MAX(LARGURA*MAX(ALTURA,1,2),1,5)';
+    expect(evalQuantidade(formula, { largura: 2, altura: 1, tc: 0.75 })).toBe(2.4);
+  });
+
   it('rejeita MAX sem fechamento', () => {
     expect(() => evalQuantidade('MAX(LARGURA,1.5', { largura: 1, altura: 1, tc: 0.75 })).toThrow();
   });
