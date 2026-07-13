@@ -5,7 +5,7 @@
 // PERSIANAS" (190128) e "ACESSÓRIOS" (76945) — verificado: os 60 códigos da planilha
 // do Victor estão lá, com o preço VAREJO batendo. Índice cacheado (preço muda raro).
 
-import { listarProdutos, type GcProduto } from './catalogos';
+import { listarProdutos, listarProdutosRemoto, type GcProduto } from './catalogos';
 
 const GRUPOS_COMPONENTES = ['190128', '76945', '5969405']; // ACESSÓRIOS DE PERSIANAS + ACESSÓRIOS + BANDÔ DE VERTICAL
 const VAREJO_TIPO_ID = '10969';
@@ -25,6 +25,21 @@ function precoCustoVarejo(p: GcProduto): { preco: number; custo: number } {
   };
 }
 
+async function listarProdutosComponentes(grupo: string): Promise<GcProduto[]> {
+  const produtos = await listarProdutos({ grupo_id: grupo, ativo: 1 });
+  const temComponenteSemPreco = produtos.some((p) => {
+    const ci = String(p.codigo_interno ?? '').trim();
+    return ci && precoCustoVarejo(p).preco <= 0;
+  });
+  if (!temComponenteSemPreco) return produtos;
+
+  try {
+    return [...produtos, ...await listarProdutosRemoto({ grupo_id: grupo, ativo: 1 })];
+  } catch {
+    return produtos;
+  }
+}
+
 export interface PrecoComponente { codigo_interno: string; nome: string; preco: number; custo: number }
 
 let cache: { idx: Map<string, PrecoComponente>; expira: number } | null = null;
@@ -34,7 +49,7 @@ export async function indicePrecosComponentes(): Promise<Map<string, PrecoCompon
   if (cache && cache.expira > Date.now()) return cache.idx;
   const idx = new Map<string, PrecoComponente>();
   for (const grupo of GRUPOS_COMPONENTES) {
-    const produtos = await listarProdutos({ grupo_id: grupo, ativo: 1 });
+    const produtos = await listarProdutosComponentes(grupo);
     for (const p of produtos) {
       const ci = String(p.codigo_interno ?? '').trim();
       if (ci) {
