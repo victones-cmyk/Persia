@@ -12,6 +12,7 @@ export interface OrcamentoListItem {
   gc_pedido_codigo?: string | null;
   pedido_confirmado_em?: string | null;
   pedido_entrega_em?: string | null;
+  erro_gc?: string | null;
   valor_final: string;
   valor_bruto: string;
   criado_em: string;

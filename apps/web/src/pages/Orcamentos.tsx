@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEye, faPen, faRotateRight, faXmark, faCopy, faIndustry, faFileInvoiceDollar } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faEye, faPen, faRotateRight, faXmark, faCopy, faIndustry, faFileInvoiceDollar, faCircleExclamation } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL } from '../lib/formatacao';
@@ -220,6 +220,16 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
     }
   }
 
+  async function copiarErro(o: OrcamentoListItem) {
+    const texto = o.erro_gc || 'Erro não informado.';
+    try {
+      await navigator.clipboard.writeText(texto);
+      showToast('success', 'Erro copiado');
+    } catch {
+      showToast('info', 'Erro do GestãoClick', texto);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -410,9 +420,14 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                         <FontAwesomeIcon icon={faPen} />
                       </button>
                       {o.status === 'erro' && (
-                        <button className="btn btn-warning btn-xs" disabled={acaoEmId === o.id} onClick={() => reenviar(o.id)} title="Reenviar">
-                          <FontAwesomeIcon icon={faRotateRight} />
-                        </button>
+                        <>
+                          <button className="btn btn-default btn-xs text-danger" onClick={() => void copiarErro(o)} title={o.erro_gc || 'Copiar erro'}>
+                            <FontAwesomeIcon icon={faCircleExclamation} />
+                          </button>
+                          <button className="btn btn-warning btn-xs" disabled={acaoEmId === o.id} onClick={() => reenviar(o.id)} title="Reenviar">
+                            <FontAwesomeIcon icon={faRotateRight} />
+                          </button>
+                        </>
                       )}
                       {o.status !== 'cancelado' && (
                         <button className="btn btn-danger btn-xs" disabled={acaoEmId === o.id} onClick={() => setCancelarId(o.id)} title="Cancelar orçamento">
