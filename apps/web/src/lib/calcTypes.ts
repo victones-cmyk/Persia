@@ -128,7 +128,7 @@ export interface ItemInput {
   ambiente?: string;
   tipo?: TipoPersiana; // produto sob medida POR ITEM (Victor 26/06/2026)
   tecido_id: string;
-  cor_acessorio: Cor;
+  cor_acessorio: Cor | '';
   acionamento: Acionamento;
   largura: number;
   altura: number;

@@ -41,9 +41,10 @@ export function descricaoProdutoPersiana(params: {
 }): string {
   const partes = [
     `Acionamento: ${ACIONAMENTO_LABEL[params.acionamento] ?? params.acionamento}`,
-    `Acessórios: ${textoLimpo(params.cor_acessorio) || '-'}`,
     `Tecido: ${textoLimpo(params.tecido_nome)}`,
   ];
+  const corAcessorio = textoLimpo(params.cor_acessorio);
+  if (corAcessorio) partes.splice(1, 0, `Acessórios: ${corAcessorio}`);
 
   const rolamento = textoLimpo(params.rolamento);
   if (rolamento) partes.push(`Rolamento: ${rolamento}`);
