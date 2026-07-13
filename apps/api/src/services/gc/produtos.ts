@@ -49,12 +49,13 @@ function descricaoProdutoGc(descricao: string | undefined): string | undefined {
 }
 
 export function urlProdutoUnica(codigoInterno: string): string {
-  return codigoInterno;
+  return `persia-${codigoInterno}`;
 }
 
 function erroUrlProdutoDuplicada(err: unknown): boolean {
-  if (!(err instanceof GcError)) return false;
-  const texto = `${err.message} ${JSON.stringify(err.payload ?? '')}`.toLocaleLowerCase('pt-BR');
+  const texto = err instanceof GcError
+    ? `${err.message} ${JSON.stringify(err.payload ?? '')}`.toLocaleLowerCase('pt-BR')
+    : `${String((err as Error | null)?.message ?? err)} ${JSON.stringify(err)}`.toLocaleLowerCase('pt-BR');
   return texto.includes('url do produto') && texto.includes('utilizada');
 }
 

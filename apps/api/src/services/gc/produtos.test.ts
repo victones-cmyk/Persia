@@ -36,7 +36,7 @@ describe('payload de produto sintetico', () => {
   });
 
   it('gera url tecnica unica a partir do codigo interno', () => {
-    expect(urlProdutoUnica('1783190400000001')).toBe('1783190400000001');
+    expect(urlProdutoUnica('1783190400000001')).toBe('persia-1783190400000001');
   });
 
   it('envia codigo interno numerico unico sem alterar o nome', async () => {
@@ -54,7 +54,7 @@ describe('payload de produto sintetico', () => {
         nome: 'Sala, Cortina Wave TEX-101 2,00X2,50',
         descricao: 'Fixação: Trilho | Abertura: Sem abertura',
         codigo_interno: expect.stringMatching(/^\d+$/),
-        url: expect.stringMatching(/^\d+$/),
+        url: expect.stringMatching(/^persia-\d+$/),
       }),
     }));
   });
@@ -72,5 +72,21 @@ describe('payload de produto sintetico', () => {
     }));
     expect(gcRequest).toHaveBeenCalledTimes(2);
     expect(vi.mocked(gcRequest).mock.calls[1][0]).toEqual(expect.objectContaining({ method: 'POST', url: '/api/produtos' }));
+  });
+
+  it('tenta novamente quando a mensagem de URL duplicada vem dentro do JSON do GestaoClick', async () => {
+    vi.mocked(gcRequest)
+      .mockRejectedValueOnce(new GcError(404, 'POST /api/produtos: {"code":404,"status":"error","data":{"erro":"Not Found","mensagem":"A URL do produto já está sendo utilizada!"}}'))
+      .mockResolvedValueOnce({ data: { id: 'produto-gc-3' } });
+
+    const produto = await criarProduto({ nome: 'Sala, Cortina Wave TEX-101 2,00X2,50', valor_custo: 100, valor_venda: 500 });
+
+    expect(produto.gc_produto_id).toBe('produto-gc-3');
+    expect(gcRequest).toHaveBeenCalledTimes(2);
+    const primeiraUrl = vi.mocked(gcRequest).mock.calls[0][0].data.url;
+    const segundaUrl = vi.mocked(gcRequest).mock.calls[1][0].data.url;
+    expect(primeiraUrl).toMatch(/^persia-\d+$/);
+    expect(segundaUrl).toMatch(/^persia-\d+$/);
+    expect(segundaUrl).not.toBe(primeiraUrl);
   });
 });
