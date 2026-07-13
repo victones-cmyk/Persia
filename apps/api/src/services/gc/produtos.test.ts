@@ -72,6 +72,8 @@ describe('payload de produto sintetico', () => {
     }));
     expect(gcRequest).toHaveBeenCalledTimes(2);
     expect(vi.mocked(gcRequest).mock.calls[1][0]).toEqual(expect.objectContaining({ method: 'POST', url: '/api/produtos' }));
+    expect(vi.mocked(gcRequest).mock.calls[0][0].data.nome).toBe('Sala, Cortina Wave TEX-101 2,00X2,50');
+    expect(vi.mocked(gcRequest).mock.calls[1][0].data.nome).toMatch(/^Sala, Cortina Wave TEX-101 2,00X2,50 #\d{8}$/);
   });
 
   it('tenta novamente quando a mensagem de URL duplicada vem dentro do JSON do GestaoClick', async () => {
@@ -88,5 +90,7 @@ describe('payload de produto sintetico', () => {
     expect(primeiraUrl).toMatch(/^persia-\d+$/);
     expect(segundaUrl).toMatch(/^persia-\d+$/);
     expect(segundaUrl).not.toBe(primeiraUrl);
+    expect(vi.mocked(gcRequest).mock.calls[0][0].data.nome).toBe('Sala, Cortina Wave TEX-101 2,00X2,50');
+    expect(vi.mocked(gcRequest).mock.calls[1][0].data.nome).toMatch(/^Sala, Cortina Wave TEX-101 2,00X2,50 #\d{8}$/);
   });
 });

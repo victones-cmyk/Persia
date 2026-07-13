@@ -39,6 +39,13 @@ export function nomeProdutoGc(nome: string): string {
   return base.slice(0, LIMITE_NOME_PRODUTO).trim();
 }
 
+function nomeProdutoGcComCodigo(nome: string, codigoInterno: string): string {
+  const sufixo = ` #${codigoInterno.slice(-8)}`;
+  const limiteBase = LIMITE_NOME_PRODUTO - sufixo.length;
+  const base = nomeProdutoGc(nome).slice(0, limiteBase).trim();
+  return `${base}${sufixo}`;
+}
+
 function descricaoProdutoGc(descricao: string | undefined): string | undefined {
   const limpa = descricao
     ?.replace(/\r?\n+/g, ' | ')
@@ -60,11 +67,12 @@ function erroUrlProdutoDuplicada(err: unknown): boolean {
 }
 
 export async function criarProduto(p: NovoProdutoGc): Promise<ResultadoProduto> {
-  const nome = nomeProdutoGc(p.nome);
+  const nomeBase = nomeProdutoGc(p.nome);
   const descricao = descricaoProdutoGc(p.descricao);
 
   for (let tentativa = 0; tentativa < 3; tentativa += 1) {
     const codigo_interno = novoCodigoInterno();
+    const nome = tentativa === 0 ? nomeBase : nomeProdutoGcComCodigo(nomeBase, codigo_interno);
     const payload = {
       nome,
       ...(descricao ? { descricao } : {}),
