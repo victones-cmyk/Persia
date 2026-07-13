@@ -13,9 +13,10 @@ import { getCalculadoras, salvarCalculadoras, type CalculadoraPersiana } from '.
 import { getCalculadorasCortina, salvarCalculadorasCortina } from '../services/calc/calculadorasCortina';
 import { auditarPrecoPersiana, type ReceitaPendenteError } from '../services/calc/persianaPreco';
 import { mapasDePrecoComponentes, tcPadrao } from '../services/calc/persianaPrecoGc';
+import { indicePrecosComponentes } from '../services/gc/componentesPersiana';
 import type { Acionamento, Cor } from '../services/calc/tipos';
 import type { VariantePersiana } from '../services/calc/persianaReceitas.data';
-import { sincronizarCatalogoLocal, statusCatalogoLocal } from '../services/gc/catalogoLocal';
+import { diagnosticarProdutoLocal, sincronizarCatalogoLocal, statusCatalogoLocal } from '../services/gc/catalogoLocal';
 
 // ---------------------------------------------------------------------------
 // Versão em produção (só admin) — usado para conferir o auto-deploy do Railway.
@@ -212,6 +213,20 @@ export async function sincronizarCatalogoGc(req: Request, res: Response): Promis
     throw new AppError(502, 'GC_CATALOGO_SYNC', resumo.erro ?? 'Falha ao atualizar matérias-primas.');
   }
   res.json({ resumo, status: await statusCatalogoLocal() });
+}
+
+export async function diagnosticarComponenteCatalogoGc(req: Request, res: Response): Promise<void> {
+  const codigo = String(req.query.codigo_interno ?? req.params.codigo ?? '').trim();
+  if (!codigo) throw new AppError(400, 'CODIGO_OBRIGATORIO', 'Informe o código interno do componente.');
+  const [produtos_locais, indice] = await Promise.all([
+    diagnosticarProdutoLocal(codigo),
+    indicePrecosComponentes(),
+  ]);
+  res.json({
+    codigo_interno: codigo,
+    produtos_locais,
+    preco_calculadora: indice.get(codigo) ?? null,
+  });
 }
 
 

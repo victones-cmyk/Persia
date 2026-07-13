@@ -19,6 +19,7 @@ import {
   listarProdutosGc,
   getStatusCatalogoGc,
   sincronizarCatalogoGc,
+  diagnosticarComponenteCatalogoGc,
   getVersao,
   listarLojas,
 } from '../controllers/adminController';
@@ -51,5 +52,6 @@ router.get('/gc/grupos-produtos', listarGruposProdutosGc);
 router.get('/gc/produtos', listarProdutosGc);
 router.get('/gc/catalogo-local/status', getStatusCatalogoGc);
 router.post('/gc/catalogo-local/sincronizar', sincronizarCatalogoGc);
+router.get('/gc/catalogo-local/diagnostico-componente', diagnosticarComponenteCatalogoGc);
 
 export default router;

@@ -41,6 +41,20 @@ export interface ResumoSyncCatalogo {
   erro?: string;
 }
 
+export interface DiagnosticoProdutoLocal {
+  id: string;
+  nome: string;
+  codigo_interno: string | null;
+  grupo_id: string | null;
+  nome_grupo: string | null;
+  ativo: boolean;
+  valor_venda: string;
+  preco_varejo: number;
+  custo_varejo: number;
+  valores: { tipo_id?: unknown; nome_tipo?: unknown; valor_venda?: unknown; valor_custo?: unknown }[];
+  sincronizado_em: string;
+}
+
 function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
@@ -132,6 +146,48 @@ export async function listarProdutosLocais(filtros: { grupo_id?: string; ativo?:
     orderBy: { nome: 'asc' },
   });
   return produtos.map(produtoLocalParaGc);
+}
+
+function precoVarejoLocal(produto: { valor_venda: Prisma.Decimal; valores: Prisma.JsonValue | null }): { preco: number; custo: number } {
+  const valores = Array.isArray(produto.valores) ? produto.valores as Record<string, unknown>[] : [];
+  const varejo = valores.find((v) => String(v.tipo_id ?? '') === '10969' || String(v.nome_tipo ?? '').toUpperCase() === 'VAREJO');
+  const preco = Number(varejo?.valor_venda ?? produto.valor_venda ?? 0);
+  const custo = Number(varejo?.valor_custo ?? 0);
+  return {
+    preco: Number.isFinite(preco) ? preco : 0,
+    custo: Number.isFinite(custo) ? custo : 0,
+  };
+}
+
+export async function diagnosticarProdutoLocal(codigo: string): Promise<DiagnosticoProdutoLocal[]> {
+  const q = String(codigo ?? '').trim();
+  if (!q) return [];
+  const produtos = await prisma.gcProdutoLocal.findMany({
+    where: { OR: [{ codigo_interno: q }, { id: q }] },
+    orderBy: [{ ativo: 'desc' }, { nome: 'asc' }],
+  });
+  return produtos.map((p) => {
+    const valores = Array.isArray(p.valores) ? p.valores as Record<string, unknown>[] : [];
+    const preco = precoVarejoLocal(p);
+    return {
+      id: p.id,
+      nome: p.nome,
+      codigo_interno: p.codigo_interno,
+      grupo_id: p.grupo_id,
+      nome_grupo: p.nome_grupo,
+      ativo: p.ativo,
+      valor_venda: p.valor_venda.toString(),
+      preco_varejo: preco.preco,
+      custo_varejo: preco.custo,
+      valores: valores.map((v) => ({
+        tipo_id: v.tipo_id,
+        nome_tipo: v.nome_tipo,
+        valor_venda: v.valor_venda,
+        valor_custo: v.valor_custo,
+      })),
+      sincronizado_em: p.sincronizado_em.toISOString(),
+    };
+  });
 }
 
 async function executarSync(): Promise<ResumoSyncCatalogo> {

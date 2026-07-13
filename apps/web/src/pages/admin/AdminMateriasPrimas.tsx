@@ -24,6 +24,26 @@ interface ResumoSync {
   erro?: string;
 }
 
+interface DiagnosticoProdutoLocal {
+  id: string;
+  nome: string;
+  codigo_interno: string | null;
+  grupo_id: string | null;
+  nome_grupo: string | null;
+  ativo: boolean;
+  valor_venda: string;
+  preco_varejo: number;
+  custo_varejo: number;
+  valores: { tipo_id?: unknown; nome_tipo?: unknown; valor_venda?: unknown; valor_custo?: unknown }[];
+  sincronizado_em: string;
+}
+
+interface DiagnosticoComponente {
+  codigo_interno: string;
+  produtos_locais: DiagnosticoProdutoLocal[];
+  preco_calculadora: { codigo_interno: string; nome: string; preco: number; custo: number } | null;
+}
+
 function dataHora(iso: string | null): string {
   if (!iso) return 'Nunca';
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(iso));
@@ -43,6 +63,9 @@ export function AdminMateriasPrimas() {
   const [ultimoResumo, setUltimoResumo] = useState<ResumoSync | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [sincronizando, setSincronizando] = useState(false);
+  const [codigoDiagnostico, setCodigoDiagnostico] = useState('5014037651965');
+  const [diagnostico, setDiagnostico] = useState<DiagnosticoComponente | null>(null);
+  const [diagnosticando, setDiagnosticando] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -70,6 +93,20 @@ export function AdminMateriasPrimas() {
       await carregar();
     } finally {
       setSincronizando(false);
+    }
+  }
+
+  async function consultarDiagnostico() {
+    const codigo = codigoDiagnostico.trim();
+    if (!codigo) return;
+    setDiagnosticando(true);
+    try {
+      const r = await api.get<DiagnosticoComponente>(`/admin/gc/catalogo-local/diagnostico-componente?codigo_interno=${encodeURIComponent(codigo)}`);
+      setDiagnostico(r);
+    } catch (e) {
+      showToast('error', 'Falha ao consultar componente', e instanceof ApiError ? e.message : '');
+    } finally {
+      setDiagnosticando(false);
     }
   }
 
@@ -130,6 +167,60 @@ export function AdminMateriasPrimas() {
           </table>
         </div>
       )}
+
+      <div className="card p-4 mt-4">
+        <h2 className="text-lg-ui font-semibold text-neutral-800 mb-3">Diagnóstico de componente</h2>
+        <div className="flex gap-2 mb-4">
+          <input
+            className="input"
+            value={codigoDiagnostico}
+            onChange={(e) => setCodigoDiagnostico(e.target.value)}
+            placeholder="Código interno"
+            style={{ maxWidth: 260 }}
+          />
+          <button className="btn btn-default" type="button" onClick={consultarDiagnostico} disabled={diagnosticando}>
+            {diagnosticando ? <><FontAwesomeIcon icon={faSpinner} spin /> Consultando</> : 'Consultar'}
+          </button>
+        </div>
+
+        {diagnostico && (
+          <div>
+            <table className="w-full mb-4" style={{ borderCollapse: 'collapse', fontSize: 14 }}>
+              <tbody>
+                <Linha label="Preço usado pela calculadora" valor={diagnostico.preco_calculadora ? `R$ ${diagnostico.preco_calculadora.preco.toFixed(2).replace('.', ',')}` : 'Não encontrado'} />
+                <Linha label="Produto da calculadora" valor={diagnostico.preco_calculadora?.nome ?? '—'} />
+              </tbody>
+            </table>
+
+            <div className="text-sm-ui font-semibold text-neutral-700 mb-2">Registros locais</div>
+            <div className="overflow-x-auto">
+              <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #dee2e6' }}>
+                    {['Produto', 'Grupo', 'Ativo', 'Valor raiz', 'Varejo', 'Tabelas'].map((h) => (
+                      <th key={h} style={{ padding: 8, textAlign: 'left', fontWeight: 700 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {diagnostico.produtos_locais.length === 0 ? (
+                    <tr><td colSpan={6} style={{ padding: 12, color: '#6c757d' }}>Nenhum produto local encontrado para este código.</td></tr>
+                  ) : diagnostico.produtos_locais.map((p) => (
+                    <tr key={p.id} style={{ borderTop: '1px solid #dee2e6' }}>
+                      <td style={{ padding: 8 }}>{p.nome}<div className="text-xs-ui text-neutral-500">{p.id}</div></td>
+                      <td style={{ padding: 8 }}>{p.nome_grupo ?? p.grupo_id ?? '—'}</td>
+                      <td style={{ padding: 8 }}>{p.ativo ? 'Sim' : 'Não'}</td>
+                      <td style={{ padding: 8 }}>R$ {Number(p.valor_venda).toFixed(2).replace('.', ',')}</td>
+                      <td style={{ padding: 8 }}>R$ {p.preco_varejo.toFixed(2).replace('.', ',')}</td>
+                      <td style={{ padding: 8 }}>{p.valores.map((v) => String(v.nome_tipo ?? v.tipo_id ?? '—')).join(', ') || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
