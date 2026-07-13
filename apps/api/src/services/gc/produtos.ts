@@ -19,11 +19,6 @@ interface ProdutoCriado {
   id: string;
 }
 
-interface ProdutoListado {
-  id: string;
-  nome: string;
-}
-
 export interface ResultadoProduto {
   gc_produto_id: string;
   codigo_interno: string;
@@ -57,66 +52,46 @@ export function urlProdutoUnica(codigoInterno: string): string {
   return codigoInterno;
 }
 
-function normalizaNome(nome: string): string {
-  return nome.trim().toLocaleLowerCase('pt-BR');
-}
-
 function erroUrlProdutoDuplicada(err: unknown): boolean {
   if (!(err instanceof GcError)) return false;
   const texto = `${err.message} ${JSON.stringify(err.payload ?? '')}`.toLocaleLowerCase('pt-BR');
   return texto.includes('url do produto') && texto.includes('utilizada');
 }
 
-async function buscarProdutoExistentePorNome(nome: string): Promise<ProdutoListado | null> {
-  const env = await gcRequest<GcEnvelope<ProdutoListado[]>>({
-    method: 'GET',
-    url: '/api/produtos',
-    params: { nome, ativo: 1, pagina: 1 },
-  });
-
-  const alvo = normalizaNome(nome);
-  return (env.data ?? []).find((p) => normalizaNome(p.nome) === alvo) ?? null;
-}
-
 export async function criarProduto(p: NovoProdutoGc): Promise<ResultadoProduto> {
-  const codigo_interno = novoCodigoInterno();
   const nome = nomeProdutoGc(p.nome);
   const descricao = descricaoProdutoGc(p.descricao);
-  const payload = {
-    nome,
-    ...(descricao ? { descricao } : {}),
-    url: urlProdutoUnica(codigo_interno),
-    codigo_interno,
-    valor_custo: p.valor_custo,
-    movimenta_estoque: 0, // produto sintético do orçamento — não controla estoque
-    valores: [{ tipo_id: VAREJO_TIPO_ID, valor_venda: p.valor_venda }],
-  };
 
-  try {
-    const env = await gcRequest<GcEnvelope<ProdutoCriado>>({
-      method: 'POST',
-      url: '/api/produtos',
-      data: payload,
-    });
-
-    const gc_produto_id = env.data?.id;
-    if (!gc_produto_id) {
-      throw new Error('GestãoClick não retornou o id do produto.');
-    }
-    return { gc_produto_id, codigo_interno, payload, criado: true };
-  } catch (err) {
-    if (!erroUrlProdutoDuplicada(err)) throw err;
-
-    const existente = await buscarProdutoExistentePorNome(nome);
-    if (!existente) throw err;
-
-    return {
-      gc_produto_id: existente.id,
+  for (let tentativa = 0; tentativa < 3; tentativa += 1) {
+    const codigo_interno = novoCodigoInterno();
+    const payload = {
+      nome,
+      ...(descricao ? { descricao } : {}),
+      url: urlProdutoUnica(codigo_interno),
       codigo_interno,
-      payload: { ...payload, produto_reutilizado_id: existente.id },
-      criado: false,
+      valor_custo: p.valor_custo,
+      movimenta_estoque: 0, // produto sintético do orçamento — não controla estoque
+      valores: [{ tipo_id: VAREJO_TIPO_ID, valor_venda: p.valor_venda }],
     };
+
+    try {
+      const env = await gcRequest<GcEnvelope<ProdutoCriado>>({
+        method: 'POST',
+        url: '/api/produtos',
+        data: payload,
+      });
+
+      const gc_produto_id = env.data?.id;
+      if (!gc_produto_id) {
+        throw new Error('GestãoClick não retornou o id do produto.');
+      }
+      return { gc_produto_id, codigo_interno, payload, criado: true };
+    } catch (err) {
+      if (!erroUrlProdutoDuplicada(err) || tentativa === 2) throw err;
+    }
   }
+
+  throw new Error('Não foi possível criar o produto no GestãoClick.');
 }
 
 export async function deletarProduto(id: string): Promise<void> {

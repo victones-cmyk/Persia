@@ -59,21 +59,18 @@ describe('payload de produto sintetico', () => {
     }));
   });
 
-  it('reutiliza produto existente quando o GestaoClick acusa URL duplicada', async () => {
+  it('tenta criar outro produto quando o GestaoClick acusa URL duplicada', async () => {
     vi.mocked(gcRequest)
       .mockRejectedValueOnce(new GcError(404, 'POST /api/produtos: A URL do produto já está sendo utilizada!'))
-      .mockResolvedValueOnce({ data: [{ id: 'produto-existente-1', nome: 'Sala, Cortina Wave TEX-101 2,00X2,50' }] });
+      .mockResolvedValueOnce({ data: { id: 'produto-gc-2' } });
 
     const produto = await criarProduto({ nome: 'Sala, Cortina Wave TEX-101 2,00X2,50', valor_custo: 100, valor_venda: 500 });
 
     expect(produto).toEqual(expect.objectContaining({
-      gc_produto_id: 'produto-existente-1',
-      criado: false,
+      gc_produto_id: 'produto-gc-2',
+      criado: true,
     }));
-    expect(gcRequest).toHaveBeenLastCalledWith(expect.objectContaining({
-      method: 'GET',
-      url: '/api/produtos',
-      params: expect.objectContaining({ nome: 'Sala, Cortina Wave TEX-101 2,00X2,50', ativo: 1 }),
-    }));
+    expect(gcRequest).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(gcRequest).mock.calls[1][0]).toEqual(expect.objectContaining({ method: 'POST', url: '/api/produtos' }));
   });
 });
