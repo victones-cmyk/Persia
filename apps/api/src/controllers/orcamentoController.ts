@@ -106,6 +106,21 @@ export interface ItemSnapshot {
   componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
 }
 
+function erroGcLegivel(erro: string | null | undefined): string | null {
+  if (!erro) return erro ?? null;
+  if (!/<html[\s>]|<!doctype html/i.test(erro)) return erro;
+  const codigo = erro.match(/Error code\s*(\d{3})/i)?.[1] ?? erro.match(/HTTP\s*(\d{3})/i)?.[1] ?? '5xx';
+  const host = erro.match(/<span[^>]*>\s*([^<]*\.[^<]*)\s*<\/span>\s*<h3[^>]*>[\s\S]*?Host/i)?.[1]?.trim()
+    ?? erro.match(/campaign=([^"&]+).*?Host/i)?.[1]?.trim()
+    ?? null;
+  const alvo = host ? ` (${host})` : '';
+  return `GestãoClick indisponível${alvo}: servidor retornou HTTP ${codigo}. Tente reenviar em alguns minutos.`;
+}
+
+function normalizarErroOrcamento<T extends { erro_gc?: string | null }>(orc: T): T {
+  return { ...orc, erro_gc: erroGcLegivel(orc.erro_gc) };
+}
+
 function produtoSobMedidaLabel(tipo: TipoPersiana): string {
   return encontrarCalculadora(tipo)?.nome ?? TIPO_LABEL[tipo] ?? tipo;
 }
@@ -685,7 +700,7 @@ export async function listarOrcamentos(req: Request, res: Response): Promise<voi
   ]);
 
   res.json({
-    orcamentos,
+    orcamentos: orcamentos.map(normalizarErroOrcamento),
     paginacao: { pagina, porPagina, total, totalPaginas: Math.max(1, Math.ceil(total / porPagina)) },
   });
 }
@@ -779,5 +794,5 @@ export async function getOrcamento(req: Request, res: Response): Promise<void> {
   if (!orc || (sessao.perfil !== 'admin' && orc.usuario_id !== sessao.id)) {
     throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
   }
-  res.json({ orcamento: orc });
+  res.json({ orcamento: normalizarErroOrcamento(orc) });
 }
