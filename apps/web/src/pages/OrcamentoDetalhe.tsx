@@ -8,6 +8,7 @@ import { faArrowLeft, faRotateRight, faSpinner, faFloppyDisk, faXmark, faPen, fa
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL, formatNum } from '../lib/formatacao';
+import { erroGcLegivel } from '../lib/erroGc';
 import { StatusBadge } from '../components/StatusBadge';
 import { ClienteSearch } from '../components/ClienteSearch';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -232,7 +233,7 @@ export function OrcamentoDetalhe() {
           <div className="alert alert-error mb-4">
             <div>
               <div className="font-semibold">Falha no envio ao GestãoClick</div>
-              <div className="text-xs-ui opacity-85">{orc.erro_gc}</div>
+              <div className="text-xs-ui opacity-85">{erroGcLegivel(orc.erro_gc)}</div>
             </div>
           </div>
         )}

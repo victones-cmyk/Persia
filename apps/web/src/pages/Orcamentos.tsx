@@ -14,6 +14,7 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import type { OrcamentoListItem, Paginacao, StatusOrcamento } from '../lib/orcamentoTypes';
 import { lerFiltrosOrcamento, salvarFiltrosOrcamento } from '../lib/filtrosSessao';
 import { parseBR } from '../lib/dataBR';
+import { erroGcLegivel } from '../lib/erroGc';
 import { PeriodoRange } from '../components/PeriodoRange';
 import { ProducaoModal } from '../components/ProducaoModal';
 
@@ -221,7 +222,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
   }
 
   async function copiarErro(o: OrcamentoListItem) {
-    const texto = o.erro_gc || 'Erro não informado.';
+    const texto = erroGcLegivel(o.erro_gc);
     try {
       await navigator.clipboard.writeText(texto);
       showToast('success', 'Erro copiado');
@@ -421,7 +422,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                       </button>
                       {o.status === 'erro' && (
                         <>
-                          <button className="btn btn-default btn-xs text-danger" onClick={() => void copiarErro(o)} title={o.erro_gc || 'Copiar erro'}>
+                          <button className="btn btn-default btn-xs text-danger" onClick={() => void copiarErro(o)} title={erroGcLegivel(o.erro_gc)}>
                             <FontAwesomeIcon icon={faCircleExclamation} />
                           </button>
                           <button className="btn btn-warning btn-xs" disabled={acaoEmId === o.id} onClick={() => reenviar(o.id)} title="Reenviar">
