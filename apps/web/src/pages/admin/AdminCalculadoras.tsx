@@ -752,7 +752,7 @@ export function AdminCalculadoras() {
                   </div>
 
                   <div>
-                    <label className="form-label">ID de Sincronização GestãoClick (`codigo_gc`)<span className="label-required">*</span></label>
+                    <label className="form-label">ID do Produto Base no GestãoClick<span className="label-required">*</span></label>
                     <input
                       className="input font-mono"
                       type="text"
@@ -760,7 +760,7 @@ export function AdminCalculadoras() {
                       value={editandoCalc.codigo_gc}
                       onChange={(e) => setEditandoCalc({ ...editandoCalc, codigo_gc: e.target.value })}
                     />
-                    <div className="helper-text">ID do Produto correspondente no GestãoClick para sincronizar vendas.</div>
+                    <div className="helper-text">Usado como referência de integração do modelo. Componentes usam código interno próprio.</div>
                   </div>
 
                   <div className="border border-neutral-300 rounded-sm bg-neutral-50 p-3 space-y-3">
