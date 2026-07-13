@@ -17,6 +17,8 @@ export interface PersianaItemSnap {
   rolamento: string;
   base: string;
   comando?: string;
+  bando_codigo?: string;
+  bando_nome?: string;
   fixacao_instalacao?: string;
   instalacao_id: string;
   instManual: boolean;

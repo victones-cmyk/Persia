@@ -24,7 +24,9 @@ import {
   buscarTecidoGc,
   tecidosCortina,
   buscarTecidoCortinaGc,
+  precoByTier,
 } from '../services/gc/tecidos';
+import { listarProdutos } from '../services/gc/catalogos';
 import { listarInstalacoes, indiceInstalacoes, type TipoInstalacao } from '../services/gc/instalacao';
 import { linhaInstalacaoBreakdown, componenteInstalacao } from '../services/calc/instalacaoCalc';
 import { listarAcessoriosCortina, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo } from '../services/gc/acessorios';
@@ -45,6 +47,24 @@ export async function listarTecidos(req: Request, res: Response): Promise<void> 
 export async function listarInstalacoesController(_req: Request, res: Response): Promise<void> {
   const instalacoes = await listarInstalacoes();
   res.json({ instalacoes });
+}
+
+/** GET /api/calcular/componentes?grupo_id=5969405 — produtos/componentes para escolhas do formulário. */
+export async function listarComponentesController(req: Request, res: Response): Promise<void> {
+  const grupoId = String(req.query.grupo_id ?? '').trim();
+  if (!grupoId) throw new AppError(400, 'GRUPO_OBRIGATORIO', 'Informe o grupo do GestãoClick.');
+  const produtos = await listarProdutos({ grupo_id: grupoId, ativo: 1 });
+  const componentes = produtos.map((p) => {
+    const preco = precoByTier(p, 'varejo');
+    return {
+      id: p.id,
+      nome: p.nome,
+      codigo_interno: String(p.codigo_interno ?? '').trim(),
+      grupo_id: String(p.grupo_id ?? ''),
+      preco_venda: preco.venda,
+    };
+  });
+  res.json({ componentes });
 }
 
 /**
@@ -222,6 +242,7 @@ export async function calcularPersianaLoteController(req: Request, res: Response
         precos,
         custos,
         componentesPorNome,
+        componente_bando: it.bando_codigo ? { codigo_interno: String(it.bando_codigo), descricao: String(it.bando_nome || 'Bando') } : null,
         cor_acessorio: it.cor_acessorio,
         cor_base: it.base || it.cor_acessorio,
       });

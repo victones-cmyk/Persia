@@ -66,6 +66,7 @@ export function precoPersianaItem(args: {
   precos: Map<string, number>;
   custos: Map<string, number>;
   componentesPorNome?: Map<string, { codigo_interno: string; nome: string; preco: number; custo: number }>;
+  componente_bando?: { codigo_interno: string; descricao: string } | null;
   cor_acessorio?: Cor | null;
   cor_base?: Cor | null;
 }): PrecoPersianaItem {
@@ -77,6 +78,7 @@ export function precoPersianaItem(args: {
     altura: args.altura,
     tc,
     componentesPorNome: args.componentesPorNome,
+    componente_bando: args.componente_bando,
     cor_acessorio: args.cor_acessorio,
     cor_base: args.cor_base,
   };

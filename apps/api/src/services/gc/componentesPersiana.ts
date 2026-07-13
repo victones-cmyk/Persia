@@ -7,7 +7,7 @@
 
 import { listarProdutos, type GcProduto } from './catalogos';
 
-const GRUPOS_COMPONENTES = ['190128', '76945']; // ACESSÓRIOS DE PERSIANAS + ACESSÓRIOS
+const GRUPOS_COMPONENTES = ['190128', '76945', '5969405']; // ACESSÓRIOS DE PERSIANAS + ACESSÓRIOS + BANDÔ DE VERTICAL
 const VAREJO_TIPO_ID = '10969';
 const TTL_MS = 5 * 60 * 1000; // 5 min — preço de componente muda raramente
 
@@ -40,6 +40,7 @@ export async function indicePrecosComponentes(): Promise<Map<string, PrecoCompon
       if (ci && !idx.has(ci)) {
         const { preco, custo } = precoCustoVarejo(p);
         idx.set(ci, { codigo_interno: ci, nome: p.nome, preco, custo });
+        idx.set(String(p.id), { codigo_interno: ci, nome: p.nome, preco, custo });
       }
     }
   }

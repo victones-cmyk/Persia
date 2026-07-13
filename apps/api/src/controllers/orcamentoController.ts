@@ -47,6 +47,8 @@ export interface ItemEntrada {
   rolamento?: string | null;
   base?: string | null;
   comando?: string | null;
+  bando_codigo?: string | null;
+  bando_nome?: string | null;
   fixacao_instalacao?: string | null;
   instalacao_id?: string | null; // tipo de instalação (grupo INSTALAÇÃO) embutido no produto
 }
@@ -64,6 +66,8 @@ interface ItemPreparado {
   rolamento: string | null;
   base: string | null;
   comando: string | null;
+  bando_codigo: string | null;
+  bando_nome: string | null;
   fixacao_instalacao: string | null;
   qtd_venda: number;
   qtd_producao: number;
@@ -92,6 +96,8 @@ export interface ItemSnapshot {
   rolamento: string | null;
   base: string | null;
   comando: string | null;
+  bando_codigo?: string | null;
+  bando_nome?: string | null;
   fixacao_instalacao?: string | null;
   qtd_venda: number;
   qtd_producao: number;
@@ -169,6 +175,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
         precos,
         custos,
         componentesPorNome,
+        componente_bando: it.bando_codigo ? { codigo_interno: String(it.bando_codigo), descricao: String(it.bando_nome || 'Bando') } : null,
         cor_acessorio: it.cor_acessorio,
         cor_base: (it.base || it.cor_acessorio) as Cor,
       });
@@ -213,6 +220,8 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
       rolamento: it.rolamento ?? null,
       base: it.base ?? null,
       comando: it.comando ?? null,
+      bando_codigo: it.bando_codigo ?? null,
+      bando_nome: it.bando_nome ?? null,
       fixacao_instalacao: it.fixacao_instalacao === 'teto' || it.fixacao_instalacao === 'parede' ? it.fixacao_instalacao : null,
       qtd_venda: item.venda.tecido.quantidade,
       qtd_producao: item.venda.tecido.quantidade,
@@ -304,6 +313,8 @@ export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[])
     rolamento: p.rolamento,
     base: p.base,
     comando: p.comando,
+    bando_codigo: p.bando_codigo,
+    bando_nome: p.bando_nome,
     fixacao_instalacao: p.fixacao_instalacao,
     qtd_venda: p.qtd_venda,
     qtd_producao: p.qtd_producao,

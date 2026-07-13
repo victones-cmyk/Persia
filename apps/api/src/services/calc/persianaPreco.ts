@@ -107,6 +107,7 @@ export interface EntradaPrecoPersiana {
   preco_tecido: number; // R$ por unidade conforme a fórmula da família (altura ou m²)
   precos: Map<string, number>; // codigo_interno → preço VAREJO do componente
   componentesPorNome?: Map<string, ComponentePrecoLookup>;
+  componente_bando?: { codigo_interno: string; descricao: string } | null;
   cor_acessorio?: Cor | null;
   cor_base?: Cor | null;
 }
@@ -143,6 +144,17 @@ function resolverComponenteColoridoDetalhado(
   componente: { codigo_interno: string; descricao: string },
   e: EntradaPrecoPersiana,
 ): { codigo_interno: string; descricao: string; preco: number; descricao_original: string; descricao_alvo: string; codigo_original: string; origem: 'original' | 'cor' | 'fallback'; alerta?: string } {
+  if (e.componente_bando && /\bBANDO\b/i.test(componente.descricao)) {
+    return {
+      codigo_interno: e.componente_bando.codigo_interno,
+      descricao: e.componente_bando.descricao,
+      preco: e.precos.get(e.componente_bando.codigo_interno) ?? 0,
+      descricao_original: componente.descricao,
+      descricao_alvo: e.componente_bando.descricao,
+      codigo_original: componente.codigo_interno,
+      origem: 'original',
+    };
+  }
   const cor = ehComponenteBase(componente.descricao) ? e.cor_base : e.cor_acessorio;
   const descricaoAlvo = trocarCorDescricao(componente.descricao, cor);
   const mudouCor = descricaoAlvo !== componente.descricao;

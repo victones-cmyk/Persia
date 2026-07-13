@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth';
 import {
   listarTecidos,
   listarInstalacoesController,
+  listarComponentesController,
   calcularPersianaController,
   calcularPersianaLoteController,
   listarTecidosCortina,
@@ -20,6 +21,7 @@ router.get('/calculadoras', listarCalculadorasController);
 router.get('/calculadoras-cortina', listarCalculadorasCortinaController);
 router.get('/tecidos', listarTecidos);
 router.get('/instalacoes', listarInstalacoesController);
+router.get('/componentes', listarComponentesController);
 router.post('/persiana', calcularPersianaController);
 router.post('/persiana/lote', calcularPersianaLoteController);
 router.get('/cortina/tecidos', listarTecidosCortina);
@@ -28,4 +30,3 @@ router.post('/cortina', calcularCortinaController);
 router.post('/cortina/completa', calcularCortinaCompletaController);
 
 export default router;
-

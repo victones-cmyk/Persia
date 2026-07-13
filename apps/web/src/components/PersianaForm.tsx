@@ -48,6 +48,8 @@ interface ItemForm {
   rolamento: string;
   base: string;
   comando: string;
+  bando_codigo: string;
+  bando_nome: string;
   fixacao_instalacao: string;
   instalacao_id: string;
   instManual: boolean;
@@ -58,12 +60,20 @@ interface ItemErro {
   alternativos?: { id: string; nome: string; dimensao_m: number }[];
 }
 
+interface ComponenteOpcao {
+  id: string;
+  nome: string;
+  codigo_interno: string;
+  preco_venda: number;
+}
+
 function itemVazio(): ItemForm {
-  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', comando: '', fixacao_instalacao: '', instalacao_id: '', instManual: false };
+  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', comando: '', bando_codigo: '', bando_nome: '', fixacao_instalacao: '', instalacao_id: '', instManual: false };
 }
 
 const ehMotorizado = (ac: string) => ac === 'motorizado_com_bando' || ac === 'motorizado_sem_bando';
 const COMANDOS_VERTICAL = ['Lateral', 'Lateral invertido', 'Central', 'Central com junção'] as const;
+const GRUPO_BANDO_VERTICAL = '5969405';
 const ACIONAMENTOS_POR_VARIANTE: Array<{ receita: keyof CalculadoraPersiana['receitas']; value: Acionamento; label: string }> = [
   { receita: 'com_bando', value: 'com_bando', label: 'Com Bandô' },
   { receita: 'sem_bando', value: 'com_barra', label: 'Sem Bandô' },
@@ -103,6 +113,8 @@ function inputParaForm(it: ItemInput, tipoFallback: TipoPersiana | ''): ItemForm
     rolamento: normalizarRolamento(it.rolamento),
     base: it.base ?? '',
     comando: it.comando ?? '',
+    bando_codigo: it.bando_codigo ?? '',
+    bando_nome: it.bando_nome ?? '',
     fixacao_instalacao: it.fixacao_instalacao ?? '',
     instalacao_id: it.instalacao_id ?? '',
     instManual: it.instalacao_id != null && it.instalacao_id !== '',
@@ -125,6 +137,8 @@ function snapParaForm(s: PersianaItemSnap, tipoFallback: TipoPersiana | ''): Ite
     rolamento: normalizarRolamento(s.rolamento),
     base: s.base,
     comando: s.comando ?? '',
+    bando_codigo: s.bando_codigo ?? '',
+    bando_nome: s.bando_nome ?? '',
     fixacao_instalacao: s.fixacao_instalacao ?? '',
     instalacao_id: s.instalacao_id ?? '',
     instManual: s.instManual ?? false,
@@ -135,7 +149,7 @@ function formParaSnap(it: ItemForm): PersianaItemSnap {
   return {
     ambiente: it.ambiente, tipo: it.tipo, tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
     largura: it.largura, altura: it.altura, tc: it.tc, tcManual: it.tcManual,
-    rolamento: it.rolamento, base: it.base, comando: it.comando, fixacao_instalacao: it.fixacao_instalacao, instalacao_id: it.instalacao_id, instManual: it.instManual,
+    rolamento: it.rolamento, base: it.base, comando: it.comando, bando_codigo: it.bando_codigo, bando_nome: it.bando_nome, fixacao_instalacao: it.fixacao_instalacao, instalacao_id: it.instalacao_id, instManual: it.instManual,
   };
 }
 
@@ -172,6 +186,7 @@ export function PersianaForm({
   const emVoo = useRef<Set<string>>(new Set());
   // Tipos de instalação (grupo INSTALAÇÃO do GestãoClick).
   const [instalacoes, setInstalacoes] = useState<TipoInstalacao[]>([]);
+  const [bandosVertical, setBandosVertical] = useState<ComponenteOpcao[]>([]);
 
   const [calculando, setCalculando] = useState(false);
   const [erros, setErros] = useState<Record<number, ItemErro>>({});
@@ -207,6 +222,9 @@ export function PersianaForm({
     getCacheado<{ instalacoes: TipoInstalacao[] }>('instalacoes', '/calcular/instalacoes')
       .then((r) => setInstalacoes(r.instalacoes))
       .catch(() => setInstalacoes([]));
+    getCacheado<{ componentes: ComponenteOpcao[] }>(`componentes:${GRUPO_BANDO_VERTICAL}`, `/calcular/componentes?grupo_id=${GRUPO_BANDO_VERTICAL}`)
+      .then((r) => setBandosVertical(r.componentes.filter((c) => c.codigo_interno)))
+      .catch(() => setBandosVertical([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -252,6 +270,10 @@ export function PersianaForm({
   function onAcionamentoChange(idx: number, ac: Acionamento) {
     const it = itens[idx];
     const patch: Partial<ItemForm> = { acionamento: ac };
+    if (ac !== 'com_bando') {
+      patch.bando_codigo = '';
+      patch.bando_nome = '';
+    }
     // Sugere a instalação pelo acionamento, a menos que o vendedor já tenha escolhido manualmente.
     if (!it.instManual && instalacoes.length > 0) patch.instalacao_id = sugerirInstalacao(instalacoes, ac);
     atualizar(idx, patch);
@@ -319,6 +341,7 @@ export function PersianaForm({
     && (ehVertical(it) || it.cor !== '')
     && it.acionamento !== ''
     && opcoesAcionamentoDaCalculadora(calculadoraDoItem(it)).some((op) => op.value === it.acionamento)
+    && (!ehVertical(it) || it.acionamento !== 'com_bando' || it.bando_codigo !== '')
     && Number(it.largura) > 0
     && Number(it.altura) > 0;
   // Só os itens completos entram no cálculo; itens incompletos bloqueiam o envio.
@@ -345,6 +368,8 @@ export function PersianaForm({
       rolamento: ehVertical(it) ? null : it.rolamento || null,
       base: ehVertical(it) ? null : it.base || null,
       comando: it.comando || null,
+      bando_codigo: ehVertical(it) && it.acionamento === 'com_bando' ? it.bando_codigo || null : null,
+      bando_nome: ehVertical(it) && it.acionamento === 'com_bando' ? it.bando_nome || null : null,
       fixacao_instalacao: it.fixacao_instalacao === 'teto' || it.fixacao_instalacao === 'parede' ? it.fixacao_instalacao : null,
       instalacao_id: it.instalacao_id || null,
     };
@@ -516,6 +541,28 @@ export function PersianaForm({
                 </select>
               </div>
             </div>
+
+            {vertical && it.acionamento === 'com_bando' && (
+              <div className="grid grid-cols-1 gap-3 mb-3">
+                <div>
+                  <label className="form-label" htmlFor={`bando-persiana-${idx}`}>Bandô<span className="label-required">*</span></label>
+                  <select
+                    id={`bando-persiana-${idx}`}
+                    className="input"
+                    value={it.bando_codigo}
+                    onChange={(e) => {
+                      const escolhido = bandosVertical.find((b) => b.codigo_interno === e.target.value);
+                      atualizar(idx, { bando_codigo: escolhido?.codigo_interno ?? '', bando_nome: escolhido?.nome ?? '' });
+                    }}
+                  >
+                    <option value="">Selecione o tipo de Bandô…</option>
+                    {bandosVertical.map((b) => (
+                      <option key={`${b.id}-${b.codigo_interno}`} value={b.codigo_interno}>{b.nome} — {formatBRL(b.preco_venda)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* Linha 2: Largura · Altura · TC · Rolamento · Base */}
             <div className={`grid ${vertical ? 'grid-cols-3' : 'grid-cols-5'} gap-3 mb-3`}>
