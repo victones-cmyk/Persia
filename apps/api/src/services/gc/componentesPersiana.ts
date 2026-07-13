@@ -31,7 +31,7 @@ async function listarProdutosComponentes(grupo: string): Promise<GcProduto[]> {
     const ci = String(p.codigo_interno ?? '').trim();
     return ci && precoCustoVarejo(p).preco <= 0;
   });
-  if (!temComponenteSemPreco) return produtos;
+  if (produtos.length > 0 && !temComponenteSemPreco) return produtos;
 
   try {
     return [...produtos, ...await listarProdutosRemoto({ grupo_id: grupo, ativo: 1 })];
