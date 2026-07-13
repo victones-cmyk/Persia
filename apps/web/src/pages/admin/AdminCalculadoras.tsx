@@ -25,6 +25,7 @@ import {
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmModal } from '../../components/ConfirmModal';
+import { formatBRL, formatQtd } from '../../lib/formatacao';
 import type { CalculadoraPersiana, ComponenteCalculadora, ReceitaCalculadora, CalculadoraCortina, CamadaCalculadoraCortina } from '../../lib/calcTypes';
 
 // Mapeamentos de enums fixos no BD/API
@@ -70,6 +71,26 @@ const FIXACOES_CORTINA = [
 type VarianteKey = (typeof VARIANTES)[number]['key'];
 interface GrupoProdutoGc { id: string; grupo_pai_id: string | null; nome: string }
 interface ProdutoGcResumo { id: string; nome: string; codigo_interno: string; grupo_id: string; nome_grupo: string }
+interface LinhaPreviewPersiana {
+  codigo_interno: string;
+  descricao: string;
+  quantidade: number;
+  preco: number;
+  subtotal: number;
+  descricao_original: string;
+  descricao_alvo: string;
+  codigo_original: string;
+  origem: 'original' | 'cor' | 'fallback';
+  alerta?: string;
+}
+interface PreviewPersiana {
+  familia: string;
+  variante: string;
+  valor: number;
+  variaveis: Record<string, number>;
+  tecido: { quantidade: number; preco: number; subtotal: number };
+  itens: LinhaPreviewPersiana[];
+}
 
 export function AdminCalculadoras() {
   const { showToast } = useToast();
@@ -87,6 +108,17 @@ export function AdminCalculadoras() {
   const [buscaGrupoGc, setBuscaGrupoGc] = useState('');
   const [buscaProdutoGc, setBuscaProdutoGc] = useState('');
   const [carregandoCatalogoGc, setCarregandoCatalogoGc] = useState(false);
+  const [previewCalc, setPreviewCalc] = useState<PreviewPersiana | null>(null);
+  const [previewErro, setPreviewErro] = useState<string | null>(null);
+  const [previewCarregando, setPreviewCarregando] = useState(false);
+  const [previewForm, setPreviewForm] = useState({
+    largura: '2',
+    altura: '1.80',
+    tc: '',
+    preco_tecido: '100',
+    cor_acessorio: 'Branco',
+    cor_base: 'Branco',
+  });
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [restaurarAberto, setRestaurarAberto] = useState(false);
@@ -152,6 +184,30 @@ export function AdminCalculadoras() {
     }
   }
 
+  async function gerarPreviewPersiana() {
+    if (!editandoCalc) return;
+    setPreviewCarregando(true);
+    setPreviewErro(null);
+    try {
+      const r = await api.post<{ preview: PreviewPersiana }>('/admin/calculadoras/preview-persiana', {
+        calculadora: editandoCalc,
+        variante: abaVariante,
+        largura: Number(previewForm.largura),
+        altura: Number(previewForm.altura),
+        tc: previewForm.tc === '' ? undefined : Number(previewForm.tc),
+        preco_tecido: Number(previewForm.preco_tecido),
+        cor_acessorio: previewForm.cor_acessorio,
+        cor_base: previewForm.cor_base,
+      });
+      setPreviewCalc(r.preview);
+    } catch (e) {
+      setPreviewCalc(null);
+      setPreviewErro(e instanceof ApiError ? e.message : 'Não foi possível gerar a prévia.');
+    } finally {
+      setPreviewCarregando(false);
+    }
+  }
+
   useEffect(() => {
     carregar();
   }, []);
@@ -160,6 +216,11 @@ export function AdminCalculadoras() {
     if (editandoCalc) void carregarGruposGc();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editandoCalc]);
+
+  useEffect(() => {
+    setPreviewCalc(null);
+    setPreviewErro(null);
+  }, [editandoCalc?.id, abaVariante]);
 
   // Salva a lista inteira de persiana de volta no servidor
   async function salvarPersianas(lista: CalculadoraPersiana[]) {
@@ -1104,6 +1165,100 @@ export function AdminCalculadoras() {
                               )}
                             </tbody>
                           </table>
+                        </div>
+
+                        <div className="border border-neutral-300 rounded-sm bg-neutral-50 p-3 space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                              <h5 className="text-sm-ui font-bold text-neutral-800">Prévia / Auditoria do Cálculo</h5>
+                              <div className="helper-text">Mostra como a receita é resolvida com cor, código interno, preço e fallback.</div>
+                            </div>
+                            <button type="button" className="btn btn-default btn-xs" disabled={previewCarregando} onClick={() => void gerarPreviewPersiana()}>
+                              {previewCarregando ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faMagnifyingGlass} />} Gerar prévia
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                            <div>
+                              <label className="form-label">Largura</label>
+                              <input className="input input-xs" type="number" step={0.01} value={previewForm.largura} onChange={(e) => setPreviewForm({ ...previewForm, largura: e.target.value })} />
+                            </div>
+                            <div>
+                              <label className="form-label">Altura</label>
+                              <input className="input input-xs" type="number" step={0.01} value={previewForm.altura} onChange={(e) => setPreviewForm({ ...previewForm, altura: e.target.value })} />
+                            </div>
+                            <div>
+                              <label className="form-label">TC</label>
+                              <input className="input input-xs" type="number" step={0.01} placeholder="auto" value={previewForm.tc} onChange={(e) => setPreviewForm({ ...previewForm, tc: e.target.value })} />
+                            </div>
+                            <div>
+                              <label className="form-label">Preço Tecido</label>
+                              <input className="input input-xs" type="number" step={0.01} value={previewForm.preco_tecido} onChange={(e) => setPreviewForm({ ...previewForm, preco_tecido: e.target.value })} />
+                            </div>
+                            <div>
+                              <label className="form-label">Acessórios</label>
+                              <select className="input input-xs" value={previewForm.cor_acessorio} onChange={(e) => setPreviewForm({ ...previewForm, cor_acessorio: e.target.value })}>
+                                {['Branco', 'Bege', 'Cinza', 'Preto'].map((c) => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="form-label">Base</label>
+                              <select className="input input-xs" value={previewForm.cor_base} onChange={(e) => setPreviewForm({ ...previewForm, cor_base: e.target.value })}>
+                                {['Branco', 'Bege', 'Cinza', 'Preto'].map((c) => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                          </div>
+
+                          {previewErro && (
+                            <div className="text-xs-ui text-error font-semibold">{previewErro}</div>
+                          )}
+
+                          {previewCalc && (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap gap-2 text-xs-ui text-neutral-700">
+                                <span className="badge badge-secondary">Família: {previewCalc.familia}</span>
+                                <span className="badge badge-secondary">Variante: {previewCalc.variante}</span>
+                                <span className="badge badge-secondary">Valor: {formatBRL(previewCalc.valor)}</span>
+                                <span className="badge badge-secondary">Tecido: {formatQtd(previewCalc.tecido.quantidade)} × {formatBRL(previewCalc.tecido.preco)}</span>
+                              </div>
+                              <div className="overflow-x-auto border border-neutral-300 rounded-sm bg-surface-card">
+                                <table className="w-full text-xs-ui" style={{ borderCollapse: 'collapse', minWidth: 860 }}>
+                                  <thead>
+                                    <tr className="border-b border-neutral-300 text-neutral-600 font-semibold">
+                                      <th className="py-2 px-2 text-left">Componente resolvido</th>
+                                      <th className="py-2 px-2 text-left">Origem</th>
+                                      <th className="py-2 px-2 text-left">Código</th>
+                                      <th className="py-2 px-2 text-right">Qtd</th>
+                                      <th className="py-2 px-2 text-right">Preço</th>
+                                      <th className="py-2 px-2 text-right">Subtotal</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {previewCalc.itens.map((linha, idxLinha) => (
+                                      <tr key={`${linha.codigo_interno}-${idxLinha}`} className="border-b border-neutral-200">
+                                        <td className="py-2 px-2">
+                                          <div className="font-semibold text-neutral-800">{linha.descricao}</div>
+                                          {linha.descricao_original !== linha.descricao && (
+                                            <div className="text-2xs-ui text-neutral-500">Original: {linha.descricao_original}</div>
+                                          )}
+                                          {linha.alerta && <div className="text-2xs-ui text-error font-semibold">{linha.alerta}</div>}
+                                        </td>
+                                        <td className="py-2 px-2">
+                                          <span className={`badge badge-secondary ${linha.origem === 'fallback' ? 'text-error' : linha.origem === 'cor' ? 'text-success' : ''}`}>
+                                            {linha.origem === 'fallback' ? 'Fallback' : linha.origem === 'cor' ? 'Cor aplicada' : 'Original'}
+                                          </span>
+                                        </td>
+                                        <td className="py-2 px-2 font-mono text-neutral-700">{linha.codigo_interno || '-'}</td>
+                                        <td className="py-2 px-2 text-right font-mono">{formatQtd(linha.quantidade)}</td>
+                                        <td className="py-2 px-2 text-right font-mono">{formatBRL(linha.preco)}</td>
+                                        <td className="py-2 px-2 text-right font-mono font-semibold">{formatBRL(linha.subtotal)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );

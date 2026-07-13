@@ -9,8 +9,12 @@ import { validarSenha } from '../lib/senha';
 import { listarFuncionarios, listarGruposProdutos, listarProdutos } from '../services/gc/catalogos';
 import { getRegras, salvarRegras, REGRAS_DEFAULT } from '../services/calc/regras';
 import { composicaoCalculo } from '../services/calc/composicao';
-import { getCalculadoras, salvarCalculadoras } from '../services/calc/calculadoras';
+import { getCalculadoras, salvarCalculadoras, type CalculadoraPersiana } from '../services/calc/calculadoras';
 import { getCalculadorasCortina, salvarCalculadorasCortina } from '../services/calc/calculadorasCortina';
+import { auditarPrecoPersiana, type ReceitaPendenteError } from '../services/calc/persianaPreco';
+import { mapasDePrecoComponentes, tcPadrao } from '../services/calc/persianaPrecoGc';
+import type { Acionamento, Cor } from '../services/calc/tipos';
+import type { VariantePersiana } from '../services/calc/persianaReceitas.data';
 
 // ---------------------------------------------------------------------------
 // Versão em produção (só admin) — usado para conferir o auto-deploy do Railway.
@@ -65,6 +69,72 @@ export async function atualizarCalculadoras(req: Request, res: Response): Promis
     data: { usuario_id: sessao.id, acao: 'calculadoras_atualizadas', detalhe: {} },
   });
   res.json({ calculadoras: salvas });
+}
+
+const ACIONAMENTO_DA_VARIANTE: Record<VariantePersiana, Acionamento> = {
+  com_bando: 'com_bando',
+  sem_bando: 'com_barra',
+  motor_com_bando: 'motorizado_com_bando',
+  motor_sem_bando: 'motorizado_sem_bando',
+};
+
+function corValida(v: unknown, fallback: Cor): Cor {
+  return ['Branco', 'Bege', 'Cinza', 'Preto'].includes(String(v)) ? (v as Cor) : fallback;
+}
+
+function varianteValida(v: unknown): VariantePersiana {
+  return ['com_bando', 'sem_bando', 'motor_com_bando', 'motor_sem_bando'].includes(String(v))
+    ? (v as VariantePersiana)
+    : 'com_bando';
+}
+
+export async function previewCalculadoraPersiana(req: Request, res: Response): Promise<void> {
+  const calc = req.body?.calculadora as CalculadoraPersiana | undefined;
+  if (!calc || typeof calc !== 'object') {
+    throw new AppError(400, 'CALCULADORA_INVALIDA', 'Informe uma calculadora para auditar.');
+  }
+  const variante = varianteValida(req.body?.variante);
+  const receita = calc.receitas?.[variante];
+  if (!receita) {
+    throw new AppError(400, 'RECEITA_PENDENTE', 'A variante selecionada não possui receita cadastrada.');
+  }
+
+  const largura = Number(req.body?.largura) || 2;
+  const altura = Number(req.body?.altura) || 1.8;
+  if (!(largura > 0) || !(altura > 0)) {
+    throw new AppError(400, 'MEDIDAS_INVALIDAS', 'Largura e altura devem ser positivas.');
+  }
+
+  const corAcessorio = corValida(req.body?.cor_acessorio, 'Branco');
+  const corBase = corValida(req.body?.cor_base, corAcessorio);
+  const precoTecido = Number(req.body?.preco_tecido);
+  const tc = tcPadrao(altura, req.body?.tc === '' || req.body?.tc == null ? undefined : Number(req.body.tc));
+  const { precos, componentesPorNome } = await mapasDePrecoComponentes();
+
+  try {
+    const preview = auditarPrecoPersiana({
+      tipo: calc.id,
+      familia: calc.familia,
+      variante,
+      receita,
+      acionamento: ACIONAMENTO_DA_VARIANTE[variante],
+      largura,
+      altura,
+      tc,
+      preco_tecido: Number.isFinite(precoTecido) ? precoTecido : 100,
+      precos,
+      componentesPorNome,
+      cor_acessorio: corAcessorio,
+      cor_base: corBase,
+    });
+    res.json({ preview });
+  } catch (err) {
+    const pendente = err as ReceitaPendenteError;
+    if (pendente?.name === 'ReceitaPendenteError') {
+      throw new AppError(400, 'RECEITA_PENDENTE', pendente.message);
+    }
+    throw err;
+  }
 }
 
 // Calculadoras dinâmicas de cortina (só admin)

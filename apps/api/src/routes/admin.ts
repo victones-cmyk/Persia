@@ -12,6 +12,7 @@ import {
   salvarRegrasCalculo,
   listarCalculadoras,
   atualizarCalculadoras,
+  previewCalculadoraPersiana,
   listarCalculadorasCortina,
   atualizarCalculadorasCortina,
   listarGruposProdutosGc,
@@ -39,6 +40,7 @@ router.put('/regras-calculo', salvarRegrasCalculo);
 
 router.get('/calculadoras', listarCalculadoras);
 router.put('/calculadoras', atualizarCalculadoras);
+router.post('/calculadoras/preview-persiana', previewCalculadoraPersiana);
 
 router.get('/calculadoras-cortina', listarCalculadorasCortina);
 router.put('/calculadoras-cortina', atualizarCalculadorasCortina);
