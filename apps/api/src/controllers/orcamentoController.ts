@@ -623,6 +623,67 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
     });
     return;
   }
+
+  const pedidoExistente = typeof req.body?.gc_pedido_codigo === 'string' || typeof req.body?.gc_pedido_codigo === 'number'
+    ? String(req.body.gc_pedido_codigo).trim()
+    : '';
+  if (pedidoExistente) {
+    if (pedidoExistente.length > 50) {
+      throw new AppError(400, 'PEDIDO_INVALIDO', 'O número do pedido deve ter no máximo 50 caracteres.');
+    }
+    const duplicado = await prisma.orcamento.findFirst({
+      where: {
+        id: { not: orc.id },
+        gc_pedido_codigo: pedidoExistente,
+      },
+      select: { id: true, gc_codigo: true, gc_orcamento_id: true, nome_cliente: true },
+    });
+    if (duplicado) {
+      throw new AppError(
+        409,
+        'PEDIDO_JA_VINCULADO',
+        `O pedido ${pedidoExistente} já está vinculado ao orçamento ${duplicado.gc_codigo ?? duplicado.gc_orcamento_id ?? duplicado.id} (${duplicado.nome_cliente}).`,
+      );
+    }
+
+    const respostaAnterior = orc.resposta_gc && typeof orc.resposta_gc === 'object' && !Array.isArray(orc.resposta_gc)
+      ? orc.resposta_gc as Prisma.JsonObject
+      : {};
+    const atualizado = await prisma.orcamento.update({
+      where: { id: orc.id },
+      data: {
+        gc_pedido_codigo: pedidoExistente,
+        pedido_confirmado_em: new Date(),
+        resposta_gc: {
+          ...respostaAnterior,
+          venda_vinculada_manual: {
+            gc_pedido_codigo: pedidoExistente,
+            vinculado_em: new Date().toISOString(),
+            usuario_id: sessao.id,
+          },
+        } as Prisma.InputJsonValue,
+        erro_gc: null,
+      },
+    });
+    await prisma.logAcao.create({
+      data: {
+        usuario_id: sessao.id,
+        acao: 'venda_vinculada_manual',
+        detalhe: {
+          orcamento_id: orc.id,
+          gc_orcamento_id: orc.gc_orcamento_id,
+          gc_pedido_codigo: pedidoExistente,
+        },
+      },
+    });
+    res.json({
+      orcamento: atualizado,
+      venda: { gc_pedido_id: null, gc_pedido_codigo: pedidoExistente },
+      vinculada_manual: true,
+    });
+    return;
+  }
+
   if (!orc.payload_gc_enviado) {
     throw new AppError(409, 'SEM_PAYLOAD_GC', 'Não foi encontrado o payload original enviado ao GestãoClick.');
   }

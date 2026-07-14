@@ -76,21 +76,21 @@ export function Sidebar() {
 
   return (
     <nav
-      className="w-sidebar bg-surface-sidebar shadow-sidebar shrink-0 overflow-y-auto py-3"
+      className="w-full lg:w-sidebar bg-surface-sidebar shadow-sidebar shrink-0 overflow-x-auto lg:overflow-x-hidden lg:overflow-y-auto py-2 lg:py-3"
       aria-label="Navegação principal"
     >
-      <div className="flex flex-col">
+      <div className="flex lg:flex-col min-w-max lg:min-w-0">
         {ITENS_GERAIS.map((item) => (
           <Link key={item.to} item={item} onAvisoNaoSalvo={() => setAvisoAberto(true)} />
         ))}
       </div>
 
       {isAdmin && (
-        <div className="mt-4">
-          <div className="px-4 py-2 text-2xs-ui font-bold uppercase text-neutral-500 tracking-wide">
+        <div className="mt-1 lg:mt-4">
+          <div className="hidden lg:block px-4 py-2 text-2xs-ui font-bold uppercase text-neutral-500 tracking-wide">
             Administração
           </div>
-          <div className="flex flex-col">
+          <div className="flex lg:flex-col min-w-max lg:min-w-0">
             {ITENS_ADMIN.map((item) => (
               <Link key={item.to} item={item} onAvisoNaoSalvo={() => setAvisoAberto(true)} />
             ))}

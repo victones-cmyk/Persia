@@ -421,3 +421,15 @@ input[type='number'] {
     min-width: max-content;
   }
 }
+
+@media (max-width: 1023px) {
+  .sidebar-link {
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+  }
+  .sidebar-link.active {
+    border-left-color: transparent;
+    border-bottom-color: var(--action-add);
+  }
+}

@@ -156,8 +156,26 @@ export function ProducaoModal({
 
   function tipoOrdem(ordem: OrdemProducao): 'persiana' | 'cortina' {
     const item = ordem.item_snapshot_json;
+    if (ordem.tipo_produto === 'persiana') return 'persiana';
     if (ordem.tipo_produto === 'cortina') return 'cortina';
-    return item?.acionamento || item?.base || item?.comando || item?.tc_m !== undefined ? 'persiana' : 'cortina';
+    const extra = item as (ItemSnapshot & { descricao_produto?: unknown; camadas?: unknown[]; fixacao?: unknown; abertura?: unknown; desconto?: unknown }) | undefined;
+    const descricao = [
+      item?.nome_produto,
+      item?.tipo,
+      extra?.descricao_produto,
+    ].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const pareceCortina = Boolean(
+      extra?.camadas?.length
+      || extra?.fixacao
+      || extra?.abertura
+      || extra?.desconto
+      || descricao.includes('cortina')
+      || descricao.includes('wave')
+      || descricao.includes('prega')
+      || descricao.includes('ilhos')
+      || descricao.includes('franzido')
+    );
+    return pareceCortina ? 'cortina' : 'persiana';
   }
 
   const totaisOrdens = useMemo(() => {

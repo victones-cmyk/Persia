@@ -115,6 +115,8 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
   const [acaoEmId, setAcaoEmId] = useState<string | null>(null);
   const [cancelarId, setCancelarId] = useState<string | null>(null);
   const [producaoOrc, setProducaoOrc] = useState<OrcamentoListItem | null>(null);
+  const [vendaOrc, setVendaOrc] = useState<OrcamentoListItem | null>(null);
+  const [pedidoExistente, setPedidoExistente] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const carregar = useCallback(async () => {
@@ -197,16 +199,21 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
     }
   }
 
-  async function gerarVenda(id: string) {
+  async function gerarVenda(id: string, pedidoManual?: string) {
     setAcaoEmId(id);
     try {
-      const r = await api.post<{ orcamento: OrcamentoListItem; ja_existia?: boolean }>(`/orcamentos/${id}/gerar-venda`);
+      const r = await api.post<{ orcamento: OrcamentoListItem; ja_existia?: boolean; vinculada_manual?: boolean }>(
+        `/orcamentos/${id}/gerar-venda`,
+        pedidoManual ? { gc_pedido_codigo: pedidoManual } : undefined,
+      );
       const codigo = r.orcamento.gc_pedido_codigo ?? r.orcamento.gc_pedido_id ?? '';
       showToast(
         'success',
-        r.ja_existia ? 'Venda já gerada' : 'Venda gerada no GestãoClick',
+        r.vinculada_manual ? 'Venda vinculada' : r.ja_existia ? 'Venda já gerada' : 'Venda gerada no GestãoClick',
         codigo ? `Pedido ${codigo}` : undefined,
       );
+      setVendaOrc(null);
+      setPedidoExistente('');
       carregar();
     } catch (e) {
       const msg = e instanceof ApiError
@@ -219,6 +226,17 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
     } finally {
       setAcaoEmId(null);
     }
+  }
+
+  function abrirModalVenda(o: OrcamentoListItem) {
+    setVendaOrc(o);
+    setPedidoExistente('');
+  }
+
+  function fecharModalVenda() {
+    if (acaoEmId) return;
+    setVendaOrc(null);
+    setPedidoExistente('');
   }
 
   async function copiarErro(o: OrcamentoListItem) {
@@ -385,19 +403,21 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                       <button className="btn btn-info btn-xs" onClick={() => navigate(`/orcamentos/${o.id}`)} title="Visualizar">
                         <FontAwesomeIcon icon={faEye} />
                       </button>
-                      <button
-                        className="btn btn-default btn-xs"
-                        disabled={o.status !== 'enviado'}
-                        onClick={() => setProducaoOrc(o)}
-                        title={o.status === 'enviado' ? 'Gerar ordem de produção' : 'Produção apenas para orçamentos enviados'}
-                      >
-                        <FontAwesomeIcon icon={faIndustry} />
-                      </button>
+                      {somenteVendas && (
+                        <button
+                          className="btn btn-default btn-xs"
+                          disabled={o.status !== 'enviado'}
+                          onClick={() => setProducaoOrc(o)}
+                          title={o.status === 'enviado' ? 'Gerar ordem de produção' : 'Produção apenas para orçamentos enviados'}
+                        >
+                          <FontAwesomeIcon icon={faIndustry} />
+                        </button>
+                      )}
                       {!somenteVendas && (
                         <button
                           className="btn btn-success btn-xs"
                           disabled={o.status !== 'enviado' || Boolean(o.gc_pedido_codigo || o.gc_pedido_id) || acaoEmId === o.id}
-                          onClick={() => gerarVenda(o.id)}
+                          onClick={() => abrirModalVenda(o)}
                           title={
                             o.status !== 'enviado'
                               ? 'Venda apenas para orçamentos enviados'
@@ -488,6 +508,61 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
         onFechar={() => setProducaoOrc(null)}
         onAtualizar={carregar}
       />
+      {vendaOrc && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={fecharModalVenda}
+        >
+          <div
+            className="card"
+            style={{ background: '#fff', borderRadius: 3, padding: 16, width: 'min(520px, calc(100vw - 32px))', boxShadow: 'var(--shadow-modal)', zIndex: 200 }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <div className="text-lg-ui font-bold">Gerar venda</div>
+                <div className="text-sm-ui text-neutral-600">
+                  {vendaOrc.nome_cliente} · orçamento <span className="font-mono">{vendaOrc.gc_codigo ?? vendaOrc.gc_orcamento_id ?? '-'}</span>
+                </div>
+              </div>
+              <button type="button" className="btn btn-default btn-xs" disabled={acaoEmId === vendaOrc.id} onClick={fecharModalVenda}>Fechar</button>
+            </div>
+
+            <div className="alert alert-info mb-3">
+              Gere uma venda nova no GestãoClick ou vincule uma venda que já foi criada no ERP.
+            </div>
+
+            <div className="mb-3">
+              <label className="form-label" htmlFor="pedido-existente">Nº do pedido já gerado no GestãoClick</label>
+              <input
+                id="pedido-existente"
+                className="input"
+                value={pedidoExistente}
+                disabled={acaoEmId === vendaOrc.id}
+                onChange={(e) => setPedidoExistente(e.target.value)}
+                placeholder="Ex.: 75147"
+              />
+              <div className="helper-text">O app valida se esse número já não está vinculado a outro orçamento.</div>
+            </div>
+
+            <div className="flex flex-wrap justify-between gap-2">
+              <button type="button" className="btn btn-default" disabled={acaoEmId === vendaOrc.id} onClick={() => void gerarVenda(vendaOrc.id)}>
+                <FontAwesomeIcon icon={faFileInvoiceDollar} /> Gerar venda nova
+              </button>
+              <button
+                type="button"
+                className="btn btn-success"
+                disabled={acaoEmId === vendaOrc.id || !pedidoExistente.trim()}
+                onClick={() => void gerarVenda(vendaOrc.id, pedidoExistente.trim())}
+              >
+                {acaoEmId === vendaOrc.id ? 'Salvando...' : 'Vincular pedido'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

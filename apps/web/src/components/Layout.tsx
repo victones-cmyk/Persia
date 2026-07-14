@@ -17,9 +17,9 @@ export function Layout() {
       <div className="h-full flex flex-col">
         <Navbar gcStatus={status} />
         {status === 'offline' && <GcOfflineBanner />}
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-col lg:flex-row flex-1 min-h-0">
           <Sidebar />
-          <main className="flex-1 overflow-y-auto bg-surface-app p-4">
+          <main className="flex-1 min-w-0 overflow-y-auto bg-surface-app p-3 lg:p-4">
             <div className="max-w-content mx-auto w-full">
               <Outlet />
             </div>

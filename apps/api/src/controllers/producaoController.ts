@@ -696,10 +696,31 @@ function itemSnapshotDaOrdem(ordem: Pick<OrdemProducao, 'item_snapshot_json'>): 
   return ordem.item_snapshot_json as unknown as ItemProducaoSnapshot;
 }
 
+function itemPareceCortina(item: ItemProducaoSnapshot): boolean {
+  const descricao = [
+    item.nome_produto,
+    item.tipo,
+    item.descricao_produto,
+  ].filter(Boolean).join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return Boolean(
+    item.camadas?.length
+    || item.fixacao
+    || item.abertura
+    || item.desconto
+    || descricao.includes('cortina')
+    || descricao.includes('wave')
+    || descricao.includes('prega')
+    || descricao.includes('ilhos')
+    || descricao.includes('franzido'),
+  );
+}
+
 function ehOrdemPersiana(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snapshot_json'>): boolean {
   const item = itemSnapshotDaOrdem(ordem);
+  if (String(ordem.tipo_produto) === 'persiana') return true;
   if (String(ordem.tipo_produto) === 'cortina') return false;
-  return Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined);
+  if (itemPareceCortina(item)) return false;
+  return true;
 }
 
 type TipoDocumentoProducao = 'persiana' | 'cortina';

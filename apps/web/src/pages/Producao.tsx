@@ -232,7 +232,7 @@ export function Producao() {
             <col style={{ width: 120 }} />
             <col style={{ width: 120 }} />
             <col style={{ width: 150 }} />
-            <col style={{ width: 210 }} />
+            <col style={{ width: 270 }} />
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
@@ -282,7 +282,7 @@ export function Producao() {
                     <div className="text-xs-ui text-neutral-500">Gerada: {dataHora(ordem.criado_em)}</div>
                   </Td>
                   <Td className="table-actions">
-                    <div className="table-actions-row">
+                    <div className="table-actions-row" style={{ flexWrap: 'wrap', minWidth: 0 }}>
                       <button type="button" className="btn btn-info btn-xs" onClick={() => abrirPdf(ordem.id)} title="Abrir OS A4">
                         <FontAwesomeIcon icon={faFilePdf} /> OS
                       </button>
