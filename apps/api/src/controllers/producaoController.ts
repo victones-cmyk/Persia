@@ -21,6 +21,7 @@ import {
   type CortinaEntrada,
 } from './orcamentoCortinaController';
 import {
+  gerarPdfOrdensProducao,
   gerarPdfOrdemProducao,
   gerarZplEtiqueta,
   gerarZplEtiquetasImpressao,
@@ -701,6 +702,26 @@ function ehOrdemPersiana(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snaps
   return Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined);
 }
 
+type TipoDocumentoProducao = 'persiana' | 'cortina';
+
+function tipoDocumentoProducao(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snapshot_json'>): TipoDocumentoProducao {
+  return ehOrdemPersiana(ordem) ? 'persiana' : 'cortina';
+}
+
+function filtroTipoDocumento(req: Request): TipoDocumentoProducao | null {
+  const tipo = String(req.query.tipo ?? '').trim().toLowerCase();
+  if (!tipo) return null;
+  if (tipo === 'persiana' || tipo === 'cortina') return tipo;
+  throw new AppError(400, 'TIPO_INVALIDO', 'Informe tipo=persiana ou tipo=cortina.');
+}
+
+function ordensFiltradasPorTipo(
+  ordens: OrdemProducao[],
+  tipo: TipoDocumentoProducao | null,
+): OrdemProducao[] {
+  return tipo ? ordens.filter((ordem) => tipoDocumentoProducao(ordem) === tipo) : ordens;
+}
+
 async function proximoSerialEtiqueta(tx: Prisma.TransactionClient): Promise<number> {
   const chave = 'etiqueta_persiana_serial';
   const existente = await tx.configuracao.findUnique({ where: { chave } });
@@ -781,4 +802,61 @@ export async function imprimirEtiquetaOrdem(req: Request, res: Response): Promis
     data: { usuario_id: req.session.usuario!.id, acao: 'etiqueta_ordem_impressa', detalhe: { ordem_id: ordem.id, codigo: ordem.codigo, impressora: env.ZEBRA_HOST || env.ZEBRA_PRINTER_NAME } },
   });
   res.json({ ordem: atualizada });
+}
+
+export async function baixarPdfOrdensOrcamento(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  const tipo = filtroTipoDocumento(req);
+  const ordens = ordensFiltradasPorTipo(orc.ordens_producao, tipo);
+  if (ordens.length === 0) {
+    throw new AppError(404, 'SEM_ORDENS', `Nenhuma OS ${tipo ? `de ${tipo}` : ''} encontrada para este orcamento.`);
+  }
+
+  const docs = ordens.map((ordem) => ordemParaDocumento(ordem, orc));
+  const pdf = await gerarPdfOrdensProducao(docs, `Ordens de Producao ${tipo ?? ''}`.trim());
+  const sufixo = tipo ? `-${tipo}` : '';
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="ordens-producao${sufixo}-${orc.gc_pedido_codigo ?? orc.id}.pdf"`);
+  res.send(pdf);
+}
+
+export async function imprimirEtiquetasOrcamento(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  const tipo = filtroTipoDocumento(req);
+  const ordens = ordensFiltradasPorTipo(orc.ordens_producao, tipo);
+  if (ordens.length === 0) {
+    throw new AppError(404, 'SEM_ORDENS', `Nenhuma etiqueta ${tipo ? `de ${tipo}` : ''} encontrada para este orcamento.`);
+  }
+
+  const docs: OrdemDocumento[] = [];
+  for (const ordem of ordens) {
+    if (tipoDocumentoProducao(ordem) === 'persiana') {
+      const etiqueta = await prepararEtiquetaEmbalagemPersiana(ordem);
+      docs.push(ordemParaDocumento(etiqueta.ordem, orc, etiqueta.meta));
+      continue;
+    }
+    docs.push(ordemParaDocumento(ordem, orc));
+  }
+
+  const zpl = docs.map((doc) => gerarZplEtiquetasImpressao(doc, env.ZEBRA_DPI)).join('\n');
+  await imprimirRawEtiqueta(zpl);
+
+  await prisma.ordemProducao.updateMany({
+    where: { id: { in: ordens.map((ordem) => ordem.id) } },
+    data: { status: 'impressa', impresso_em: new Date() },
+  });
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: req.session.usuario!.id,
+      acao: 'etiquetas_ordens_impressas',
+      detalhe: {
+        orcamento_id: orc.id,
+        tipo,
+        quantidade: ordens.length,
+        codigos: ordens.map((ordem) => ordem.codigo),
+        impressora: env.ZEBRA_HOST || env.ZEBRA_PRINTER_NAME,
+      },
+    },
+  });
+  res.json({ quantidade: ordens.length, tipo });
 }

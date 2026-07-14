@@ -16,11 +16,13 @@ import { criarOrcamentoMisto } from '../controllers/orcamentoMistoController';
 import {
   atualizarPedidoOrcamento,
   baixarPdfOrdem,
+  baixarPdfOrdensOrcamento,
   baixarZplEtiqueta,
   criarOrdensProducao,
   gerarVendaAjusteMedicao,
   getProducaoOrcamento,
   imprimirEtiquetaOrdem,
+  imprimirEtiquetasOrcamento,
   preverMedicaoProducao,
 } from '../controllers/producaoController';
 
@@ -35,6 +37,8 @@ router.get('/ordens-producao/:id/pdf', baixarPdfOrdem);
 router.get('/ordens-producao/:id/etiqueta.zpl', baixarZplEtiqueta);
 router.post('/ordens-producao/:id/imprimir-etiqueta', imprimirEtiquetaOrdem);
 router.get('/:id/producao', getProducaoOrcamento);
+router.get('/:id/ordens-producao/pdf', baixarPdfOrdensOrcamento);
+router.post('/:id/ordens-producao/imprimir-etiquetas', imprimirEtiquetasOrcamento);
 router.post('/:id/producao/medicao/preview', preverMedicaoProducao);
 router.post('/:id/producao/medicao/venda-ajuste', gerarVendaAjusteMedicao);
 router.put('/:id/pedido', atualizarPedidoOrcamento);

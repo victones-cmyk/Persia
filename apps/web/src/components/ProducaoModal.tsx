@@ -10,6 +10,7 @@ interface OrdemProducao {
   codigo: string;
   item_index: number;
   gc_pedido_codigo: string;
+  tipo_produto?: 'persiana' | 'cortina' | 'misto';
   status: 'criada' | 'impressa' | 'cancelada';
   item_snapshot_json?: ItemSnapshot;
 }
@@ -85,6 +86,7 @@ export function ProducaoModal({
   const [recalculando, setRecalculando] = useState(false);
   const [gerandoAjuste, setGerandoAjuste] = useState(false);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
+  const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
@@ -149,6 +151,21 @@ export function ProducaoModal({
   const podeGerar = useMemo(() => {
     return dados?.orcamento.status === 'enviado' && pedido.trim().length > 0 && selecionados.length > 0 && diferencaAutorizada;
   }, [dados?.orcamento.status, pedido, selecionados.length, diferencaAutorizada]);
+
+  function tipoOrdem(ordem: OrdemProducao): 'persiana' | 'cortina' {
+    const item = ordem.item_snapshot_json;
+    if (ordem.tipo_produto === 'cortina') return 'cortina';
+    return item?.acionamento || item?.base || item?.comando || item?.tc_m !== undefined ? 'persiana' : 'cortina';
+  }
+
+  const totaisOrdens = useMemo(() => {
+    const totais = { persiana: 0, cortina: 0 };
+    dados?.itens.forEach(({ ordem }) => {
+      if (!ordem) return;
+      totais[tipoOrdem(ordem)] += 1;
+    });
+    return totais;
+  }, [dados?.itens]);
 
   if (!aberto || !orcamento) return null;
 
@@ -260,6 +277,11 @@ export function ProducaoModal({
     window.open(`/api/orcamentos/ordens-producao/${id}/pdf`, '_blank', 'noopener,noreferrer');
   }
 
+  function abrirPdfLote(tipo: 'persiana' | 'cortina') {
+    if (!orcamento) return;
+    window.open(`/api/orcamentos/${orcamento.id}/ordens-producao/pdf?tipo=${tipo}`, '_blank', 'noopener,noreferrer');
+  }
+
   async function imprimirEtiqueta(ordem: OrdemProducao) {
     setImprimindoId(ordem.id);
     setErro(null);
@@ -272,6 +294,22 @@ export function ProducaoModal({
       setErro(e instanceof ApiError ? e.message : 'Falha ao imprimir etiqueta.');
     } finally {
       setImprimindoId(null);
+    }
+  }
+
+  async function imprimirEtiquetasLote(tipo: 'persiana' | 'cortina') {
+    if (!orcamento) return;
+    setImprimindoLote(tipo);
+    setErro(null);
+    setSucesso(null);
+    try {
+      const r = await api.post<{ quantidade: number }>(`/orcamentos/${orcamento.id}/ordens-producao/imprimir-etiquetas?tipo=${tipo}`);
+      setSucesso(`${r.quantidade} etiqueta(s) de ${tipo} enviada(s) para impressão.`);
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Falha ao imprimir etiquetas em lote.');
+    } finally {
+      setImprimindoLote(null);
     }
   }
 
@@ -353,6 +391,48 @@ export function ProducaoModal({
               disabled={orcamento.status !== 'enviado'}
               onChange={(e) => setEntrega(e.target.value)}
             />
+          </div>
+        </div>
+
+        <div className="mb-4" style={{ border: '1px solid #dee2e6', borderRadius: 3, padding: 12, background: '#f8f9fa' }}>
+          <div className="text-sm-ui font-bold mb-2">Impressão em lote</div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-info btn-sm"
+              disabled={totaisOrdens.persiana === 0}
+              onClick={() => abrirPdfLote('persiana')}
+              title="Abrir todas as OS A4 de persianas em um PDF"
+            >
+              <FontAwesomeIcon icon={faFilePdf} /> OS A4 persianas ({totaisOrdens.persiana})
+            </button>
+            <button
+              type="button"
+              className="btn btn-info btn-sm"
+              disabled={totaisOrdens.cortina === 0}
+              onClick={() => abrirPdfLote('cortina')}
+              title="Abrir todas as OS A4 de cortinas em um PDF"
+            >
+              <FontAwesomeIcon icon={faFilePdf} /> OS A4 cortinas ({totaisOrdens.cortina})
+            </button>
+            <button
+              type="button"
+              className="btn btn-default btn-sm"
+              disabled={totaisOrdens.persiana === 0 || imprimindoLote !== null}
+              onClick={() => void imprimirEtiquetasLote('persiana')}
+              title="Imprimir todas as etiquetas de persianas na Zebra"
+            >
+              <FontAwesomeIcon icon={faTag} /> {imprimindoLote === 'persiana' ? 'Imprimindo...' : `Etiquetas persianas (${totaisOrdens.persiana})`}
+            </button>
+            <button
+              type="button"
+              className="btn btn-default btn-sm"
+              disabled={totaisOrdens.cortina === 0 || imprimindoLote !== null}
+              onClick={() => void imprimirEtiquetasLote('cortina')}
+              title="Imprimir todas as etiquetas de cortinas na Zebra"
+            >
+              <FontAwesomeIcon icon={faTag} /> {imprimindoLote === 'cortina' ? 'Imprimindo...' : `Etiquetas cortinas (${totaisOrdens.cortina})`}
+            </button>
           </div>
         </div>
 

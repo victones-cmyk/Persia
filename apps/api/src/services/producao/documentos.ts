@@ -607,6 +607,104 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
   });
 }
 
+function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): void {
+  if (ehPersianaDocumento(ordem)) {
+    desenharPdfPersiana(doc, ordem);
+    return;
+  }
+
+  if (ehCortinaDocumento(ordem)) {
+    desenharPdfCortina(doc, ordem);
+    return;
+  }
+
+  const left = 36;
+  const pageW = 523;
+
+  doc.rect(0, 0, 595, 70).fill('#f3f5f7');
+  doc.fillColor('#111111').font('Helvetica-Bold').fontSize(18).text('Ordem de Producao', left, 22, { width: 260 });
+  doc.font('Helvetica-Bold').fontSize(12).text(ordem.codigo, 350, 20, { width: 209, align: 'right' });
+  doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`Gerada em ${dataBR(ordem.criadoEm)}`, 350, 39, { width: 209, align: 'right' });
+
+  const metaY = 88;
+  const boxH = 48;
+  const gap = 8;
+  const boxW = (pageW - gap * 3) / 4;
+  [
+    ['Pedido', ordem.pedidoCodigo],
+    ['Orcamento GC', ordem.orcamentoCodigo],
+    ['Cliente', ordem.cliente],
+    ['Tipo', tipoLabel(String(ordem.tipoProduto))],
+  ].forEach(([label, value], i) => {
+    const x = left + i * (boxW + gap);
+    drawBox(doc, x, metaY, boxW, boxH);
+    labelValue(doc, label, value, x + 8, metaY + 8, boxW - 16);
+  });
+
+  const produtoY = 154;
+  sectionTitle(doc, 'Produto', left, produtoY, pageW);
+  doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(abreviar(produtoResumo(ordem.item), 96), left, produtoY + 24, { width: pageW, height: 34 });
+
+  const dadosY = 224;
+  sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
+  const tech = linhasTecnicas(ordem.item).filter(([label]) => !['Produto'].includes(label)).slice(0, 12);
+  const cellW = (pageW - gap) / 2;
+  tech.forEach(([label, value], index) => {
+    const col = index % 2;
+    const row = Math.floor(index / 2);
+    const x = left + col * (cellW + gap);
+    const y = dadosY + 24 + row * 36;
+    drawBox(doc, x, y, cellW, 30);
+    labelValue(doc, label, value, x + 7, y + 5, cellW - 14);
+  });
+
+  const compY = 478;
+  sectionTitle(doc, 'Componentes e materiais', left, compY, pageW);
+  const headerY = compY + 24;
+  doc.rect(left, headerY, pageW, 20).fill('#f3f5f7');
+  doc.font('Helvetica-Bold').fontSize(8).fillColor('#111111');
+  doc.text('Grupo', left + 8, headerY + 6, { width: 84 });
+  doc.text('Descricao', left + 98, headerY + 6, { width: 295 });
+  doc.text('Qtd.', left + 406, headerY + 6, { width: 56, align: 'right' });
+  doc.text('Un.', left + 474, headerY + 6, { width: 40 });
+
+  const componentes = (ordem.item.componentes ?? []).slice(0, 14);
+  componentes.forEach((c, index) => {
+    const y = headerY + 20 + index * 18;
+    doc.moveTo(left, y).lineTo(left + pageW, y).strokeColor('#e4e7ea').stroke();
+    doc.font('Helvetica').fontSize(7.5).fillColor('#111111');
+    doc.text(abreviar(c.grupo, 18), left + 8, y + 5, { width: 84, height: 10 });
+    doc.text(abreviar(c.descricao, 78), left + 98, y + 5, { width: 295, height: 10 });
+    doc.text(numero(c.quantidade), left + 406, y + 5, { width: 56, height: 10, align: 'right' });
+    doc.text(abreviar(c.unidade, 8), left + 474, y + 5, { width: 40, height: 10 });
+  });
+  const tableBottom = headerY + 20 + Math.max(componentes.length, 1) * 18;
+  drawBox(doc, left, headerY, pageW, Math.max(38, tableBottom - headerY));
+  if ((ordem.item.componentes?.length ?? 0) > componentes.length) {
+    doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`+ ${(ordem.item.componentes?.length ?? 0) - componentes.length} componente(s) adicional(is) no calculo original.`, left, tableBottom + 6);
+  }
+
+  const obsY = 770;
+  doc.moveTo(left, obsY - 8).lineTo(left + pageW, obsY - 8).strokeColor('#d7dce0').stroke();
+  doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text('Conferir medidas, tecido e acessorios antes do corte/producao.', left, obsY, { width: pageW });
+}
+
+export async function gerarPdfOrdensProducao(ordens: OrdemDocumento[], titulo = 'Ordens de Producao'): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 36, info: { Title: titulo } });
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    ordens.forEach((ordem, index) => {
+      if (index > 0) doc.addPage();
+      desenharOrdemProducao(doc, ordem);
+    });
+    doc.end();
+  });
+}
+
 function zplText(value: unknown, max = 90): string {
   return texto(value, '').replace(/\^/g, '').replace(/~/g, '').slice(0, max);
 }
@@ -647,8 +745,7 @@ function gerarZplEtiquetaCortina(ordem: OrdemDocumento, width: number, height: n
   const frente = tecidoSemPrefixo(descComponente(tecidos[0]));
   const camada2 = tecidoSemPrefixo(descComponente(tecidos[1]));
   const suporte = suporteCortina(item);
-  const clienteW = Math.round(contentW * 0.56);
-  const pedidoW = contentW - clienteW - 10;
+  const pedidoW = Math.round(contentW * 0.48);
 
   return [
     '^XA',
@@ -656,13 +753,13 @@ function gerarZplEtiquetaCortina(ordem: OrdemDocumento, width: number, height: n
     `^PW${width}`,
     `^LL${height}`,
     '^LH0,0',
-    zplLine(marginLeft, 14, 26, 26, pedidoW, `Pedido ${ordem.pedidoCodigo}`, 1, 24),
-    zplLine(marginLeft + pedidoW + 10, 14, 24, 24, clienteW, ordem.cliente, 1, 42),
-    zplLine(marginLeft, 48, 23, 23, contentW, `Amb: ${texto(item.ambiente, '')}`, 1, 58),
-    zplLine(marginLeft, 78, 22, 22, contentW, produtoResumo(item), 2, 88),
-    zplLine(marginLeft, 128, 17, 17, contentW, `Frente: ${frente}`, 2, 118),
-    camada2 ? zplLine(marginLeft, 166, 17, 17, contentW, `Camada 2: ${camada2}`, 2, 118) : '',
-    suporte ? zplLine(marginLeft, camada2 ? 224 : 184, 19, 19, contentW, suporte, 1, 96) : '',
+    zplLine(marginLeft, 12, 25, 25, pedidoW, `Pedido ${ordem.pedidoCodigo}`, 1, 24),
+    zplLine(marginLeft, 42, 20, 20, contentW, `Cliente: ${ordem.cliente}`, 1, 56),
+    zplLine(marginLeft, 68, 20, 20, contentW, `Amb: ${texto(item.ambiente, '')}`, 1, 58),
+    zplLine(marginLeft, 94, 20, 20, contentW, produtoResumo(item), 2, 88),
+    zplLine(marginLeft, 142, 17, 17, contentW, `Frente: ${frente}`, 2, 118),
+    camada2 ? zplLine(marginLeft, 182, 17, 17, contentW, `Camada 2: ${camada2}`, 2, 118) : '',
+    suporte ? zplLine(marginLeft, camada2 ? 226 : 208, 18, 18, contentW, suporte, 1, 96) : '',
     '^XZ',
   ].filter(Boolean).join('\n');
 }
@@ -698,8 +795,6 @@ function gerarZplEtiquetaPersiana(ordem: OrdemDocumento, width: number, height: 
   const qrSize = Math.round(18 * dotsPorMm);
   const qrX = width - marginRight - qrSize;
   const textW = qrX - marginLeftPersiana - 12;
-  const pedidoW = Math.round(textW * 0.36);
-  const clienteW = textW - pedidoW - 10;
   const entradaEntregaW = Math.round(textW * 0.53);
   const acessorios = [
     item.acionamento ? `AC:${item.acionamento}` : null,
@@ -721,16 +816,16 @@ function gerarZplEtiquetaPersiana(ordem: OrdemDocumento, width: number, height: 
     `^PW${width}`,
     `^LL${height}`,
     '^LH0,0',
-    zplLine(marginLeftPersiana, 12, 29, 29, pedidoW, `Pedido ${ordem.pedidoCodigo}`, 1, 24),
-    zplLine(marginLeftPersiana + pedidoW + 10, 12, 27, 27, clienteW, ordem.cliente, 1, 42),
-    zplLine(marginLeftPersiana, 46, 25, 25, textW, produto, 1, 62),
-    zplLine(marginLeftPersiana, 78, 21, 21, entradaEntregaW, `Entrada:${entrada}`, 1, 22),
-    zplLine(marginLeftPersiana + entradaEntregaW + 12, 78, 21, 21, textW - entradaEntregaW - 12, `Entrega:${entrega}`, 1, 22),
-    zplLine(marginLeftPersiana, 108, 21, 21, textW, `Tipo:${tipo}`, 1, 66),
-    zplLine(marginLeftPersiana, 138, 21, 21, textW, `Tecido:${tecido}`, 2, 104),
-    zplLine(marginLeftPersiana, 193, 21, 21, textW, acessorios, 1, 88),
-    zplLine(marginLeftPersiana, 224, 21, 21, textW, comando, 1, 80),
-    `^FO${qrX},72^BQN,2,3^FDLA,${zplText(ordem.pedidoCodigo, 50)}^FS`,
+    zplLine(marginLeftPersiana, 10, 26, 26, textW, `Pedido ${ordem.pedidoCodigo}`, 1, 26),
+    zplLine(marginLeftPersiana, 40, 19, 19, textW, `Cliente: ${ordem.cliente}`, 1, 58),
+    zplLine(marginLeftPersiana, 66, 22, 22, textW, produto, 1, 62),
+    zplLine(marginLeftPersiana, 96, 20, 20, entradaEntregaW, `Entrada:${entrada}`, 1, 22),
+    zplLine(marginLeftPersiana + entradaEntregaW + 12, 96, 20, 20, textW - entradaEntregaW - 12, `Entrega:${entrega}`, 1, 22),
+    zplLine(marginLeftPersiana, 124, 20, 20, textW, `Tipo:${tipo}`, 1, 66),
+    zplLine(marginLeftPersiana, 152, 20, 20, textW, `Tecido:${tecido}`, 2, 104),
+    zplLine(marginLeftPersiana, 208, 20, 20, textW, acessorios, 1, 88),
+    zplLine(marginLeftPersiana, 236, 20, 20, textW, comando, 1, 80),
+    `^FO${qrX},96^BQN,2,3^FDLA,${zplText(ordem.pedidoCodigo, 50)}^FS`,
     '^XZ',
   ].join('\n');
 }
@@ -772,8 +867,8 @@ function gerarZplEtiquetaEmbalagemPersiana(ordem: OrdemDocumento, width: number,
     zplLine(col2X + 92, y + 14, 29, 25, 190, lojaEtiqueta(ordem.loja), 1, 18),
     zplLine(x + 14, y + 70, 29, 25, 170, 'FIXAÇÃO:', 1, 12),
     zplLine(x + 176, y + 70, 29, 25, 120, fixacaoPersianaLabel(item), 1, 12),
-    zplLine(col2X, y + 70, 29, 25, 90, 'VEND:', 1, 8),
-    zplLine(col2X + 92, y + 70, 29, 25, 190, primeiroNome(ordem.vendedor), 1, 18),
+    zplLine(col2X, y + 70, 24, 20, 75, 'VEND:', 1, 8),
+    zplLine(col2X + 78, y + 70, 24, 20, 205, primeiroNome(ordem.vendedor), 1, 18),
     zplLine(x + 14, y + 126, 28, 24, leftW - 35, `DATA DE ENTREGA: ${entrega}`, 1, 38),
     zplLine(x + 14, y + 183, 30, 26, 245, `PEÇAS: ${meta.pecaNumero} / ${meta.pecaTotal}`, 1, 18),
     zplLine(x + 275, y + 174, 24, 21, leftW - 295, 'AMBIENTE:', 1, 12),
