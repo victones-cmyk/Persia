@@ -47,7 +47,7 @@ export const env = {
   GESTAOCLICK_ACCESS_TOKEN: optional('GESTAOCLICK_ACCESS_TOKEN', ''),
   GESTAOCLICK_SECRET_ACCESS_TOKEN: optional('GESTAOCLICK_SECRET_ACCESS_TOKEN', ''),
   GC_API_BASE_URL: optional('GC_API_BASE_URL', 'https://api.gestaoclick.com'),
-  GC_CLIENTE_URL_TEMPLATE: optional('GC_CLIENTE_URL_TEMPLATE', 'https://app.gestaoclick.com/clientes/editar/{id}'),
+  GC_CLIENTE_URL_TEMPLATE: optional('GC_CLIENTE_URL_TEMPLATE', 'https://app.rainhadascortinas.com.br/clientes/editar/{id}'),
   GC_LOJA_ID_SP: optional('GC_LOJA_ID_SP', '8274'),
   GC_LOJA_ID_SBC: optional('GC_LOJA_ID_SBC', '8284'),
   // Usuário (login) do GestãoClick usado como "usuário de integração" nos orçamentos.
