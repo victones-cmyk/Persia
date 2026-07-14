@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faFilePdf, faTag } from '@fortawesome/free-solid-svg-icons';
+import { faEye, faFilePdf, faTag } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import type { ItemSnapshot, OrcamentoListItem } from '../lib/orcamentoTypes';
 import { useAuth } from '../hooks/useAuth';
+import { EtiquetaPreviewModal, type EtiquetaPreviewOrdem } from './EtiquetaPreviewModal';
 
 interface OrdemProducao {
   id: string;
@@ -87,6 +88,7 @@ export function ProducaoModal({
   const [gerandoAjuste, setGerandoAjuste] = useState(false);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | null>(null);
+  const [previaEtiqueta, setPreviaEtiqueta] = useState<EtiquetaPreviewOrdem | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
@@ -166,6 +168,21 @@ export function ProducaoModal({
     });
     return totais;
   }, [dados?.itens]);
+
+  function ordemParaPrevia(ordem: OrdemProducao): EtiquetaPreviewOrdem {
+    return {
+      id: ordem.id,
+      codigo: ordem.codigo,
+      gc_pedido_codigo: ordem.gc_pedido_codigo,
+      tipo_documento: tipoOrdem(ordem),
+      tipo_produto: ordem.tipo_produto,
+      item_snapshot_json: ordem.item_snapshot_json,
+      orcamento: {
+        nome_cliente: orcamento?.nome_cliente,
+        pedido_entrega_em: dados?.orcamento.pedido_entrega_em ?? null,
+      },
+    };
+  }
 
   if (!aberto || !orcamento) return null;
 
@@ -321,12 +338,16 @@ export function ProducaoModal({
           <button type="button" className="btn btn-info btn-xs" onClick={() => abrirPdf(ordem.id)} title="Abrir ordem de serviço em PDF">
             <FontAwesomeIcon icon={faFilePdf} /> OS
           </button>
+          <button type="button" className="btn btn-info btn-xs" onClick={() => setPreviaEtiqueta(ordemParaPrevia(ordem))} title="Prévia visual da etiqueta">
+            <FontAwesomeIcon icon={faEye} /> Prévia
+          </button>
           <button
             type="button"
             className="btn btn-default btn-xs"
             disabled={imprimindoId === ordem.id}
             onClick={() => void imprimirEtiqueta(ordem)}
             title="Imprimir etiqueta na Zebra"
+            style={{ gridColumn: '1 / -1' }}
           >
             <FontAwesomeIcon icon={faTag} /> {imprimindoId === ordem.id ? '...' : 'Etiqueta'}
           </button>
@@ -596,6 +617,15 @@ export function ProducaoModal({
           <div className="text-xs-ui text-neutral-500 mt-2">Recalcule a diferença para liberar a OS com medidas alteradas.</div>
         )}
       </div>
+      <EtiquetaPreviewModal
+        ordem={previaEtiqueta}
+        imprimindo={previaEtiqueta ? imprimindoId === previaEtiqueta.id : false}
+        onImprimir={(ordem) => {
+          const origem = dados?.itens.map((it) => it.ordem).find((op): op is OrdemProducao => Boolean(op && op.id === ordem.id));
+          if (origem) void imprimirEtiqueta(origem);
+        }}
+        onFechar={() => setPreviaEtiqueta(null)}
+      />
     </div>
   );
 }

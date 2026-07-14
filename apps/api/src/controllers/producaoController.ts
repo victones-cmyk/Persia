@@ -703,6 +703,7 @@ function ehOrdemPersiana(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snaps
 }
 
 type TipoDocumentoProducao = 'persiana' | 'cortina';
+type StatusFiltroProducao = 'criada' | 'impressa' | 'cancelada';
 
 function tipoDocumentoProducao(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snapshot_json'>): TipoDocumentoProducao {
   return ehOrdemPersiana(ordem) ? 'persiana' : 'cortina';
@@ -720,6 +721,23 @@ function ordensFiltradasPorTipo(
   tipo: TipoDocumentoProducao | null,
 ): OrdemProducao[] {
   return tipo ? ordens.filter((ordem) => tipoDocumentoProducao(ordem) === tipo) : ordens;
+}
+
+function dataFiltro(v: unknown): Date | null {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  const [ano, mes, dia] = v.split('-').map(Number);
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  if (data.getUTCFullYear() !== ano || data.getUTCMonth() !== mes - 1 || data.getUTCDate() !== dia) return null;
+  return data;
+}
+
+function normalizarBusca(v: unknown): string {
+  return String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+function textoBusca(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  return String(v);
 }
 
 async function proximoSerialEtiqueta(tx: Prisma.TransactionClient): Promise<number> {
@@ -859,4 +877,121 @@ export async function imprimirEtiquetasOrcamento(req: Request, res: Response): P
     },
   });
   res.json({ quantidade: ordens.length, tipo });
+}
+
+export async function listarOrdensProducao(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario;
+  if (!sessao) throw new AppError(401, 'NAO_AUTENTICADO', 'Sessao expirada.');
+
+  const status = String(req.query.status ?? '').trim() as StatusFiltroProducao | '';
+  if (status && !['criada', 'impressa', 'cancelada'].includes(status)) {
+    throw new AppError(400, 'STATUS_INVALIDO', 'Status de producao invalido.');
+  }
+  const tipo = filtroTipoDocumento(req);
+  const entregaDe = dataFiltro(req.query.entrega_de);
+  const entregaAte = dataFiltro(req.query.entrega_ate);
+  const busca = normalizarBusca(req.query.q);
+
+  const where: Prisma.OrdemProducaoWhereInput = {
+    ...(status ? { status } : {}),
+    ...(sessao.perfil === 'admin' ? {} : { orcamento: { usuario_id: sessao.id } }),
+  };
+
+  const ordens = await prisma.ordemProducao.findMany({
+    where,
+    include: {
+      usuario: { select: { nome: true } },
+      orcamento: {
+        include: {
+          loja: { select: { nome: true } },
+          usuario: { select: { nome: true } },
+        },
+      },
+    },
+    orderBy: { criado_em: 'desc' },
+    take: 500,
+  });
+
+  const filtradas = ordens
+    .filter((ordem) => !tipo || tipoDocumentoProducao(ordem) === tipo)
+    .filter((ordem) => {
+      const entrega = ordem.orcamento.pedido_entrega_em;
+      if (entregaDe && (!entrega || entrega < entregaDe)) return false;
+      if (entregaAte) {
+        const fim = new Date(entregaAte);
+        fim.setUTCHours(23, 59, 59, 999);
+        if (!entrega || entrega > fim) return false;
+      }
+      if (!busca) return true;
+      const item = itemSnapshotDaOrdem(ordem);
+      const alvo = normalizarBusca([
+        ordem.codigo,
+        ordem.gc_pedido_codigo,
+        ordem.orcamento.gc_codigo,
+        ordem.orcamento.gc_orcamento_id,
+        ordem.orcamento.nome_cliente,
+        ordem.orcamento.loja?.nome,
+        ordem.orcamento.usuario?.nome,
+        textoBusca(item.ambiente),
+        textoBusca(item.nome_produto),
+        textoBusca(item.tecido_nome),
+      ].filter(Boolean).join(' '));
+      return alvo.includes(busca);
+    });
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const amanha = new Date(hoje);
+  amanha.setDate(hoje.getDate() + 1);
+
+  const resumo = filtradas.reduce((acc, ordem) => {
+    const t = tipoDocumentoProducao(ordem);
+    const entrega = ordem.orcamento.pedido_entrega_em;
+    acc.total += 1;
+    if (ordem.status === 'criada') acc.criadas += 1;
+    if (ordem.status === 'impressa') acc.impressas += 1;
+    if (ordem.status === 'cancelada') acc.canceladas += 1;
+    if (t === 'persiana') acc.persianas += 1;
+    if (t === 'cortina') acc.cortinas += 1;
+    if (entrega && entrega < hoje && ordem.status !== 'cancelada') acc.atrasadas += 1;
+    if (entrega && entrega >= hoje && entrega < amanha && ordem.status !== 'cancelada') acc.entregaHoje += 1;
+    return acc;
+  }, {
+    total: 0,
+    criadas: 0,
+    impressas: 0,
+    canceladas: 0,
+    persianas: 0,
+    cortinas: 0,
+    atrasadas: 0,
+    entregaHoje: 0,
+  });
+
+  res.json({
+    resumo,
+    ordens: filtradas.map((ordem) => ({
+      id: ordem.id,
+      codigo: ordem.codigo,
+      item_index: ordem.item_index,
+      gc_pedido_codigo: ordem.gc_pedido_codigo,
+      tipo_produto: ordem.tipo_produto,
+      tipo_documento: tipoDocumentoProducao(ordem),
+      status: ordem.status,
+      criado_em: ordem.criado_em,
+      impresso_em: ordem.impresso_em,
+      gerado_por: ordem.usuario.nome,
+      item_snapshot_json: ordem.item_snapshot_json,
+      orcamento: {
+        id: ordem.orcamento.id,
+        status: ordem.orcamento.status,
+        nome_cliente: ordem.orcamento.nome_cliente,
+        gc_codigo: ordem.orcamento.gc_codigo,
+        gc_orcamento_id: ordem.orcamento.gc_orcamento_id,
+        gc_pedido_codigo: ordem.orcamento.gc_pedido_codigo,
+        pedido_entrega_em: ordem.orcamento.pedido_entrega_em,
+        loja_nome: ordem.orcamento.loja?.nome ?? null,
+        vendedor_nome: ordem.orcamento.usuario?.nome ?? null,
+      },
+    })),
+  });
 }

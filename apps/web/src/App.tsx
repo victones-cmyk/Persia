@@ -10,6 +10,7 @@ import { ProtectedRoute, AdminRoute, SenhaDefinitivaRoute } from './components/P
 import { OrcamentoNovo } from './pages/OrcamentoNovo';
 import { Orcamentos, Vendas } from './pages/Orcamentos';
 import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
+import { Producao } from './pages/Producao';
 import { AdminUsuarios } from './pages/admin/AdminUsuarios';
 import { AdminLog } from './pages/admin/AdminLog';
 import { AdminRegras } from './pages/admin/AdminRegras';
@@ -33,6 +34,7 @@ function App() {
             <Route path="/orcamentos/novo" element={<OrcamentoNovo />} />
             <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
             <Route path="/vendas" element={<Vendas />} />
+            <Route path="/producao" element={<Producao />} />
 
             <Route element={<AdminRoute />}>
               <Route path="/admin/usuarios" element={<AdminUsuarios />} />

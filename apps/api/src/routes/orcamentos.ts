@@ -23,6 +23,7 @@ import {
   getProducaoOrcamento,
   imprimirEtiquetaOrdem,
   imprimirEtiquetasOrcamento,
+  listarOrdensProducao,
   preverMedicaoProducao,
 } from '../controllers/producaoController';
 
@@ -36,6 +37,7 @@ router.post('/misto', criarOrcamentoMisto);
 router.get('/ordens-producao/:id/pdf', baixarPdfOrdem);
 router.get('/ordens-producao/:id/etiqueta.zpl', baixarZplEtiqueta);
 router.post('/ordens-producao/:id/imprimir-etiqueta', imprimirEtiquetaOrdem);
+router.get('/ordens-producao', listarOrdensProducao);
 router.get('/:id/producao', getProducaoOrcamento);
 router.get('/:id/ordens-producao/pdf', baixarPdfOrdensOrcamento);
 router.post('/:id/ordens-producao/imprimir-etiquetas', imprimirEtiquetasOrcamento);
