@@ -5,9 +5,19 @@ import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { buscarClientes, criarClienteRapido } from '../services/gc/clientes';
+import { env } from '../config/env';
 
 const router = Router();
 router.use(requireAuth);
+
+router.get('/clientes/:id/editar', (req: Request, res: Response) => {
+  const id = String(req.params.id ?? '').trim();
+  if (!/^[\w.-]+$/.test(id)) {
+    throw new AppError(400, 'CLIENTE_INVALIDO', 'Cliente inválido.');
+  }
+  const url = env.GC_CLIENTE_URL_TEMPLATE.replace('{id}', encodeURIComponent(id));
+  res.redirect(url);
+});
 
 // GET /api/gc/clientes?q=termo — busca de clientes (frontend faz debounce 300ms).
 router.get('/clientes', async (req: Request, res: Response) => {

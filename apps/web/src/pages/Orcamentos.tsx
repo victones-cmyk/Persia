@@ -393,7 +393,21 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                   <td style={{ padding: 12 }} className="font-mono tabular-nums text-sm-ui" title="Nº do pedido/venda">
                     {o.gc_pedido_codigo ?? '—'}
                   </td>
-                  <td style={{ padding: 12 }} className="td-strong">{o.nome_cliente}</td>
+                  <td style={{ padding: 12 }} className="td-strong">
+                    {o.gc_cliente_id ? (
+                      <a
+                        href={`/api/gc/clientes/${encodeURIComponent(o.gc_cliente_id)}/editar`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Abrir cliente no GestãoClick"
+                        style={{ color: '#0073b7', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                      >
+                        {o.nome_cliente}
+                      </a>
+                    ) : (
+                      o.nome_cliente
+                    )}
+                  </td>
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{tipoLabel(o.tipo_produto)}</td>
                   <td style={{ padding: 12 }} className="font-mono tabular-nums">{formatBRL(Number(o.valor_final))}</td>
                   <td style={{ padding: 12 }}><StatusBadge status={o.status} /></td>
