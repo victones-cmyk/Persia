@@ -386,9 +386,14 @@ async function carregarOrcamentoAutorizado(req: Request) {
 
 function ordemParaDocumento(
   ordem: OrdemProducao,
-  orc: Orcamento & { loja?: { nome: string } | null; usuario?: { nome: string } | null },
+  orc: Orcamento & { loja?: { nome: string } | null; usuario?: { nome: string } | null; ordens_producao?: OrdemProducao[] },
   etiquetaEmbalagem?: OrdemDocumento['etiquetaEmbalagem'],
 ): OrdemDocumento {
+  const ordensPedido = orc.ordens_producao?.length ? orc.ordens_producao : [ordem];
+  const tipoPeca = tipoDocumentoProducao(ordem);
+  const ordensDoTipo = ordensPedido.filter((op) => tipoDocumentoProducao(op) === tipoPeca);
+  const pecaIndex = Math.max(0, ordensDoTipo.findIndex((op) => op.id === ordem.id));
+
   return {
     codigo: ordem.codigo,
     pedidoCodigo: ordem.gc_pedido_codigo,
@@ -400,6 +405,11 @@ function ordemParaDocumento(
     criadoEm: ordem.criado_em,
     entradaEm: ordem.impresso_em ?? new Date(),
     entregaEm: orc.pedido_entrega_em,
+    peca: {
+      tipo: tipoPeca,
+      numero: pecaIndex + 1,
+      total: Math.max(1, ordensDoTipo.length),
+    },
     etiquetaEmbalagem: etiquetaEmbalagem ?? null,
     item: ordem.item_snapshot_json as unknown as ItemProducaoSnapshot,
   };
@@ -601,6 +611,7 @@ async function carregarOrdemAutorizada(req: Request) {
         include: {
           loja: { select: { nome: true } },
           usuario: { select: { nome: true } },
+          ordens_producao: { orderBy: { item_index: 'asc' } },
         },
       },
     },

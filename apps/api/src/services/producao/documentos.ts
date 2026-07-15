@@ -56,6 +56,12 @@ export interface EtiquetaEmbalagemMeta {
   serial: number;
 }
 
+export interface OrdemPecaMeta {
+  tipo: 'persiana' | 'cortina';
+  numero: number;
+  total: number;
+}
+
 export interface OrdemDocumento {
   codigo: string;
   pedidoCodigo: string;
@@ -67,6 +73,7 @@ export interface OrdemDocumento {
   criadoEm: Date;
   entradaEm?: Date | null;
   entregaEm?: Date | null;
+  peca?: OrdemPecaMeta | null;
   etiquetaEmbalagem?: EtiquetaEmbalagemMeta | null;
   item: ItemProducaoSnapshot;
 }
@@ -95,6 +102,13 @@ function tipoLabel(t: string): string {
   if (t === 'cortina') return 'Cortina';
   if (t === 'misto') return 'Misto';
   return 'Persiana';
+}
+
+function tipoOrdemA4(ordem: OrdemDocumento): string {
+  const tipo = ordem.peca?.tipo ?? (ehCortinaDocumento(ordem) ? 'cortina' : 'persiana');
+  const label = tipoLabel(tipo);
+  if (!ordem.peca) return label;
+  return `${label} ${ordem.peca.numero}/${ordem.peca.total}`;
 }
 
 function tipoPersianaLabel(v: unknown): string {
@@ -218,11 +232,19 @@ function campoPdf(
   w: number,
   h = 30,
   fill = '#ffffff',
+  labelColor = '#5d6873',
+  valueColor?: string,
+  stroke = '#cfd6dd',
 ): void {
-  doc.save().fillColor(fill).rect(x, y, w, h).fill().lineWidth(0.7).strokeColor('#cfd6dd').rect(x, y, w, h).stroke().restore();
-  doc.font('Helvetica-Bold').fontSize(5.8).fillColor('#5d6873').text(label, x + 7, y + 6, { width: w - 14, height: 8 });
+  doc.save().fillColor(fill).rect(x, y, w, h).fill().lineWidth(0.7).strokeColor(stroke).rect(x, y, w, h).stroke().restore();
+  doc.font('Helvetica-Bold').fontSize(5.8).fillColor(labelColor).text(label, x + 7, y + 6, { width: w - 14, height: 8 });
   const darkFill = ['#2f3133', '#9a765d'].includes(fill);
-  doc.font('Helvetica').fontSize(8).fillColor(darkFill ? '#ffffff' : '#111111').text(abreviar(value, 62), x + 7, y + 15, { width: w - 14, height: h - 16 });
+  doc.font('Helvetica').fontSize(8).fillColor(valueColor ?? (darkFill ? '#ffffff' : '#111111')).text(abreviar(value, 62), x + 7, y + 15, { width: w - 14, height: h - 16 });
+}
+
+function ehAcionamentoMotorizado(v: unknown): boolean {
+  const s = texto(v, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return s.includes('motoriz') || s === 'motor_com_bando' || s === 'motor_sem_bando';
 }
 
 function corCampoPdf(v: unknown): string {
@@ -271,12 +293,19 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
   const muted = '#5d6873';
   const line = '#cfd6dd';
   const soft = '#f1f3f5';
+  const navy = '#0b2f4f';
+  const navyMuted = '#d8e6f3';
+  const motorFill = '#e5f1fb';
+  const motorStroke = '#8bb7dd';
+  const motorText = '#0b2f4f';
+  const acionamentoMotorizado = ehAcionamentoMotorizado(item.acionamento);
 
-  doc.rect(0, 0, 595, 76).fill(soft);
-  doc.fillColor(ink).font('Helvetica-Bold').fontSize(18).text('Ordem de Producao', left, 22, { width: 260 });
-  doc.font('Helvetica-Bold').fontSize(11).text(ordem.codigo, 372, 19, { width: 187, align: 'right' });
-  doc.font('Helvetica').fontSize(7).fillColor(muted).text(`Gerada em ${dataBR(ordem.criadoEm)}`, 372, 39, { width: 187, align: 'right' });
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(muted).text(`Entrega: ${dataCurtaBR(ordem.entregaEm)}`, 372, 57, { width: 187, align: 'right' });
+  doc.rect(0, 0, 595, 76).fill(navy);
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(18).text('Ordem de Producao', left, 22, { width: 260 });
+  doc.font('Helvetica-Bold').fontSize(8.5).fillColor(navyMuted).text(tipoOrdemA4(ordem), left, 48, { width: 260 });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#ffffff').text(ordem.codigo, 372, 19, { width: 187, align: 'right' });
+  doc.font('Helvetica').fontSize(7).fillColor(navyMuted).text(`Gerada em ${dataBR(ordem.criadoEm)}`, 372, 39, { width: 187, align: 'right' });
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(navyMuted).text(`Entrega: ${dataCurtaBR(ordem.entregaEm)}`, 372, 57, { width: 187, align: 'right' });
 
   const metaY = 98;
   const metaW = (pageW - gap * 3) / 4;
@@ -286,14 +315,14 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
     ['Vendedor', primeiroNome(ordem.vendedor)],
     ['Instalacao', texto(item.instalacao_nome)],
   ].forEach(([label, value], index) => {
-    campoPdf(doc, label, value, left + index * (metaW + gap), metaY, metaW, 48);
+    campoPdf(doc, label, value, left + index * (metaW + gap), metaY, metaW, 36);
   });
 
-  const produtoY = 168;
+  const produtoY = 150;
   sectionTitle(doc, 'Produto', left, produtoY, pageW);
   doc.font('Helvetica-Bold').fontSize(12).fillColor(ink).text(abreviar(produtoResumo(item), 112), left, produtoY + 23, { width: pageW, height: 18 });
 
-  const dadosY = 224;
+  const dadosY = 204;
   sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
   const colW = (pageW - gap) / 2;
   const rowH = 36;
@@ -308,10 +337,22 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
   campoPdf(doc, 'Tamanho do comando', item.tc_m === undefined ? '-' : `${numero(item.tc_m)} m`, left, y0 + rowH * 3, (colW - gap) / 2, 30);
   campoPdf(doc, 'Comando', texto(item.comando), left + (colW + gap) / 2, y0 + rowH * 3, (colW - gap) / 2, 30);
   campoPdf(doc, 'Rolamento', texto(item.rolamento), left + colW + gap, y0 + rowH * 3, colW, 30);
-  campoPdf(doc, 'Acionamento', texto(item.acionamento), left, y0 + rowH * 4, colW, 30);
+  campoPdf(
+    doc,
+    'Acionamento',
+    texto(item.acionamento),
+    left,
+    y0 + rowH * 4,
+    colW,
+    30,
+    acionamentoMotorizado ? motorFill : '#ffffff',
+    acionamentoMotorizado ? motorText : '#5d6873',
+    acionamentoMotorizado ? motorText : undefined,
+    acionamentoMotorizado ? motorStroke : '#cfd6dd',
+  );
   campoInstalacaoPdf(doc, ordem.codigo, left + colW + gap, y0 + rowH * 4, colW);
 
-  const compY = 450;
+  const compY = 424;
   sectionTitle(doc, 'Componentes e materiais', left, compY, pageW);
   const componentes = ordem.item.componentes ?? [];
   const headerY = compY + 24;
@@ -379,7 +420,8 @@ function desenharCabecalhoCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento
   const muted = '#5d6873';
   doc.rect(0, 0, 595, 76).fill('#f1f3f5');
   doc.fillColor('#15191d').font('Helvetica-Bold').fontSize(18).text(titulo, left, 22, { width: 260 });
-  doc.font('Helvetica-Bold').fontSize(11).text(ordem.codigo, 372, 19, { width: 187, align: 'right' });
+  doc.font('Helvetica-Bold').fontSize(8.5).fillColor(muted).text(tipoOrdemA4(ordem), left, 48, { width: 260 });
+  doc.font('Helvetica-Bold').fontSize(11).fillColor('#15191d').text(ordem.codigo, 372, 19, { width: 187, align: 'right' });
   doc.font('Helvetica').fontSize(7).fillColor(muted).text(`Gerada em ${dataBR(ordem.criadoEm)}`, 372, 39, { width: 187, align: 'right' });
   doc.font('Helvetica-Bold').fontSize(8).fillColor(muted).text(`Entrega: ${dataCurtaBR(ordem.entregaEm)}`, 372, 57, { width: 187, align: 'right' });
 }
@@ -482,14 +524,14 @@ function desenharPdfCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): voi
     ['Vendedor', primeiroNome(ordem.vendedor)],
     ['Instalacao', texto(item.instalacao_nome)],
   ].forEach(([label, value], index) => {
-    campoCortinaPdf(doc, label, value, left + index * (metaW + gap), metaY, metaW, 48);
+    campoCortinaPdf(doc, label, value, left + index * (metaW + gap), metaY, metaW, 36);
   });
 
-  const produtoY = 168;
+  const produtoY = 150;
   sectionTitle(doc, 'Produto', left, produtoY, pageW);
   doc.font('Helvetica-Bold').fontSize(12).fillColor(ink).text(abreviar(produtoResumo(item), 112), left, produtoY + 23, { width: pageW, height: 18 });
 
-  const dadosY = 224;
+  const dadosY = 204;
   sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
   const y0 = dadosY + 24;
   const rowH = 36;
@@ -510,7 +552,7 @@ function desenharPdfCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): voi
   campoCortinaPdf(doc, 'Desconto', descontoCortinaLabel(item.desconto), left + colW + gap, y0 + rowH * 5, colW, 30, '#fffba6');
   campoCortinaPdf(doc, 'Observações', '', left, y0 + rowH * 6, pageW, 34);
 
-  desenharTabelaComponentesCortina(doc, ordem, item.componentes ?? [], 512);
+  desenharTabelaComponentesCortina(doc, ordem, item.componentes ?? [], 486);
 }
 
 export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buffer> {
@@ -538,11 +580,12 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
 
     doc.rect(0, 0, 595, 70).fill('#f3f5f7');
     doc.fillColor('#111111').font('Helvetica-Bold').fontSize(18).text('Ordem de Producao', left, 22, { width: 260 });
-    doc.font('Helvetica-Bold').fontSize(12).text(ordem.codigo, 350, 20, { width: 209, align: 'right' });
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#5f6973').text(tipoOrdemA4(ordem), left, 48, { width: 260 });
+    doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(ordem.codigo, 350, 20, { width: 209, align: 'right' });
     doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`Gerada em ${dataBR(ordem.criadoEm)}`, 350, 39, { width: 209, align: 'right' });
 
     const metaY = 88;
-    const boxH = 48;
+    const boxH = 36;
     const gap = 8;
     const boxW = (pageW - gap * 3) / 4;
     [
@@ -556,11 +599,11 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
       labelValue(doc, label, value, x + 8, metaY + 8, boxW - 16);
     });
 
-    const produtoY = 154;
+    const produtoY = 142;
     sectionTitle(doc, 'Produto', left, produtoY, pageW);
     doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(abreviar(produtoResumo(ordem.item), 96), left, produtoY + 24, { width: pageW, height: 34 });
 
-    const dadosY = 224;
+    const dadosY = 204;
     sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
     const tech = linhasTecnicas(ordem.item).filter(([label]) => !['Produto'].includes(label)).slice(0, 12);
     const cellW = (pageW - gap) / 2;
@@ -573,7 +616,7 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
       labelValue(doc, label, value, x + 7, y + 5, cellW - 14);
     });
 
-    const compY = 478;
+    const compY = 452;
     sectionTitle(doc, 'Componentes e materiais', left, compY, pageW);
     const headerY = compY + 24;
     doc.rect(left, headerY, pageW, 20).fill('#f3f5f7');
@@ -623,11 +666,12 @@ function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): 
 
   doc.rect(0, 0, 595, 70).fill('#f3f5f7');
   doc.fillColor('#111111').font('Helvetica-Bold').fontSize(18).text('Ordem de Producao', left, 22, { width: 260 });
-  doc.font('Helvetica-Bold').fontSize(12).text(ordem.codigo, 350, 20, { width: 209, align: 'right' });
+  doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#5f6973').text(tipoOrdemA4(ordem), left, 48, { width: 260 });
+  doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(ordem.codigo, 350, 20, { width: 209, align: 'right' });
   doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`Gerada em ${dataBR(ordem.criadoEm)}`, 350, 39, { width: 209, align: 'right' });
 
   const metaY = 88;
-  const boxH = 48;
+  const boxH = 36;
   const gap = 8;
   const boxW = (pageW - gap * 3) / 4;
   [
@@ -641,11 +685,11 @@ function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): 
     labelValue(doc, label, value, x + 8, metaY + 8, boxW - 16);
   });
 
-  const produtoY = 154;
+  const produtoY = 142;
   sectionTitle(doc, 'Produto', left, produtoY, pageW);
   doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(abreviar(produtoResumo(ordem.item), 96), left, produtoY + 24, { width: pageW, height: 34 });
 
-  const dadosY = 224;
+  const dadosY = 204;
   sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
   const tech = linhasTecnicas(ordem.item).filter(([label]) => !['Produto'].includes(label)).slice(0, 12);
   const cellW = (pageW - gap) / 2;
@@ -658,7 +702,7 @@ function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): 
     labelValue(doc, label, value, x + 7, y + 5, cellW - 14);
   });
 
-  const compY = 478;
+  const compY = 452;
   sectionTitle(doc, 'Componentes e materiais', left, compY, pageW);
   const headerY = compY + 24;
   doc.rect(left, headerY, pageW, 20).fill('#f3f5f7');
