@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye, faFilePdf, faTag } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
@@ -137,6 +138,7 @@ export function ProducaoModal({
 }) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin';
+  const navigate = useNavigate();
   const [dados, setDados] = useState<ProducaoPayload | null>(null);
   const [pedido, setPedido] = useState('');
   const [entrega, setEntrega] = useState('');
@@ -151,10 +153,10 @@ export function ProducaoModal({
   const [gerandoAjuste, setGerandoAjuste] = useState(false);
   const [solicitandoAbsorcao, setSolicitandoAbsorcao] = useState(false);
   const [decidindoAbsorcao, setDecidindoAbsorcao] = useState<'aprovar' | 'reprovar' | null>(null);
+  const [editandoOrcamentoIndex, setEditandoOrcamentoIndex] = useState<number | null>(null);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | null>(null);
   const [previaEtiqueta, setPreviaEtiqueta] = useState<EtiquetaPreviewOrdem | null>(null);
-  const [editandoIndex, setEditandoIndex] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
@@ -204,7 +206,6 @@ export function ProducaoModal({
       setMedidasFinais({});
       setPrevia(null);
       setDiferencaAbsorvida(false);
-      setEditandoIndex(null);
       setErro(null);
       setSucesso(null);
     }
@@ -340,19 +341,19 @@ export function ProducaoModal({
     setDiferencaAbsorvida(false);
   }
 
-  function editarItemDiferenca(index: number) {
-    setEditandoIndex(index);
-    const linhas = Array.from(document.querySelectorAll<HTMLElement>(`[data-medicao-item="${index}"]`));
-    const linhaVisivel = linhas.find((el) => el.offsetParent !== null) ?? linhas[0];
-    linhaVisivel?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-    window.setTimeout(() => {
-      const campos = Array.from(document.querySelectorAll<HTMLInputElement>(`[data-medicao-largura="${index}"]`));
-      const campoVisivel = campos.find((el) => el.offsetParent !== null) ?? campos[0];
-      campoVisivel?.focus();
-      campoVisivel?.select();
-    }, 250);
-    window.setTimeout(() => setEditandoIndex((atual) => atual === index ? null : atual), 2500);
+  async function editarOrcamentoItem(index: number) {
+    if (!orcamento) return;
+    setEditandoOrcamentoIndex(index);
+    setErro(null);
+    setSucesso(null);
+    try {
+      const r = await api.post<{ orcamento: { id: string } }>(`/orcamentos/${orcamento.id}/duplicar`);
+      navigate(`/orcamentos/novo?editar=${encodeURIComponent(r.orcamento.id)}&item=${index}`);
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Falha ao criar cópia editável do orçamento.');
+    } finally {
+      setEditandoOrcamentoIndex(null);
+    }
   }
 
   async function recalcularMedicao() {
@@ -433,7 +434,6 @@ export function ProducaoModal({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           <input
             className="input"
-            data-medicao-largura={index}
             value={final.largura}
             disabled={bloqueado}
             onChange={(e) => alterarMedida(index, 'largura', e.target.value)}
@@ -659,15 +659,7 @@ export function ProducaoModal({
                 <tr><td colSpan={6} style={{ padding: 16, color: '#6c757d' }}>Nenhum produto encontrado no orçamento.</td></tr>
               ) : (
                 dados?.itens.map(({ index, item, ordem }) => (
-                  <tr
-                    key={index}
-                    data-medicao-item={index}
-                    style={{
-                      borderTop: '1px solid #dee2e6',
-                      background: editandoIndex === index ? '#fff3cd' : undefined,
-                      transition: 'background 150ms ease',
-                    }}
-                  >
+                  <tr key={index} style={{ borderTop: '1px solid #dee2e6' }}>
                     <td style={{ padding: 10 }}>
                       <input
                         type="checkbox"
@@ -709,16 +701,7 @@ export function ProducaoModal({
             <div style={{ padding: 16, color: '#6c757d' }}>Nenhum produto encontrado no orçamento.</div>
           ) : (
             dados?.itens.map(({ index, item, ordem }) => (
-              <div
-                key={index}
-                data-medicao-item={index}
-                style={{
-                  padding: 12,
-                  borderTop: index === 0 ? undefined : '1px solid #dee2e6',
-                  background: editandoIndex === index ? '#fff3cd' : undefined,
-                  transition: 'background 150ms ease',
-                }}
-              >
+              <div key={index} style={{ padding: 12, borderTop: index === 0 ? undefined : '1px solid #dee2e6' }}>
                 <div className="flex items-start gap-2">
                   <input
                     type="checkbox"
@@ -809,11 +792,11 @@ export function ProducaoModal({
                             <button
                               type="button"
                               className="btn btn-default btn-xs"
-                              disabled={orcamento.status !== 'enviado'}
-                              onClick={() => editarItemDiferenca(d.index)}
-                              title="Editar as medidas finais deste item"
+                              disabled={editandoOrcamentoIndex !== null}
+                              onClick={() => void editarOrcamentoItem(d.index)}
+                              title="Criar uma cópia editável do orçamento e abrir este item"
                             >
-                              Editar
+                              {editandoOrcamentoIndex === d.index ? 'Abrindo...' : 'Editar orçamento'}
                             </button>
                           </td>
                         </tr>
@@ -836,11 +819,11 @@ export function ProducaoModal({
                       <button
                         type="button"
                         className="btn btn-default btn-xs mt-2"
-                        disabled={orcamento.status !== 'enviado'}
-                        onClick={() => editarItemDiferenca(d.index)}
-                        title="Editar as medidas finais deste item"
+                        disabled={editandoOrcamentoIndex !== null}
+                        onClick={() => void editarOrcamentoItem(d.index)}
+                        title="Criar uma cópia editável do orçamento e abrir este item"
                       >
-                        Editar item
+                        {editandoOrcamentoIndex === d.index ? 'Abrindo...' : 'Editar orçamento'}
                       </button>
                     </div>
                   ))}

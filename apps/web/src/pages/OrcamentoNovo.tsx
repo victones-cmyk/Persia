@@ -30,6 +30,7 @@ import {
 const ESTADO_CORTINA_VAZIO: CortinaOrcamentoEstado = { total: 0, todasCompletas: false, temCortinas: false, count: 0, cortinas: [], totais: [], calculando: false };
 
 type Secao = 'persiana' | 'cortina';
+type FocoEdicaoItem = { secao: Secao; index: number } | null;
 
 // Recuperação: detecta se o rascunho local tem conteúdo real em cada seção (e não só
 // os campos vazios iniciais), para reabrir já com a seção certa marcada.
@@ -53,6 +54,7 @@ export function OrcamentoNovo() {
   const { setDirty } = useNavGuard();
   const [params] = useSearchParams();
   const editarId = params.get('editar');
+  const itemFocoParam = params.get('item');
 
   // Rascunho local recuperado (só fora do modo edição).
   const [rascunhoLocal] = useState<RascunhoLocal | null>(() => (editarId ? null : lerRascunhoLocal()));
@@ -93,6 +95,7 @@ export function OrcamentoNovo() {
   const [prontoEdicao, setProntoEdicao] = useState(!editarId);
   const [persianaInicial, setPersianaInicial] = useState<{ tipo: TipoPersiana; itens: ItemInput[] } | undefined>();
   const [cortinaInicial, setCortinaInicial] = useState<{ cortinas: CortinaInicial[]; instalacao_valor: number } | undefined>();
+  const [focoEdicaoItem, setFocoEdicaoItem] = useState<FocoEdicaoItem>(null);
 
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -177,15 +180,24 @@ export function OrcamentoNovo() {
         const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[]; rt_pct?: number } | null;
         const ehMisto = o.tipo_produto === 'misto';
         const ehCortina = o.tipo_produto === 'cortina';
+        const itemFoco = Number(itemFocoParam);
         setRt(entrada?.rt_pct ? String(entrada.rt_pct) : '');
 
         const novaOrdem: Secao[] = [];
+        let foco: FocoEdicaoItem = null;
         if (ehMisto) {
+          const qtdPersianas = entrada?.itens?.length ?? 0;
+          const qtdCortinas = entrada?.cortinas?.length ?? 0;
           if (entrada?.itens?.length) { setPersianaInicial({ tipo: entrada.tipo as TipoPersiana, itens: entrada.itens }); novaOrdem.push('persiana'); }
           if (entrada?.cortinas?.length) { setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 }); novaOrdem.push('cortina'); }
+          if (Number.isInteger(itemFoco) && itemFoco >= 0) {
+            if (itemFoco < qtdPersianas) foco = { secao: 'persiana', index: itemFoco };
+            else if (itemFoco < qtdPersianas + qtdCortinas) foco = { secao: 'cortina', index: itemFoco - qtdPersianas };
+          }
         } else if (ehCortina) {
           if (entrada?.cortinas?.length) { setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 }); novaOrdem.push('cortina'); }
           else { showToast('error', 'Rascunho antigo', 'Este rascunho não tem dados para reabrir. Crie um novo orçamento.'); navigate(`/orcamentos/${editarId}`); return; }
+          if (Number.isInteger(itemFoco) && itemFoco >= 0 && itemFoco < (entrada?.cortinas?.length ?? 0)) foco = { secao: 'cortina', index: itemFoco };
         } else {
           if (entrada?.itens?.length) { setPersianaInicial({ tipo: o.tipo_produto as TipoPersiana, itens: entrada.itens }); novaOrdem.push('persiana'); }
           else if (o.itens_json && o.itens_json.length > 0) {
@@ -199,8 +211,11 @@ export function OrcamentoNovo() {
             });
             novaOrdem.push('persiana');
           } else { showToast('error', 'Rascunho sem itens', 'Não há itens para reabrir.'); navigate(`/orcamentos/${editarId}`); return; }
+          const totalPersianas = entrada?.itens?.length ?? o.itens_json?.length ?? 0;
+          if (Number.isInteger(itemFoco) && itemFoco >= 0 && itemFoco < totalPersianas) foco = { secao: 'persiana', index: itemFoco };
         }
         setOrdem(novaOrdem);
+        setFocoEdicaoItem(foco);
         setProntoEdicao(true);
       } catch {
         if (vivo) { showToast('error', 'Não foi possível abrir o orçamento para edição.'); navigate('/orcamentos'); }
@@ -210,7 +225,31 @@ export function OrcamentoNovo() {
     })();
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editarId]);
+  }, [editarId, itemFocoParam]);
+
+  useEffect(() => {
+    if (!prontoEdicao || !focoEdicaoItem) return;
+    const timeout = window.setTimeout(() => {
+      const alvoId = focoEdicaoItem.secao === 'cortina'
+        ? `tamanho-barra-cortina-${focoEdicaoItem.index}`
+        : `altura-persiana-${focoEdicaoItem.index}`;
+      const fallbackId = focoEdicaoItem.secao === 'cortina'
+        ? `altura-cortina-${focoEdicaoItem.index}`
+        : `largura-persiana-${focoEdicaoItem.index}`;
+      const alvo = document.getElementById(alvoId) as HTMLInputElement | HTMLSelectElement | null;
+      const fallback = document.getElementById(fallbackId) as HTMLInputElement | HTMLSelectElement | null;
+      const campo = alvo ?? fallback;
+      campo?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      campo?.focus();
+      if (campo instanceof HTMLInputElement) campo.select();
+      if (focoEdicaoItem.secao === 'cortina') {
+        showToast('info', 'Cópia editável aberta', 'Ajuste o tamanho da barra deste item e salve o orçamento.');
+      } else {
+        showToast('info', 'Cópia editável aberta', 'Ajuste este item e salve o orçamento.');
+      }
+    }, 700);
+    return () => window.clearTimeout(timeout);
+  }, [prontoEdicao, focoEdicaoItem, showToast]);
 
   // --- Derivados ---
   const persianaItens: ItemInput[] = resultado ? resultado.itens.map((it) => it.input) : [];
