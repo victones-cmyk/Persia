@@ -446,14 +446,16 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                       <button className="btn btn-default btn-xs text-primary" disabled={acaoEmId === o.id} onClick={() => duplicar(o.id)} title="Duplicar como rascunho">
                         <FontAwesomeIcon icon={faCopy} />
                       </button>
-                      <button
-                        className="btn btn-warning btn-xs"
-                        disabled={o.status !== 'rascunho'}
-                        onClick={() => navigate(`/orcamentos/novo?editar=${o.id}`)}
-                        title={o.status === 'rascunho' ? 'Editar' : 'Só é possível editar orçamentos em rascunho'}
-                      >
-                        <FontAwesomeIcon icon={faPen} />
-                      </button>
+                      {!somenteVendas && (
+                        <button
+                          className="btn btn-warning btn-xs"
+                          disabled={o.status !== 'rascunho'}
+                          onClick={() => navigate(`/orcamentos/novo?editar=${o.id}`)}
+                          title={o.status === 'rascunho' ? 'Editar' : 'Só é possível editar orçamentos em rascunho'}
+                        >
+                          <FontAwesomeIcon icon={faPen} />
+                        </button>
+                      )}
                       {o.status === 'erro' && (
                         <>
                           <button className="btn btn-default btn-xs text-danger" onClick={() => void copiarErro(o)} title={erroGcLegivel(o.erro_gc)}>
@@ -464,7 +466,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                           </button>
                         </>
                       )}
-                      {o.status !== 'cancelado' && (
+                      {!somenteVendas && o.status !== 'cancelado' && (
                         <button className="btn btn-danger btn-xs" disabled={acaoEmId === o.id} onClick={() => setCancelarId(o.id)} title="Cancelar orçamento">
                           <FontAwesomeIcon icon={faXmark} />
                         </button>
