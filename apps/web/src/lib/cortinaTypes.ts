@@ -4,7 +4,9 @@
 import type { TecidoOpcao } from './calcTypes';
 
 export type ModeloCortina = 'ilhos' | 'prega' | 'franzido' | 'wave';
-export type ModeloCortinaOpcao = ModeloCortina | 'prega_americana' | 'prega_macho' | 'prega_femea';
+export type ModeloCamadaCortina = ModeloCortina | 'costurado_junto';
+export type ModeloCortinaOpcao = ModeloCamadaCortina | 'prega_americana' | 'prega_macho' | 'prega_femea';
+export type QuantidadeCosturadoJunto = 'mesma_quantidade' | 'proporcao_franzido';
 export type FixacaoCortina = 'varao' | 'trilho' | 'varao_suico';
 export type MetodoCortina = 'normal' | 'emenda' | 'barra_postica';
 export type MetodoAlturaCortina = 'emenda' | 'barra_postica';
@@ -47,6 +49,7 @@ export interface CalcularCortinaResposta {
 }
 
 export function normalizarModeloCortina(modelo: ModeloCortinaOpcao): ModeloCortina {
+  if (modelo === 'costurado_junto') return 'franzido';
   if (modelo.startsWith('prega_')) return 'prega';
   return modelo as ModeloCortina;
 }
@@ -69,6 +72,11 @@ export const MODELOS_CORTINA: { value: ModeloCortinaOpcao; label: string }[] = [
   { value: 'prega_femea', label: 'Modelo Prega Fêmea' },
   { value: 'franzido', label: 'Franzido' },
   { value: 'wave', label: 'Wave' },
+];
+
+export const MODELOS_CAMADA_SECUNDARIA: { value: ModeloCortinaOpcao; label: string }[] = [
+  ...MODELOS_CORTINA,
+  { value: 'costurado_junto', label: 'Costurado junto' },
 ];
 
 export const MODELOS_CORTINA_CALC: { value: ModeloCortina; label: string }[] = [
@@ -135,6 +143,8 @@ export interface CamadaCalc {
   consumo: number;
   barra_postica_base: number | null;
   barra_postica_acrescimo: number | null;
+  costurado_junto?: boolean;
+  costurado_quantidade?: QuantidadeCosturadoJunto;
 }
 export interface AcessorioCalc {
   item: string;

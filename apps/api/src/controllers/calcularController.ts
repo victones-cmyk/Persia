@@ -360,16 +360,17 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
     tecidos.push(t);
   }
 
-  const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string; modelo?: string; metodo_altura?: string }, i: number) => ({
+  const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string; modelo?: string; metodo_altura?: string; costurado_quantidade?: string }, i: number) => ({
     largura_tecido: tecidos[i]!.dimensao_m,
     franzido: c.franzido !== undefined && c.franzido !== '' ? Number(c.franzido) : undefined,
     modelo: c.modelo ? (c.modelo as CamadaCortina['modelo']) : undefined, // modelo PRÓPRIO da camada (Victor v.4.1)
     metodo_altura: c.metodo_altura === 'barra_postica' ? 'barra_postica' : c.metodo_altura === 'emenda' ? 'emenda' : undefined,
+    costurado_quantidade: c.costurado_quantidade === 'proporcao_franzido' ? 'proporcao_franzido' : c.costurado_quantidade === 'mesma_quantidade' ? 'mesma_quantidade' : undefined,
   }));
 
   try {
     const r = calcularCortinaMultiCamada({
-      modelo: b.modelo ?? camadasCalc[0]?.modelo, // fallback = modelo da 1ª camada
+      modelo: b.modelo ?? (camadasCalc[0]?.modelo === 'costurado_junto' ? 'franzido' : camadasCalc[0]?.modelo), // fallback = modelo da 1ª camada
       fixacao: b.fixacao,
       largura: Number(b.largura),
       altura: Number(b.altura),

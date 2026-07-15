@@ -1,11 +1,11 @@
 // Formatação do produto sintético de cortina criado no GestãoClick.
 
-import type { FixacaoCortina, ModeloCortina } from './cortina';
+import type { FixacaoCortina, ModeloCamadaCortina, ModeloCortina } from './cortina';
 import { MODELOS_CORTINA_LABEL } from './cortinaLabels';
 
 type CamadaProdutoCortina = {
   nome?: string | null;
-  modelo?: ModeloCortina | null;
+  modelo?: ModeloCamadaCortina | null;
   tecido_nome: string;
   franzido?: number | string | null;
 };
@@ -36,8 +36,9 @@ function modeloLimpo(modelo: string): string {
   return textoLimpo(modelo).replace(/^cortina\s+/i, '');
 }
 
-function modeloLabel(modelo: ModeloCortina | null | undefined): string {
+function modeloLabel(modelo: ModeloCamadaCortina | null | undefined): string {
   if (!modelo) return 'Cortina';
+  if (modelo === 'costurado_junto') return 'Costurado junto';
   return MODELOS_CORTINA_LABEL[modelo] ?? modelo;
 }
 

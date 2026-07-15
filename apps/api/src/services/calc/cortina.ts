@@ -24,6 +24,8 @@ export class NotImplementedError extends Error {
 }
 
 export type ModeloCortina = 'ilhos' | 'prega' | 'franzido' | 'wave';
+export type ModeloCamadaCortina = ModeloCortina | 'costurado_junto';
+export type QuantidadeCosturadoJunto = 'mesma_quantidade' | 'proporcao_franzido';
 export type FixacaoCortina = 'varao' | 'trilho' | 'varao_suico';
 export type MetodoCortina = 'normal' | 'emenda' | 'barra_postica';
 export type MetodoAlturaCortina = 'emenda' | 'barra_postica';
@@ -259,7 +261,8 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
 export interface CamadaCortina {
   largura_tecido: number; // largura do rolo do tecido desta camada (m)
   franzido?: number; // default 3 (no wave, ignorado: usa 2,7)
-  modelo?: ModeloCortina; // modelo PRÓPRIO da camada (Victor v.4.1: frente wave + fundo franzido). Default = e.modelo.
+  modelo?: ModeloCamadaCortina; // modelo PRÓPRIO da camada. Costurado junto só é válido da camada 2 em diante.
+  costurado_quantidade?: QuantidadeCosturadoJunto;
   metodo_altura?: MetodoAlturaCortina;
 }
 
@@ -285,6 +288,8 @@ export interface CamadaResultado {
   barra_consumo: number;
   barra_postica_base: number | null;
   barra_postica_acrescimo: number | null;
+  costurado_junto?: boolean;
+  costurado_quantidade?: QuantidadeCosturadoJunto;
 }
 
 export interface ResultadoCortinaCompleta {
@@ -313,8 +318,16 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
   const multiCamada = e.camadas.length > 1;
 
   e.camadas.forEach((cam, i) => {
+    if (i === 0 && cam.modelo === 'costurado_junto') {
+      throw new Error('Costurado junto só pode ser usado da camada 2 em diante.');
+    }
+    const costuradoJunto = cam.modelo === 'costurado_junto';
+    const costuradoQuantidade = cam.costurado_quantidade ?? 'mesma_quantidade';
+    const modeloCalculo: ModeloCortina = costuradoJunto
+      ? 'franzido'
+      : (cam.modelo === 'costurado_junto' ? 'franzido' : (cam.modelo ?? e.modelo));
     const r = calcularCortina({
-      modelo: cam.modelo ?? e.modelo, // Victor v.4.1: cada camada pode ter seu próprio modelo
+      modelo: modeloCalculo, // Costurado junto usa consumo/folga de franzido e sem acessórios.
       fixacao: e.fixacao,
       config: 'um_tecido',
       largura: e.largura,
@@ -328,16 +341,23 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
       espacamento_ilhos: e.espacamento_ilhos,
       espacamento_ferragem: e.espacamento_ferragem,
     });
+    const camadaBase = camadas[0];
+    const metragemCosturada = costuradoJunto && costuradoQuantidade === 'mesma_quantidade' && camadaBase
+      ? camadaBase.metragem
+      : r.metragem_frente;
     camadas.push({
       metodo: r.metodo,
       altura_excede_tecido: r.altura_excede_tecido,
       consumo: r.consumo_frente,
-      metragem: r.metragem_frente,
+      metragem: metragemCosturada,
       tiras: r.tiras_frente,
       barra_consumo: r.barra_consumo,
       barra_postica_base: r.barra_postica_base,
       barra_postica_acrescimo: r.barra_postica_acrescimo,
+      ...(costuradoJunto ? { costurado_junto: true, costurado_quantidade: costuradoQuantidade } : {}),
     });
+
+    if (costuradoJunto) return;
 
     for (const it of r.itens) {
       if (it.tipo === 'tecido') continue; // tecido é por camada

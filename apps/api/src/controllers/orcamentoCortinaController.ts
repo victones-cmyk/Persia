@@ -21,7 +21,7 @@ import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
 import { descricaoProdutoCortina, nomeProdutoCortina } from '../services/calc/cortinaProduto';
 
-interface CamadaEntrada { nome?: string; tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave'; metodo_altura?: 'emenda' | 'barra_postica' }
+interface CamadaEntrada { nome?: string; tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave' | 'costurado_junto'; metodo_altura?: 'emenda' | 'barra_postica'; costurado_quantidade?: 'mesma_quantidade' | 'proporcao_franzido' }
 interface AcessorioEntrada { item: string; produto_id?: string; quantidade?: number }
 export interface CortinaEntrada {
   ambiente?: string;
@@ -75,6 +75,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     franzido: cam.franzido !== undefined && cam.franzido !== '' ? Number(cam.franzido) : undefined,
     modelo: cam.modelo, // modelo PRÓPRIO da camada (Victor v.4.1: frente wave + fundo franzido)
     metodo_altura: cam.metodo_altura,
+    costurado_quantidade: cam.costurado_quantidade,
   }));
 
   const r = calcularCortinaMultiCamada({
@@ -107,7 +108,9 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
       barra_consumo: cam.barra_consumo,
       barra_postica_base: cam.barra_postica_base,
       barra_postica_acrescimo: cam.barra_postica_acrescimo,
-      consumo: cam.consumo
+      consumo: cam.consumo,
+      costurado_junto: cam.costurado_junto === true,
+      costurado_quantidade: cam.costurado_quantidade ?? null
     };
   });
 
@@ -173,6 +176,8 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
       nome: cs.nome,
       tecido_nome: cs.tecido_nome,
       franzido: c.camadas[i]?.franzido,
+      costurado_junto: c.camadas[i]?.modelo === 'costurado_junto',
+      costurado_quantidade: c.camadas[i]?.costurado_quantidade,
     })),
   });
 

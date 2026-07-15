@@ -288,6 +288,32 @@ describe('Cortina multi-camada (modelo "+" do Victor)', () => {
     expect(accQtd(trilho, 'Rodízios/ganchos')).toBe(60); // 30 + 30
   });
 
+  it('costurado junto na camada 2 calcula só tecido, sem acessórios próprios', () => {
+    const mesmaQtd = calcularCortinaMultiCamada({
+      modelo: 'prega', fixacao: 'trilho', largura: 3, altura: 2.6,
+      camadas: [
+        { largura_tecido: 3.0, modelo: 'prega', franzido: 3 },
+        { largura_tecido: 3.0, modelo: 'costurado_junto', costurado_quantidade: 'mesma_quantidade' },
+      ],
+    });
+    expect(mesmaQtd.camadas[1].costurado_junto).toBe(true);
+    expect(mesmaQtd.camadas[1].metragem).toBe(mesmaQtd.camadas[0].metragem);
+    expect(accQtd(mesmaQtd, 'Trilho')).toBe(3);
+    expect(accQtd(mesmaQtd, 'Rodízios/ganchos')).toBe(30);
+    expect(accQtd(mesmaQtd, 'Entretela (KOS)')).toBe(9);
+
+    const proporcao = calcularCortinaMultiCamada({
+      modelo: 'prega', fixacao: 'trilho', largura: 3, altura: 2.6,
+      camadas: [
+        { largura_tecido: 3.0, modelo: 'prega', franzido: 3 },
+        { largura_tecido: 3.0, modelo: 'costurado_junto', franzido: 2, costurado_quantidade: 'proporcao_franzido' },
+      ],
+    });
+    expect(proporcao.camadas[1].metragem).toBe(6);
+    expect(proporcao.camadas[1].barra_consumo).toBe(0.28);
+    expect(accQtd(proporcao, 'Rodízios/ganchos')).toBe(30);
+  });
+
   it('rejeita 0 ou mais de 3 camadas', () => {
     expect(() => calcularCortinaMultiCamada({ modelo: 'ilhos', fixacao: 'varao', largura: 3, altura: 2.6, camadas: [] })).toThrow();
     expect(() => calcularCortinaMultiCamada({ modelo: 'ilhos', fixacao: 'varao', largura: 3, altura: 2.6, camadas: Array(4).fill({ largura_tecido: 3 }) })).toThrow();

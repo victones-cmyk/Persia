@@ -16,9 +16,9 @@ import { formatBRL, formatNum } from '../lib/formatacao';
 import type { TecidoOpcao, TipoInstalacao, CalculadoraCortina } from '../lib/calcTypes';
 import type { CortinaCardSnap } from '../lib/rascunhoLocal';
 import {
-  MODELOS_CORTINA, FIXACOES_CORTINA, FIXACOES_POR_MODELO, DESCONTOS_CORTINA,
+  MODELOS_CORTINA, MODELOS_CAMADA_SECUNDARIA, FIXACOES_CORTINA, FIXACOES_POR_MODELO, DESCONTOS_CORTINA,
   modeloCortinaParaOpcao, normalizarModeloCortina,
-  type ModeloCortina, type ModeloCortinaOpcao, type FixacaoCortina, type DescontoCortina, type AcessoriosCortinaResp,
+  type ModeloCortina, type ModeloCamadaCortina, type ModeloCortinaOpcao, type QuantidadeCosturadoJunto, type FixacaoCortina, type DescontoCortina, type AcessoriosCortinaResp,
   type CalcCortinaCompletaResp, type CategoriaAcessorio, type MetodoAlturaCortina,
 } from '../lib/cortinaTypes';
 
@@ -36,7 +36,7 @@ export interface CortinaResumo {
     tamanho_barra?: number;
     tipo_barra?: 'simples' | 'dupla';
     aberturas?: number;
-    camadas: { nome?: string; tecido_id: string; modelo: ModeloCortina; franzido?: number; metodo_altura?: MetodoAlturaCortina }[];
+    camadas: { nome?: string; tecido_id: string; modelo: ModeloCamadaCortina; franzido?: number; metodo_altura?: MetodoAlturaCortina; costurado_quantidade?: QuantidadeCosturadoJunto }[];
     acessorios: { item: string; categoria: CategoriaAcessorio | null; produto_id: string; quantidade: number; preco: number }[];
     nome_produto: string;
     ja_possui_varao?: boolean;
@@ -44,10 +44,10 @@ export interface CortinaResumo {
   } | null;
 }
 
-interface CamadaState { id: string; nome: string; tecidoId: string; modelo: ModeloCortinaOpcao | ''; franzido: string; metodoAltura: MetodoAlturaCortina; }
+interface CamadaState { id: string; nome: string; tecidoId: string; modelo: ModeloCortinaOpcao | ''; franzido: string; metodoAltura: MetodoAlturaCortina; costuradoQuantidade: QuantidadeCosturadoJunto; }
 
 const nomePadraoCamada = (index: number): string => (index === 0 ? 'Frente' : `Camada ${index + 1}`);
-const novaCamada = (modelo: ModeloCortinaOpcao | '' = '', index = 0): CamadaState => ({ id: crypto.randomUUID(), nome: nomePadraoCamada(index), tecidoId: '', modelo, franzido: '', metodoAltura: 'emenda' });
+const novaCamada = (modelo: ModeloCortinaOpcao | '' = '', index = 0): CamadaState => ({ id: crypto.randomUUID(), nome: nomePadraoCamada(index), tecidoId: '', modelo, franzido: '', metodoAltura: 'emenda', costuradoQuantidade: 'mesma_quantidade' });
 const calcCache = new Map<string, { expiraEm: number; valor: CalcCortinaCompletaResp }>();
 const calcEmVoo = new Map<string, Promise<CalcCortinaCompletaResp>>();
 
@@ -80,8 +80,15 @@ export type CortinaInicial = NonNullable<CortinaResumo['payload']>;
 
 /** Fixações permitidas para um conjunto de modelos = interseção das permitidas de cada um. */
 function fixacoesComuns(modelos: ModeloCortinaOpcao[]): FixacaoCortina[] {
-  if (modelos.length === 0) return FIXACOES_CORTINA.map((f) => f.value);
-  return FIXACOES_CORTINA.map((f) => f.value).filter((f) => modelos.every((m) => FIXACOES_POR_MODELO[normalizarModeloCortina(m)].includes(f)));
+  const modelosComFixacao = modelos.filter((m) => m !== 'costurado_junto');
+  if (modelosComFixacao.length === 0) return FIXACOES_CORTINA.map((f) => f.value);
+  return FIXACOES_CORTINA.map((f) => f.value).filter((f) => modelosComFixacao.every((m) => FIXACOES_POR_MODELO[normalizarModeloCortina(m)].includes(f)));
+}
+
+function modeloCamadaPayload(modelo: ModeloCortinaOpcao | ''): ModeloCamadaCortina | undefined {
+  if (!modelo) return undefined;
+  if (modelo === 'costurado_junto') return 'costurado_junto';
+  return normalizarModeloCortina(modelo);
 }
 
 export function CortinaCard({
@@ -129,6 +136,7 @@ export function CortinaCard({
         modelo: modeloCamadaInicial(i),
         franzido: (c as { franzido?: number | string }).franzido != null ? String((c as { franzido?: number | string }).franzido) : '',
         metodoAltura: ((c as { metodoAltura?: MetodoAlturaCortina; metodo_altura?: MetodoAlturaCortina }).metodoAltura ?? (c as { metodo_altura?: MetodoAlturaCortina }).metodo_altura ?? 'emenda'),
+        costuradoQuantidade: ((c as { costuradoQuantidade?: QuantidadeCosturadoJunto; costurado_quantidade?: QuantidadeCosturadoJunto }).costuradoQuantidade ?? (c as { costurado_quantidade?: QuantidadeCosturadoJunto }).costurado_quantidade ?? 'mesma_quantidade'),
       }));
     }
     return [novaCamada()];
@@ -165,6 +173,7 @@ export function CortinaCard({
       modelo: modeloCortinaParaOpcao(cam.modelo_default),
       franzido: cam.franzido_default != null ? String(cam.franzido_default) : '',
       metodoAltura: 'emenda' as MetodoAlturaCortina,
+      costuradoQuantidade: 'mesma_quantidade' as QuantidadeCosturadoJunto,
     }));
     setCamadas(novasCamadas);
   };
@@ -203,7 +212,7 @@ export function CortinaCard({
   // Nome do item da barra conforme a fixação — para o "Já possui".
   const nomeBarra = fixacao === 'trilho' ? 'Trilho' : fixacao === 'varao_suico' ? 'Varão suíço' : 'Varão';
   const ehBarra = (item: string) => item === nomeBarra || item.startsWith(`${nomeBarra} (camada `);
-  const isWaveCamada = (c: CamadaState) => c.modelo !== '' && normalizarModeloCortina(c.modelo) === 'wave';
+  const isWaveCamada = (c: CamadaState) => c.modelo !== '' && c.modelo !== 'costurado_junto' && normalizarModeloCortina(c.modelo) === 'wave';
 
   const obterFormulaAcessorio = (item: string) => {
     const L = Number(largura) || 0;
@@ -253,7 +262,7 @@ export function CortinaCard({
 
   const assinatura = JSON.stringify({
     fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas,
-    camadas: camadas.map((c) => ({ t: c.tecidoId, m: c.modelo, f: c.modelo === 'wave' ? '' : c.franzido, ma: c.metodoAltura })),
+    camadas: camadas.map((c) => ({ t: c.tecidoId, m: c.modelo, f: c.modelo === 'wave' || (c.modelo === 'costurado_junto' && c.costuradoQuantidade === 'mesma_quantidade') ? '' : c.franzido, ma: c.metodoAltura, cq: c.modelo === 'costurado_junto' ? c.costuradoQuantidade : '' })),
   });
 
   const podeCalcular = Number(largura) > 0 && Number(altura) > 0 && camadas.length > 0
@@ -286,7 +295,7 @@ export function CortinaCard({
         modelo: camadas[0]?.modelo ? normalizarModeloCortina(camadas[0].modelo) : undefined, fixacao, desconto, largura: Number(largura), altura: Number(altura),
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
-        camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : undefined, franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
+        camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: modeloCamadaPayload(c.modelo), franzido: franzidoDe(c), metodo_altura: c.metodoAltura, ...(c.modelo === 'costurado_junto' ? { costurado_quantidade: c.costuradoQuantidade } : {}) })),
       };
       try {
         const r = await postCalculoCortinaCacheado(assinatura, payload);
@@ -357,13 +366,13 @@ export function CortinaCard({
         modelo_cortina_nome: modeloCortinaNome || undefined,
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
-        camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: c.modelo ? normalizarModeloCortina(c.modelo) : 'franzido', franzido: franzidoDe(c), metodo_altura: c.metodoAltura })),
+        camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: modeloCamadaPayload(c.modelo) ?? 'franzido', franzido: franzidoDe(c), metodo_altura: c.metodoAltura, ...(c.modelo === 'costurado_junto' ? { costurado_quantidade: c.costuradoQuantidade } : {}) })),
         acessorios: acessoriosPayload, nome_produto: nomeProdutoPreview, ja_possui_varao: jaPossuiVarao,
         instalacao_id: instalacaoId || null,
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, nomeProdutoPreview, JSON.stringify(camadas.map((c) => ({ nome: c.nome, modelo: c.modelo, metodoAltura: c.metodoAltura })))]);
+  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, nomeProdutoPreview, JSON.stringify(camadas.map((c) => ({ nome: c.nome, modelo: c.modelo, metodoAltura: c.metodoAltura, costuradoQuantidade: c.costuradoQuantidade })))]);
 
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
 
@@ -378,7 +387,7 @@ export function CortinaCard({
     onSnapshotRef.current?.({
       ambiente, modelo: modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao,
       modeloCortinaNome,
-      camadas: camadas.map((c) => ({ nome: c.nome, tecidoId: c.tecidoId, franzido: c.franzido, modelo: c.modelo, metodoAltura: c.metodoAltura })),
+      camadas: camadas.map((c) => ({ nome: c.nome, tecidoId: c.tecidoId, franzido: c.franzido, modelo: c.modelo, metodoAltura: c.metodoAltura, costuradoQuantidade: c.costuradoQuantidade })),
       acessorioSel, qtdManual, instalacaoId,
     });
   }, [ambiente, modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, modeloCortinaNome, camadas, acessorioSel, qtdManual, instalacaoId]);
@@ -534,19 +543,38 @@ export function CortinaCard({
                 <div className="grid grid-cols-12 gap-2">
                   <div className="col-span-4">
                     <span className="text-2xs-ui text-neutral-500">Tipo de Confecção<span className="label-required">*</span></span>
-                    <select className="input" value={c.modelo} onChange={(e) => setCamada(c.id, { modelo: e.target.value as ModeloCortinaOpcao | '' })}>
+                    <select
+                      className="input"
+                      value={c.modelo}
+                      onChange={(e) => {
+                        const modelo = e.target.value as ModeloCortinaOpcao | '';
+                        setCamada(c.id, {
+                          modelo,
+                          ...(modelo === 'costurado_junto' ? { metodoAltura: 'emenda', costuradoQuantidade: c.costuradoQuantidade ?? 'mesma_quantidade' } : {}),
+                        });
+                      }}
+                    >
                       <option value="">Selecione…</option>
-                      {MODELOS_CORTINA.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                      {(i === 0 ? MODELOS_CORTINA : MODELOS_CAMADA_SECUNDARIA).map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                   </div>
                   <div className={isWaveCamada(c) ? 'col-span-8' : 'col-span-5'}>
                     <span className="text-2xs-ui text-neutral-500">Tecido<span className="label-required">*</span></span>
                     <TecidoSearch tecidos={tecidos} value={c.tecidoId} onChange={(v) => setCamada(c.id, { tecidoId: v })} placeholder="Buscar tecido…" />
                   </div>
-                  {!isWaveCamada(c) && (
+                  {!isWaveCamada(c) && !(c.modelo === 'costurado_junto' && c.costuradoQuantidade === 'mesma_quantidade') && (
                     <div className="col-span-3">
                       <span className="text-2xs-ui text-neutral-500">Franzido</span>
                       <input type="number" className="input" min={1} step={0.1} value={c.franzido} placeholder="" onChange={(e) => setCamada(c.id, { franzido: e.target.value })} />
+                    </div>
+                  )}
+                  {c.modelo === 'costurado_junto' && (
+                    <div className="col-span-12 md:col-span-4">
+                      <span className="text-2xs-ui text-neutral-500">Quantidade de tecido</span>
+                      <select className="input" value={c.costuradoQuantidade} onChange={(e) => setCamada(c.id, { costuradoQuantidade: e.target.value as QuantidadeCosturadoJunto })}>
+                        <option value="mesma_quantidade">Mesma quantidade da frente</option>
+                        <option value="proporcao_franzido">Proporção do franzido</option>
+                      </select>
                     </div>
                   )}
                   {pedeMetodoAltura && (
@@ -576,10 +604,18 @@ export function CortinaCard({
               <div key={i} className="grid grid-cols-12 gap-2 items-center text-xs-ui border-b border-neutral-100 py-1 last:border-b-0">
                 <div className="col-span-6 text-neutral-700">{camadas[i]?.nome.trim() || nomePadraoCamada(i)}: {cam.tecido.nome}</div>
                 <div className="col-span-3 font-mono tabular-nums text-right text-neutral-600">
-                  {formatNum(cam.metragem, 2)} m{cam.metodo === 'emenda' ? ' (emenda)' : cam.metodo === 'barra_postica' ? ' (barra postiça)' : ''}
+                  {formatNum(cam.metragem, 2)} m{cam.costurado_junto ? ' (costurado junto)' : cam.metodo === 'emenda' ? ' (emenda)' : cam.metodo === 'barra_postica' ? ' (barra postiça)' : ''}
                 </div>
                 <div className="col-span-3 font-mono tabular-nums text-right text-neutral-800">{formatBRL(cam.valor_tecido)}</div>
-                {cam.metodo === 'emenda' && cam.tiras && (
+                {cam.costurado_junto && (
+                  <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-2 border-l-2 border-primary flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
+                    <FontAwesomeIcon icon={faCircleInfo} className="text-primary" style={{ fontSize: 10 }} />
+                    <span>
+                      Costurado junto: calcula somente o tecido, sem acessórios. Quantidade: <strong>{cam.costurado_quantidade === 'proporcao_franzido' ? 'proporção do franzido' : 'mesma quantidade da frente'}</strong>.
+                    </span>
+                  </div>
+                )}
+                {!cam.costurado_junto && cam.metodo === 'emenda' && cam.tiras && (
                   <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-2 border-l-2 border-primary flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
                     <FontAwesomeIcon icon={faCircleInfo} className="text-primary" style={{ fontSize: 10 }} />
                     <span>
@@ -587,7 +623,7 @@ export function CortinaCard({
                     </span>
                   </div>
                 )}
-                {cam.metodo === 'barra_postica' && cam.barra_postica_base !== null && cam.barra_postica_acrescimo !== null && (
+                {!cam.costurado_junto && cam.metodo === 'barra_postica' && cam.barra_postica_base !== null && cam.barra_postica_acrescimo !== null && (
                   <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-2 border-l-2 border-primary flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
                     <FontAwesomeIcon icon={faCircleInfo} className="text-primary" style={{ fontSize: 10 }} />
                     <span>
