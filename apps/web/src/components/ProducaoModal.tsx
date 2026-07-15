@@ -154,6 +154,7 @@ export function ProducaoModal({
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | null>(null);
   const [previaEtiqueta, setPreviaEtiqueta] = useState<EtiquetaPreviewOrdem | null>(null);
+  const [editandoIndex, setEditandoIndex] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
@@ -203,6 +204,7 @@ export function ProducaoModal({
       setMedidasFinais({});
       setPrevia(null);
       setDiferencaAbsorvida(false);
+      setEditandoIndex(null);
       setErro(null);
       setSucesso(null);
     }
@@ -338,6 +340,21 @@ export function ProducaoModal({
     setDiferencaAbsorvida(false);
   }
 
+  function editarItemDiferenca(index: number) {
+    setEditandoIndex(index);
+    const linhas = Array.from(document.querySelectorAll<HTMLElement>(`[data-medicao-item="${index}"]`));
+    const linhaVisivel = linhas.find((el) => el.offsetParent !== null) ?? linhas[0];
+    linhaVisivel?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    window.setTimeout(() => {
+      const campos = Array.from(document.querySelectorAll<HTMLInputElement>(`[data-medicao-largura="${index}"]`));
+      const campoVisivel = campos.find((el) => el.offsetParent !== null) ?? campos[0];
+      campoVisivel?.focus();
+      campoVisivel?.select();
+    }, 250);
+    window.setTimeout(() => setEditandoIndex((atual) => atual === index ? null : atual), 2500);
+  }
+
   async function recalcularMedicao() {
     if (!orcamento) return;
     setRecalculando(true);
@@ -416,6 +433,7 @@ export function ProducaoModal({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           <input
             className="input"
+            data-medicao-largura={index}
             value={final.largura}
             disabled={bloqueado}
             onChange={(e) => alterarMedida(index, 'largura', e.target.value)}
@@ -641,7 +659,15 @@ export function ProducaoModal({
                 <tr><td colSpan={6} style={{ padding: 16, color: '#6c757d' }}>Nenhum produto encontrado no orçamento.</td></tr>
               ) : (
                 dados?.itens.map(({ index, item, ordem }) => (
-                  <tr key={index} style={{ borderTop: '1px solid #dee2e6' }}>
+                  <tr
+                    key={index}
+                    data-medicao-item={index}
+                    style={{
+                      borderTop: '1px solid #dee2e6',
+                      background: editandoIndex === index ? '#fff3cd' : undefined,
+                      transition: 'background 150ms ease',
+                    }}
+                  >
                     <td style={{ padding: 10 }}>
                       <input
                         type="checkbox"
@@ -683,7 +709,16 @@ export function ProducaoModal({
             <div style={{ padding: 16, color: '#6c757d' }}>Nenhum produto encontrado no orçamento.</div>
           ) : (
             dados?.itens.map(({ index, item, ordem }) => (
-              <div key={index} style={{ padding: 12, borderTop: index === 0 ? undefined : '1px solid #dee2e6' }}>
+              <div
+                key={index}
+                data-medicao-item={index}
+                style={{
+                  padding: 12,
+                  borderTop: index === 0 ? undefined : '1px solid #dee2e6',
+                  background: editandoIndex === index ? '#fff3cd' : undefined,
+                  transition: 'background 150ms ease',
+                }}
+              >
                 <div className="flex items-start gap-2">
                   <input
                     type="checkbox"
@@ -742,7 +777,7 @@ export function ProducaoModal({
                   Onde a diferença apareceu
                 </div>
                 <div className="table-scroll hidden md:block">
-                  <table className="data-table" style={{ minWidth: 720 }}>
+                  <table className="data-table" style={{ minWidth: 820 }}>
                     <thead>
                       <tr>
                         <th style={{ padding: 8, textAlign: 'left' }}>Item</th>
@@ -751,6 +786,7 @@ export function ProducaoModal({
                         <th style={{ padding: 8, textAlign: 'right' }}>Vendido</th>
                         <th style={{ padding: 8, textAlign: 'right' }}>Conferido</th>
                         <th style={{ padding: 8, textAlign: 'right' }}>Diferença</th>
+                        <th style={{ padding: 8, textAlign: 'right' }}>Ação</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -769,6 +805,17 @@ export function ProducaoModal({
                           <td style={{ padding: 8, textAlign: 'right' }} className="font-mono text-sm-ui">{dinheiro(d.valor_vendido)}</td>
                           <td style={{ padding: 8, textAlign: 'right' }} className="font-mono text-sm-ui">{dinheiro(d.valor_conferido)}</td>
                           <td style={{ padding: 8, textAlign: 'right' }} className={`font-mono text-sm-ui ${d.diferenca > 0 ? 'text-danger' : d.diferenca < 0 ? 'text-success' : ''}`}>{dinheiro(d.diferenca)}</td>
+                          <td style={{ padding: 8, textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="btn btn-default btn-xs"
+                              disabled={orcamento.status !== 'enviado'}
+                              onClick={() => editarItemDiferenca(d.index)}
+                              title="Editar as medidas finais deste item"
+                            >
+                              Editar
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -786,6 +833,15 @@ export function ProducaoModal({
                         <span>Conferido: <strong>{dinheiro(d.valor_conferido)}</strong></span>
                         <span>Diferença: <strong className={d.diferenca > 0 ? 'text-danger' : d.diferenca < 0 ? 'text-success' : ''}>{dinheiro(d.diferenca)}</strong></span>
                       </div>
+                      <button
+                        type="button"
+                        className="btn btn-default btn-xs mt-2"
+                        disabled={orcamento.status !== 'enviado'}
+                        onClick={() => editarItemDiferenca(d.index)}
+                        title="Editar as medidas finais deste item"
+                      >
+                        Editar item
+                      </button>
                     </div>
                   ))}
                 </div>
