@@ -102,8 +102,19 @@ function fixacaoLabel(item?: PreviewItem): string {
 
 function instalacaoSimNao(v: unknown): string {
   const s = texto(v, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (!s || s === '-' || s.includes('sem instalacao')) return 'Não';
+  if (!s || s === '-' || s.includes('sem instalacao') || s.includes('sem instalação')) return 'Não';
   return 'Sim';
+}
+
+function acionamentoLabel(v: unknown): string {
+  const s = texto(v, '');
+  const labels: Record<string, string> = {
+    com_bando: 'Com Bandô',
+    com_barra: 'Com Barra Estabilizadora',
+    motorizado_com_bando: 'Motorizado com Bandô',
+    motorizado_sem_bando: 'Motorizado sem Bandô',
+  };
+  return labels[s] ?? s.replace(/_/g, ' ').replace(/\s+/g, ' ').trim().replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
 function Linha({ children, forte = false }: { children: ReactNode; forte?: boolean }) {
@@ -130,7 +141,7 @@ function EtiquetaProduto({ ordem }: { ordem: EtiquetaPreviewOrdem }) {
   const camada2 = tecidoSemPrefixo(texto(tecidos[1]?.descricao, ''));
   const suporte = suporteCortina(item);
   const acessorios = [
-    item?.acionamento ? `AC:${item.acionamento}` : null,
+    item?.acionamento ? `AC:${acionamentoLabel(item.acionamento)}` : null,
     item?.cor_acessorio ? `cor ${item.cor_acessorio}` : null,
     item?.base ? `Base ${item.base}` : null,
   ].filter(Boolean).join(' ');

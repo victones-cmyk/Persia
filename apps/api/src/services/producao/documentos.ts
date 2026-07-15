@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import type { TipoProduto } from '@prisma/client';
+import { ACIONAMENTO_LABEL } from '../calc/tipos';
 
 export interface ComponenteSnapshot {
   grupo?: string;
@@ -132,18 +133,28 @@ function abreviar(v: unknown, max = 72): string {
   return `${s.slice(0, Math.max(0, max - 1))}…`;
 }
 
+function acionamentoLabel(v: unknown): string {
+  const s = texto(v, '');
+  if (!s) return '-';
+  return ACIONAMENTO_LABEL[s as keyof typeof ACIONAMENTO_LABEL] ?? s
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
 function linhasTecnicas(item: ItemProducaoSnapshot): Array<[string, string]> {
   const linhas: Array<[string, string]> = [
     ['Ambiente', texto(item.ambiente)],
     ['Produto', produtoResumo(item)],
     ['Tecido', texto(item.tecido_nome)],
-    ['Codigo tecido', texto(item.tecido_codigo_gc)],
+    ['Código tecido', texto(item.tecido_codigo_gc)],
     ['Largura', `${numero(item.largura_m)} m`],
     ['Altura', `${numero(item.altura_m)} m`],
     ['Dimensao', item.dimensao_m === undefined ? '-' : `${numero(item.dimensao_m)} m`],
-    ['Qtd. producao', item.qtd_producao === undefined ? '-' : `${numero(item.qtd_producao)} m`],
-    ['Instalacao', texto(item.instalacao_nome)],
-    ['Acionamento', texto(item.acionamento)],
+    ['Qtd. produção', item.qtd_producao === undefined ? '-' : `${numero(item.qtd_producao)} m`],
+    ['Instalação', texto(item.instalacao_nome)],
+    ['Acionamento', acionamentoLabel(item.acionamento)],
     ['Cor acessorio', texto(item.cor_acessorio)],
     ['Rolamento', texto(item.rolamento)],
     ['Base', texto(item.base)],
@@ -278,7 +289,7 @@ function checkboxPdf(doc: PDFKit.PDFDocument, name: string, x: number, y: number
 }
 
 function campoInstalacaoPdf(doc: PDFKit.PDFDocument, ordemCodigo: string, x: number, y: number, w: number): void {
-  campoPdf(doc, 'Instalacao', '', x, y, w, 30);
+  campoPdf(doc, 'Instalação', '', x, y, w, 30);
   const slug = ordemCodigo.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
   checkboxPdf(doc, `instalacao_parede_${slug}`, x + 8, y + 16, 'Parede', false);
   checkboxPdf(doc, `instalacao_teto_${slug}`, x + 70, y + 16, 'Teto', false);
@@ -301,7 +312,7 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
   const acionamentoMotorizado = ehAcionamentoMotorizado(item.acionamento);
 
   doc.rect(0, 0, 595, 76).fill(navy);
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(18).text('Ordem de Producao', left, 22, { width: 260 });
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(18).text('Ordem de Produção', left, 22, { width: 260 });
   doc.font('Helvetica-Bold').fontSize(8.5).fillColor(navyMuted).text(tipoOrdemA4(ordem), left, 48, { width: 260 });
   doc.font('Helvetica-Bold').fontSize(11).fillColor('#ffffff').text(ordem.codigo, 372, 19, { width: 187, align: 'right' });
   doc.font('Helvetica').fontSize(7).fillColor(navyMuted).text(`Gerada em ${dataBR(ordem.criadoEm)}`, 372, 39, { width: 187, align: 'right' });
@@ -313,7 +324,7 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
     ['Pedido', ordem.pedidoCodigo],
     ['Cliente', ordem.cliente],
     ['Vendedor', primeiroNome(ordem.vendedor)],
-    ['Instalacao', texto(item.instalacao_nome)],
+    ['Instalação', texto(item.instalacao_nome)],
   ].forEach(([label, value], index) => {
     campoPdf(doc, label, value, left + index * (metaW + gap), metaY, metaW, 36);
   });
@@ -323,7 +334,7 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
   doc.font('Helvetica-Bold').fontSize(12).fillColor(ink).text(abreviar(produtoResumo(item), 112), left, produtoY + 23, { width: pageW, height: 18 });
 
   const dadosY = 204;
-  sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
+  sectionTitle(doc, 'Dados técnicos', left, dadosY, pageW);
   const colW = (pageW - gap) / 2;
   const rowH = 36;
   const y0 = dadosY + 24;
@@ -332,7 +343,7 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
   campoPdf(doc, 'Largura', `${numero(item.largura_m)} m`, left, y0 + rowH, (colW - gap) / 2, 30);
   campoPdf(doc, 'Altura', `${numero(item.altura_m)} m`, left + (colW + gap) / 2, y0 + rowH, (colW - gap) / 2, 30);
   campoPdf(doc, 'Tipo', tipoPersianaLabel(item.tipo || ordem.tipoProduto), left + colW + gap, y0 + rowH, colW, 30);
-  campoPdf(doc, 'Acessorios', texto(item.cor_acessorio), left, y0 + rowH * 2, colW, 30, corCampoPdf(item.cor_acessorio));
+  campoPdf(doc, 'Acessórios', texto(item.cor_acessorio), left, y0 + rowH * 2, colW, 30, corCampoPdf(item.cor_acessorio));
   campoPdf(doc, 'Base', texto(item.base), left + colW + gap, y0 + rowH * 2, colW, 30, corCampoPdf(item.base));
   campoPdf(doc, 'Tamanho do comando', item.tc_m === undefined ? '-' : `${numero(item.tc_m)} m`, left, y0 + rowH * 3, (colW - gap) / 2, 30);
   campoPdf(doc, 'Comando', texto(item.comando), left + (colW + gap) / 2, y0 + rowH * 3, (colW - gap) / 2, 30);
@@ -340,7 +351,7 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
   campoPdf(
     doc,
     'Acionamento',
-    texto(item.acionamento),
+    acionamentoLabel(item.acionamento),
     left,
     y0 + rowH * 4,
     colW,
@@ -368,7 +379,7 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
   doc.rect(left, headerY, pageW, headerH).fill(soft);
   doc.font('Helvetica-Bold').fontSize(7).fillColor(ink);
   doc.text('Grupo', left + 8, headerY + 5, { width: 82 });
-  doc.text('Descricao', left + 98, headerY + 5, { width: descW });
+  doc.text('Descrição', left + 98, headerY + 5, { width: descW });
   doc.text('Qtd.', qtdX, headerY + 5, { width: 42, align: 'right' });
   doc.text('Un.', unX, headerY + 5, { width: 34 });
 
@@ -384,7 +395,7 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
 
   const tableH = headerH + Math.max(componentes.length, 1) * rowHComp;
   doc.save().lineWidth(0.7).strokeColor(line).rect(left, headerY, pageW, tableH).stroke().restore();
-  doc.font('Helvetica').fontSize(7).fillColor(muted).text('Conferir medidas, tecido e acessorios antes da producao.', left, 798, { width: pageW, height: 10 });
+  doc.font('Helvetica').fontSize(7).fillColor(muted).text('Conferir medidas, tecido e acessórios antes da produção.', left, 798, { width: pageW, height: 10 });
 }
 
 function campoCortinaPdf(
@@ -415,7 +426,7 @@ function modeloCamada(item: ItemProducaoSnapshot, index: number): string {
   return modeloCortinaLabel(item.camadas?.[index]?.modelo ?? item.tipo);
 }
 
-function desenharCabecalhoCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento, titulo = 'Ordem de Producao'): void {
+function desenharCabecalhoCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento, titulo = 'Ordem de Produção'): void {
   const left = 36;
   const muted = '#5d6873';
   doc.rect(0, 0, 595, 76).fill('#f1f3f5');
@@ -430,7 +441,7 @@ function rodapeProducao(doc: PDFKit.PDFDocument): void {
   const left = 36;
   const pageW = 523;
   doc.moveTo(left, 790).lineTo(left + pageW, 790).strokeColor('#d7dce0').stroke();
-  doc.font('Helvetica').fontSize(7).fillColor('#5d6873').text('Conferir medidas, tecido e acessorios antes do corte/producao.', left, 800, { width: pageW, height: 10 });
+  doc.font('Helvetica').fontSize(7).fillColor('#5d6873').text('Conferir medidas, tecido e acessórios antes do corte/produção.', left, 800, { width: pageW, height: 10 });
 }
 
 function desenharTabelaComponentesCortina(
@@ -462,7 +473,7 @@ function desenharTabelaComponentesCortina(
     doc.rect(left, y, pageW, headerH).fill(soft);
     doc.font('Helvetica-Bold').fontSize(7).fillColor(ink);
     doc.text('Grupo', left + 8, y + 5, { width: 82 });
-    doc.text('Descricao', left + 98, y + 5, { width: descW });
+    doc.text('Descrição', left + 98, y + 5, { width: descW });
     doc.text('Qtd.', qtdX, y + 5, { width: qtdW, align: 'right' });
     doc.save().lineWidth(0.7).strokeColor(line).rect(left, y, pageW, headerH).stroke().restore();
     y += headerH;
@@ -489,7 +500,7 @@ function desenharTabelaComponentesCortina(
       rodapeProducao(doc);
       doc.addPage();
       page += 1;
-      desenharCabecalhoCortina(doc, ordem, 'Ordem de Producao');
+      desenharCabecalhoCortina(doc, ordem, 'Ordem de Produção');
       y = 98;
       desenharCabecalhoTabela(`Componentes e materiais (continuação ${page})`);
     }
@@ -522,7 +533,7 @@ function desenharPdfCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): voi
     ['Pedido', ordem.pedidoCodigo],
     ['Cliente', ordem.cliente],
     ['Vendedor', primeiroNome(ordem.vendedor)],
-    ['Instalacao', texto(item.instalacao_nome)],
+    ['Instalação', texto(item.instalacao_nome)],
   ].forEach(([label, value], index) => {
     campoCortinaPdf(doc, label, value, left + index * (metaW + gap), metaY, metaW, 36);
   });
@@ -532,7 +543,7 @@ function desenharPdfCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): voi
   doc.font('Helvetica-Bold').fontSize(12).fillColor(ink).text(abreviar(produtoResumo(item), 112), left, produtoY + 23, { width: pageW, height: 18 });
 
   const dadosY = 204;
-  sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
+  sectionTitle(doc, 'Dados técnicos', left, dadosY, pageW);
   const y0 = dadosY + 24;
   const rowH = 36;
   const ambienteW = 260;
@@ -557,7 +568,7 @@ function desenharPdfCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): voi
 
 export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 36, info: { Title: `Ordem de Producao ${ordem.codigo}` } });
+    const doc = new PDFDocument({ size: 'A4', margin: 36, info: { Title: `Ordem de Produção ${ordem.codigo}` } });
     const chunks: Buffer[] = [];
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -579,7 +590,7 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
     const pageW = 523;
 
     doc.rect(0, 0, 595, 70).fill('#f3f5f7');
-    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(18).text('Ordem de Producao', left, 22, { width: 260 });
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(18).text('Ordem de Produção', left, 22, { width: 260 });
     doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#5f6973').text(tipoOrdemA4(ordem), left, 48, { width: 260 });
     doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(ordem.codigo, 350, 20, { width: 209, align: 'right' });
     doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`Gerada em ${dataBR(ordem.criadoEm)}`, 350, 39, { width: 209, align: 'right' });
@@ -590,7 +601,7 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
     const boxW = (pageW - gap * 3) / 4;
     [
       ['Pedido', ordem.pedidoCodigo],
-      ['Orcamento GC', ordem.orcamentoCodigo],
+      ['Orçamento GC', ordem.orcamentoCodigo],
       ['Cliente', ordem.cliente],
       ['Tipo', tipoLabel(String(ordem.tipoProduto))],
     ].forEach(([label, value], i) => {
@@ -604,7 +615,7 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
     doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(abreviar(produtoResumo(ordem.item), 96), left, produtoY + 24, { width: pageW, height: 34 });
 
     const dadosY = 204;
-    sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
+    sectionTitle(doc, 'Dados técnicos', left, dadosY, pageW);
     const tech = linhasTecnicas(ordem.item).filter(([label]) => !['Produto'].includes(label)).slice(0, 12);
     const cellW = (pageW - gap) / 2;
     tech.forEach(([label, value], index) => {
@@ -622,7 +633,7 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
     doc.rect(left, headerY, pageW, 20).fill('#f3f5f7');
     doc.font('Helvetica-Bold').fontSize(8).fillColor('#111111');
     doc.text('Grupo', left + 8, headerY + 6, { width: 84 });
-    doc.text('Descricao', left + 98, headerY + 6, { width: 295 });
+    doc.text('Descrição', left + 98, headerY + 6, { width: 295 });
     doc.text('Qtd.', left + 406, headerY + 6, { width: 56, align: 'right' });
     doc.text('Un.', left + 474, headerY + 6, { width: 40 });
 
@@ -639,12 +650,12 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
     const tableBottom = headerY + 20 + Math.max(componentes.length, 1) * 18;
     drawBox(doc, left, headerY, pageW, Math.max(38, tableBottom - headerY));
     if ((ordem.item.componentes?.length ?? 0) > componentes.length) {
-      doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`+ ${(ordem.item.componentes?.length ?? 0) - componentes.length} componente(s) adicional(is) no calculo original.`, left, tableBottom + 6);
+      doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`+ ${(ordem.item.componentes?.length ?? 0) - componentes.length} componente(s) adicional(is) no cálculo original.`, left, tableBottom + 6);
     }
 
     const obsY = 770;
     doc.moveTo(left, obsY - 8).lineTo(left + pageW, obsY - 8).strokeColor('#d7dce0').stroke();
-    doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text('Conferir medidas, tecido e acessorios antes do corte/producao.', left, obsY, { width: pageW });
+    doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text('Conferir medidas, tecido e acessórios antes do corte/produção.', left, obsY, { width: pageW });
 
     doc.end();
   });
@@ -665,7 +676,7 @@ function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): 
   const pageW = 523;
 
   doc.rect(0, 0, 595, 70).fill('#f3f5f7');
-  doc.fillColor('#111111').font('Helvetica-Bold').fontSize(18).text('Ordem de Producao', left, 22, { width: 260 });
+  doc.fillColor('#111111').font('Helvetica-Bold').fontSize(18).text('Ordem de Produção', left, 22, { width: 260 });
   doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#5f6973').text(tipoOrdemA4(ordem), left, 48, { width: 260 });
   doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(ordem.codigo, 350, 20, { width: 209, align: 'right' });
   doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`Gerada em ${dataBR(ordem.criadoEm)}`, 350, 39, { width: 209, align: 'right' });
@@ -676,7 +687,7 @@ function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): 
   const boxW = (pageW - gap * 3) / 4;
   [
     ['Pedido', ordem.pedidoCodigo],
-    ['Orcamento GC', ordem.orcamentoCodigo],
+    ['Orçamento GC', ordem.orcamentoCodigo],
     ['Cliente', ordem.cliente],
     ['Tipo', tipoLabel(String(ordem.tipoProduto))],
   ].forEach(([label, value], i) => {
@@ -690,7 +701,7 @@ function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): 
   doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(abreviar(produtoResumo(ordem.item), 96), left, produtoY + 24, { width: pageW, height: 34 });
 
   const dadosY = 204;
-  sectionTitle(doc, 'Dados tecnicos', left, dadosY, pageW);
+  sectionTitle(doc, 'Dados técnicos', left, dadosY, pageW);
   const tech = linhasTecnicas(ordem.item).filter(([label]) => !['Produto'].includes(label)).slice(0, 12);
   const cellW = (pageW - gap) / 2;
   tech.forEach(([label, value], index) => {
@@ -708,7 +719,7 @@ function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): 
   doc.rect(left, headerY, pageW, 20).fill('#f3f5f7');
   doc.font('Helvetica-Bold').fontSize(8).fillColor('#111111');
   doc.text('Grupo', left + 8, headerY + 6, { width: 84 });
-  doc.text('Descricao', left + 98, headerY + 6, { width: 295 });
+  doc.text('Descrição', left + 98, headerY + 6, { width: 295 });
   doc.text('Qtd.', left + 406, headerY + 6, { width: 56, align: 'right' });
   doc.text('Un.', left + 474, headerY + 6, { width: 40 });
 
@@ -725,15 +736,15 @@ function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): 
   const tableBottom = headerY + 20 + Math.max(componentes.length, 1) * 18;
   drawBox(doc, left, headerY, pageW, Math.max(38, tableBottom - headerY));
   if ((ordem.item.componentes?.length ?? 0) > componentes.length) {
-    doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`+ ${(ordem.item.componentes?.length ?? 0) - componentes.length} componente(s) adicional(is) no calculo original.`, left, tableBottom + 6);
+    doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text(`+ ${(ordem.item.componentes?.length ?? 0) - componentes.length} componente(s) adicional(is) no cálculo original.`, left, tableBottom + 6);
   }
 
   const obsY = 770;
   doc.moveTo(left, obsY - 8).lineTo(left + pageW, obsY - 8).strokeColor('#d7dce0').stroke();
-  doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text('Conferir medidas, tecido e acessorios antes do corte/producao.', left, obsY, { width: pageW });
+  doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text('Conferir medidas, tecido e acessórios antes do corte/produção.', left, obsY, { width: pageW });
 }
 
-export async function gerarPdfOrdensProducao(ordens: OrdemDocumento[], titulo = 'Ordens de Producao'): Promise<Buffer> {
+export async function gerarPdfOrdensProducao(ordens: OrdemDocumento[], titulo = 'Ordens de Produção'): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 36, info: { Title: titulo } });
     const chunks: Buffer[] = [];
@@ -817,7 +828,7 @@ function lojaEtiqueta(v: unknown): string {
 
 function instalacaoSimNao(v: unknown): string {
   const s = texto(v, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  if (!s || s === '-' || s.includes('sem instalacao')) return 'Não';
+  if (!s || s === '-' || s.includes('sem instalacao') || s.includes('sem instalação')) return 'Não';
   return 'Sim';
 }
 
@@ -841,7 +852,7 @@ function gerarZplEtiquetaPersiana(ordem: OrdemDocumento, width: number, height: 
   const textW = qrX - marginLeftPersiana - 12;
   const entradaEntregaW = Math.round(textW * 0.53);
   const acessorios = [
-    item.acionamento ? `AC:${item.acionamento}` : null,
+    item.acionamento ? `AC:${acionamentoLabel(item.acionamento)}` : null,
     item.cor_acessorio ? `cor ${item.cor_acessorio}` : null,
     item.base ? `Base ${item.base}` : null,
   ].filter(Boolean).join(' ');

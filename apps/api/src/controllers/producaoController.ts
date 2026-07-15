@@ -241,7 +241,7 @@ function aplicarMedida<T extends { largura?: unknown; altura?: unknown }>(item: 
 
 async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Promise<PreviaMedicao> {
   const itensAtuais = itensDoOrcamento(orc);
-  if (itensAtuais.length === 0) throw new AppError(409, 'SEM_ITENS', 'Este orcamento nao possui itens para producao.');
+  if (itensAtuais.length === 0) throw new AppError(409, 'SEM_ITENS', 'Este orçamento não possui itens para produção.');
   const ajustes = medicoesPorIndex(medicoes, itensAtuais.length);
   const valorOriginal = totalItens(itensAtuais) || Number(orc.valor_final);
 
@@ -262,12 +262,12 @@ async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Prom
     rt_pct?: number;
   } | null;
   if (!entrada) {
-    throw new AppError(409, 'SEM_ENTRADA_ORIGINAL', 'Nao foi possivel recalcular: este orcamento nao possui entrada original salva.');
+    throw new AppError(409, 'SEM_ENTRADA_ORIGINAL', 'Não foi possível recalcular: este orçamento não possui entrada original salva.');
   }
 
   if (orc.tipo_produto === 'cortina') {
     const cortinasEntrada = entrada.cortinas ?? [];
-    if (cortinasEntrada.length === 0) throw new AppError(409, 'SEM_ENTRADA_ORIGINAL', 'Orcamento de cortina sem entrada original.');
+    if (cortinasEntrada.length === 0) throw new AppError(409, 'SEM_ENTRADA_ORIGINAL', 'Orçamento de cortina sem entrada original.');
     const ajustadas = cortinasEntrada.map((c, index) => aplicarMedida(c, ajustes.get(index)));
     const preparadas = await recalcularCortinasDeEntrada(ajustadas, Number(entrada.rt_pct) || 0);
     const itens = preparadas.map((p) => cortinaParaItem(p.snapshot as CortinaSnapshotProducao));
@@ -307,7 +307,7 @@ async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Prom
   }
 
   const itensEntrada = entrada.itens ?? [];
-  if (itensEntrada.length === 0) throw new AppError(409, 'SEM_ENTRADA_ORIGINAL', 'Orcamento de persiana sem entrada original.');
+  if (itensEntrada.length === 0) throw new AppError(409, 'SEM_ENTRADA_ORIGINAL', 'Orçamento de persiana sem entrada original.');
   const ajustados = itensEntrada.map((it, index) => aplicarMedida(it, ajustes.get(index)));
   const preparados = await recalcularPersianasDeEntrada(isTipoPersiana(entrada.tipo ?? '') ? (entrada.tipo as TipoPersiana) : null, ajustados, Number(entrada.rt_pct) || 0);
   const idsAtuais = ((orc.itens_json as unknown as ItemSnapshot[] | null) ?? []).map((s) => s.gc_produto_id ?? null);
@@ -327,8 +327,8 @@ function pedidoCodigo(orc: Pick<Orcamento, 'gc_pedido_codigo'>): string {
 
 function validarPedido(v: unknown): string {
   const s = typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '';
-  if (!s) throw new AppError(400, 'PEDIDO_OBRIGATORIO', 'Informe o numero do pedido antes de gerar a ordem.');
-  if (s.length > 50) throw new AppError(400, 'PEDIDO_INVALIDO', 'O numero do pedido deve ter no maximo 50 caracteres.');
+  if (!s) throw new AppError(400, 'PEDIDO_OBRIGATORIO', 'Informe o número do pedido antes de gerar a ordem.');
+  if (s.length > 50) throw new AppError(400, 'PEDIDO_INVALIDO', 'O número do pedido deve ter no máximo 50 caracteres.');
   return s;
 }
 
@@ -340,17 +340,17 @@ function validarDataEntrega(v: unknown): Date | null {
   const [ano, mes, dia] = v.split('-').map(Number);
   const data = new Date(Date.UTC(ano, mes - 1, dia));
   if (data.getUTCFullYear() !== ano || data.getUTCMonth() !== mes - 1 || data.getUTCDate() !== dia) {
-    throw new AppError(400, 'DATA_ENTREGA_INVALIDA', 'Informe uma data de entrega valida.');
+    throw new AppError(400, 'DATA_ENTREGA_INVALIDA', 'Informe uma data de entrega válida.');
   }
   return data;
 }
 
 function validarOrcamentoParaProducao(orc: Pick<Orcamento, 'status' | 'gc_pedido_codigo'>): void {
   if (orc.status !== 'enviado') {
-    throw new AppError(409, 'ORCAMENTO_NAO_ENVIADO', 'A ordem de producao so pode ser gerada para orcamentos enviados.');
+    throw new AppError(409, 'ORCAMENTO_NAO_ENVIADO', 'A ordem de produção só pode ser gerada para orçamentos enviados.');
   }
   if (!pedidoCodigo(orc)) {
-    throw new AppError(409, 'PEDIDO_NAO_INFORMADO', 'Informe o numero do pedido antes de gerar a ordem de producao.');
+    throw new AppError(409, 'PEDIDO_NAO_INFORMADO', 'Informe o número do pedido antes de gerar a ordem de produção.');
   }
 }
 
@@ -379,7 +379,7 @@ async function buscarOrcamento(id: string) {
 async function carregarOrcamentoAutorizado(req: Request) {
   const orc = await buscarOrcamento(String(req.params.id));
   if (!orc || !temAcesso(orc, req.session.usuario)) {
-    throw new AppError(404, 'NAO_ENCONTRADO', 'Orcamento nao encontrado.');
+    throw new AppError(404, 'NAO_ENCONTRADO', 'Orçamento não encontrado.');
   }
   return orc;
 }
@@ -445,7 +445,7 @@ export async function getProducaoOrcamento(req: Request, res: Response): Promise
 export async function atualizarPedidoOrcamento(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   if (orc.status !== 'enviado') {
-    throw new AppError(409, 'ORCAMENTO_NAO_ENVIADO', 'Informe pedido apenas em orcamentos enviados.');
+    throw new AppError(409, 'ORCAMENTO_NAO_ENVIADO', 'Informe pedido apenas em orçamentos enviados.');
   }
   const codigo = validarPedido((req.body as { gc_pedido_codigo?: unknown } | null)?.gc_pedido_codigo);
   const entrega = validarDataEntrega((req.body as { pedido_entrega_em?: unknown } | null)?.pedido_entrega_em);
@@ -469,14 +469,14 @@ export async function criarOrdensProducao(req: Request, res: Response): Promise<
   validarOrcamentoParaProducao(orc);
   const previa = await recalcularMedicao(orc, validarMedicoes(req.body));
   const itens = previa.itens;
-  if (itens.length === 0) throw new AppError(409, 'SEM_ITENS', 'Este orcamento nao possui itens para producao.');
+  if (itens.length === 0) throw new AppError(409, 'SEM_ITENS', 'Este orçamento não possui itens para produção.');
   const absorverDiferenca = (req.body as { absorver_diferenca?: unknown } | null)?.absorver_diferenca === true;
   const ajusteGerado = vendaAjusteMedicaoGerada(orc);
   if (diferencaRelevante(previa.diferenca) && !absorverDiferenca && !ajusteGerado) {
-    throw new AppError(409, 'DIFERENCA_NAO_AUTORIZADA', 'A diferenca da medicao deve ser absorvida por um admin ou cobrada em venda complementar antes de gerar a OS.');
+    throw new AppError(409, 'DIFERENCA_NAO_AUTORIZADA', 'A diferença da medição deve ser absorvida por um admin ou cobrada em venda complementar antes de gerar a OS.');
   }
   if (absorverDiferenca && req.session.usuario?.perfil !== 'admin') {
-    throw new AppError(403, 'APENAS_ADMIN', 'Apenas administradores podem absorver diferenca de medicao.');
+    throw new AppError(403, 'APENAS_ADMIN', 'Apenas administradores podem absorver diferença de medição.');
   }
 
   const indicesRaw = (req.body as { itens?: unknown } | null)?.itens;
@@ -485,7 +485,7 @@ export async function criarOrdensProducao(req: Request, res: Response): Promise<
     : [];
   if (indices.length === 0) throw new AppError(400, 'ITENS_OBRIGATORIOS', 'Selecione ao menos um produto.');
   for (const idx of indices) {
-    if (idx < 0 || idx >= itens.length) throw new AppError(400, 'ITEM_INVALIDO', 'Produto selecionado invalido.');
+    if (idx < 0 || idx >= itens.length) throw new AppError(400, 'ITEM_INVALIDO', 'Produto selecionado inválido.');
   }
 
   const criadas = await prisma.$transaction(async (tx) => {
@@ -530,19 +530,19 @@ export async function preverMedicaoProducao(req: Request, res: Response): Promis
 export async function gerarVendaAjusteMedicao(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   validarOrcamentoParaProducao(orc);
-  if (!orc.gc_cliente_id) throw new AppError(409, 'SEM_CLIENTE', 'Orcamento sem cliente vinculado ao GestaoClick.');
+  if (!orc.gc_cliente_id) throw new AppError(409, 'SEM_CLIENTE', 'Orçamento sem cliente vinculado ao GestãoClick.');
   const respostaAtual = respostaGcObj(orc);
   if (respostaAtual.venda_ajuste_medicao) {
-    throw new AppError(409, 'AJUSTE_JA_GERADO', 'Este orcamento ja possui venda complementar de medicao tecnica.');
+    throw new AppError(409, 'AJUSTE_JA_GERADO', 'Este orçamento já possui venda complementar de medição técnica.');
   }
 
   const previa = await recalcularMedicao(orc, validarMedicoes(req.body));
   if (!(previa.diferenca > 0)) {
-    throw new AppError(400, 'SEM_DIFERENCA_POSITIVA', 'A venda complementar so e gerada quando existe diferenca positiva.');
+    throw new AppError(400, 'SEM_DIFERENCA_POSITIVA', 'A venda complementar só é gerada quando existe diferença positiva.');
   }
 
   const pedido = pedidoCodigo(orc);
-  const nome = `Diferenca de valores do pedido ${pedido} apos medicao tecnica`;
+  const nome = `Diferença de valores do pedido ${pedido} após medição técnica`;
   const descricao = [
     `Pedido original: ${pedido}`,
     `Orcamento: ${orc.gc_codigo ?? orc.gc_orcamento_id ?? '-'}`,
@@ -617,7 +617,7 @@ async function carregarOrdemAutorizada(req: Request) {
     },
   });
   if (!ordem || !temAcesso(ordem.orcamento, req.session.usuario)) {
-    throw new AppError(404, 'NAO_ENCONTRADO', 'Ordem de producao nao encontrada.');
+    throw new AppError(404, 'NAO_ENCONTRADO', 'Ordem de produção não encontrada.');
   }
   return ordem;
 }
@@ -657,7 +657,7 @@ function imprimirRawCups(zpl: string): Promise<void> {
       if (code === 0) {
         resolve();
       } else {
-        reject(new AppError(500, 'FALHA_IMPRESSAO', stderr.trim() || `CUPS retornou codigo ${code}.`));
+        reject(new AppError(500, 'FALHA_IMPRESSAO', stderr.trim() || `CUPS retornou código ${code}.`));
       }
     });
     child.stdin.end(zpl);
@@ -782,7 +782,7 @@ async function proximoSerialEtiqueta(tx: Prisma.TransactionClient): Promise<numb
     create: {
       chave,
       valor: String(proximo),
-      descricao: 'Ultimo S/N usado nas etiquetas de embalagem de persianas.',
+      descricao: 'Último S/N usado nas etiquetas de embalagem de persianas.',
     },
     update: { valor: String(proximo) },
   });
@@ -859,11 +859,11 @@ export async function baixarPdfOrdensOrcamento(req: Request, res: Response): Pro
   const tipo = filtroTipoDocumento(req);
   const ordens = ordensFiltradasPorTipo(orc.ordens_producao, tipo);
   if (ordens.length === 0) {
-    throw new AppError(404, 'SEM_ORDENS', `Nenhuma OS ${tipo ? `de ${tipo}` : ''} encontrada para este orcamento.`);
+    throw new AppError(404, 'SEM_ORDENS', `Nenhuma OS ${tipo ? `de ${tipo}` : ''} encontrada para este orçamento.`);
   }
 
   const docs = ordens.map((ordem) => ordemParaDocumento(ordem, orc));
-  const pdf = await gerarPdfOrdensProducao(docs, `Ordens de Producao ${tipo ?? ''}`.trim());
+  const pdf = await gerarPdfOrdensProducao(docs, `Ordens de Produção ${tipo ?? ''}`.trim());
   const sufixo = tipo ? `-${tipo}` : '';
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="ordens-producao${sufixo}-${orc.gc_pedido_codigo ?? orc.id}.pdf"`);
@@ -875,7 +875,7 @@ export async function imprimirEtiquetasOrcamento(req: Request, res: Response): P
   const tipo = filtroTipoDocumento(req);
   const ordens = ordensFiltradasPorTipo(orc.ordens_producao, tipo);
   if (ordens.length === 0) {
-    throw new AppError(404, 'SEM_ORDENS', `Nenhuma etiqueta ${tipo ? `de ${tipo}` : ''} encontrada para este orcamento.`);
+    throw new AppError(404, 'SEM_ORDENS', `Nenhuma etiqueta ${tipo ? `de ${tipo}` : ''} encontrada para este orçamento.`);
   }
 
   const docs: OrdemDocumento[] = [];
@@ -913,11 +913,11 @@ export async function imprimirEtiquetasOrcamento(req: Request, res: Response): P
 
 export async function listarOrdensProducao(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario;
-  if (!sessao) throw new AppError(401, 'NAO_AUTENTICADO', 'Sessao expirada.');
+  if (!sessao) throw new AppError(401, 'NAO_AUTENTICADO', 'Sessão expirada.');
 
   const status = String(req.query.status ?? '').trim() as StatusFiltroProducao | '';
   if (status && !['criada', 'impressa', 'cancelada'].includes(status)) {
-    throw new AppError(400, 'STATUS_INVALIDO', 'Status de producao invalido.');
+    throw new AppError(400, 'STATUS_INVALIDO', 'Status de produção inválido.');
   }
   const tipo = filtroTipoDocumento(req);
   const entregaDe = dataFiltro(req.query.entrega_de);
