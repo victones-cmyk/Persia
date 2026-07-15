@@ -41,6 +41,8 @@ export interface ItemSnapshot {
   fixacao_instalacao?: string | null;
   desconto?: string | null;
   fixacao?: string | null;
+  tamanho_barra?: number | null;
+  tipo_barra?: 'simples' | 'dupla' | string | null;
   qtd_venda: number;
   qtd_producao: number;
   valor_bruto: number;

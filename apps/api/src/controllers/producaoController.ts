@@ -40,6 +40,8 @@ interface CortinaSnapshotProducao {
   fixacao?: string;
   abertura?: string | number | null;
   desconto?: string | null;
+  tamanho_barra?: number | null;
+  tipo_barra?: string | null;
   largura?: number;
   altura?: number;
   n_camadas?: number;
@@ -64,6 +66,8 @@ interface AjusteMedida {
   largura: number;
   altura: number;
   desconto?: string;
+  tamanho_barra?: number;
+  tipo_barra?: 'simples' | 'dupla';
 }
 
 interface PreviaMedicao {
@@ -88,6 +92,10 @@ interface DetalheDiferencaMedicao {
   altura_final: number;
   desconto_vendido: string | null;
   desconto_final: string | null;
+  tamanho_barra_vendida: number | null;
+  tamanho_barra_final: number | null;
+  tipo_barra_vendido: string | null;
+  tipo_barra_final: string | null;
   alterado: boolean;
 }
 
@@ -102,6 +110,11 @@ interface AbsorcaoMedicao {
   decidido_em?: string;
   motivo?: string;
 }
+
+type ItemProducaoSnapshotTecnico = ItemProducaoSnapshot & {
+  tamanho_barra?: number | null;
+  tipo_barra?: string | null;
+};
 
 function diferencaRelevante(v: number): boolean {
   return Math.abs(v) >= 0.01;
@@ -135,6 +148,8 @@ function assinaturaMedicoes(medicoes: AjusteMedida[]): string {
       largura: roundHalfUp(m.largura),
       altura: roundHalfUp(m.altura),
       desconto: m.desconto ?? null,
+      tamanho_barra: m.tamanho_barra != null ? roundHalfUp(m.tamanho_barra) : null,
+      tipo_barra: m.tipo_barra ?? null,
     })));
 }
 
@@ -206,6 +221,8 @@ function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
     fixacao: c.fixacao,
     abertura: c.abertura,
     desconto: c.desconto,
+    tamanho_barra: c.tamanho_barra ?? null,
+    tipo_barra: c.tipo_barra ?? null,
     largura_m: Number(c.largura ?? 0),
     altura_m: Number(c.altura ?? 0),
     n_camadas: c.n_camadas,
@@ -238,21 +255,42 @@ function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
         unidade: 'un',
       })),
     ],
-  };
+  } as ItemProducaoSnapshotTecnico;
 }
 
-function itensDoOrcamento(orc: Pick<Orcamento, 'itens_json'>): ItemProducaoSnapshot[] {
+function aplicarDadosCortinaEntrada(item: ItemProducaoSnapshot, c?: CortinaEntrada): ItemProducaoSnapshot {
+  if (!c) return item;
+  return {
+    ...item,
+    tamanho_barra: c.tamanho_barra !== undefined && c.tamanho_barra !== '' ? Number(c.tamanho_barra) : null,
+    tipo_barra: c.tipo_barra ?? null,
+  } as ItemProducaoSnapshotTecnico;
+}
+
+function itensDoOrcamento(orc: Pick<Orcamento, 'itens_json' | 'entrada_json' | 'tipo_produto'>): ItemProducaoSnapshot[] {
   const json = orc.itens_json as unknown;
-  if (Array.isArray(json)) return json as ItemProducaoSnapshot[];
+  const entrada = orc.entrada_json as { itens?: ItemEntrada[]; cortinas?: CortinaEntrada[] } | null;
+  if (Array.isArray(json)) {
+    const itens = json as ItemProducaoSnapshot[];
+    if (orc.tipo_produto === 'cortina') {
+      return itens.map((item, index) => aplicarDadosCortinaEntrada(item, entrada?.cortinas?.[index]));
+    }
+    if (orc.tipo_produto === 'misto') {
+      const offset = entrada?.itens?.length ?? 0;
+      return itens.map((item, index) => index >= offset ? aplicarDadosCortinaEntrada(item, entrada?.cortinas?.[index - offset]) : item);
+    }
+    return itens;
+  }
   if (!json || typeof json !== 'object') return [];
 
   const obj = json as {
     persiana?: { itens?: ItemProducaoSnapshot[] };
     cortinas?: CortinaSnapshotProducao[];
   };
+  const persianas = obj.persiana?.itens ?? [];
   return [
-    ...(obj.persiana?.itens ?? []),
-    ...(obj.cortinas ?? []).map(cortinaParaItem),
+    ...persianas,
+    ...(obj.cortinas ?? []).map((c, index) => aplicarDadosCortinaEntrada(cortinaParaItem(c), entrada?.cortinas?.[index])),
   ];
 }
 
@@ -269,6 +307,11 @@ function totalItens(itens: ItemProducaoSnapshot[]): number {
 function numeroItem(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+function numeroOuNull(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 function nomeItemMedicao(item: ItemProducaoSnapshot, index: number): string {
@@ -304,6 +347,10 @@ function detalhesDiferencaMedicao(
       altura_final: numeroItem(conferido.altura_m),
       desconto_vendido: typeof vendido.desconto === 'string' ? vendido.desconto : null,
       desconto_final: typeof conferido.desconto === 'string' ? conferido.desconto : null,
+      tamanho_barra_vendida: numeroOuNull((vendido as ItemProducaoSnapshot & { tamanho_barra?: unknown }).tamanho_barra),
+      tamanho_barra_final: numeroOuNull((conferido as ItemProducaoSnapshot & { tamanho_barra?: unknown }).tamanho_barra),
+      tipo_barra_vendido: typeof (vendido as ItemProducaoSnapshot & { tipo_barra?: unknown }).tipo_barra === 'string' ? String((vendido as ItemProducaoSnapshot & { tipo_barra?: unknown }).tipo_barra) : null,
+      tipo_barra_final: typeof (conferido as ItemProducaoSnapshot & { tipo_barra?: unknown }).tipo_barra === 'string' ? String((conferido as ItemProducaoSnapshot & { tipo_barra?: unknown }).tipo_barra) : null,
       alterado,
     });
   }
@@ -338,7 +385,15 @@ function validarMedicoes(body: unknown): AjusteMedida[] {
     if (desconto && !descontosValidos.has(desconto)) {
       throw new AppError(400, 'DESCONTO_INVALIDO', 'Informe um tipo de desconto válido.');
     }
-    return { index, largura, altura, ...(desconto ? { desconto } : {}) };
+    const tamanhoBarraRaw = obj.tamanho_barra;
+    const tamanho_barra = tamanhoBarraRaw === undefined || tamanhoBarraRaw === null || tamanhoBarraRaw === ''
+      ? undefined
+      : Number(tamanhoBarraRaw);
+    if (tamanho_barra !== undefined && (!(tamanho_barra >= 0) || tamanho_barra > 1)) {
+      throw new AppError(400, 'BARRA_INVALIDA', 'Informe um tamanho de barra válido.');
+    }
+    const tipo_barra = obj.tipo_barra === 'simples' || obj.tipo_barra === 'dupla' ? obj.tipo_barra : undefined;
+    return { index, largura, altura, ...(desconto ? { desconto } : {}), ...(tamanho_barra !== undefined ? { tamanho_barra } : {}), ...(tipo_barra ? { tipo_barra } : {}) };
   });
 }
 
@@ -351,13 +406,15 @@ function medicoesPorIndex(medicoes: AjusteMedida[], total: number): Map<number, 
   return map;
 }
 
-function aplicarMedida<T extends { largura?: unknown; altura?: unknown; desconto?: unknown }>(item: T, ajuste?: AjusteMedida): T {
+function aplicarMedida<T extends { largura?: unknown; altura?: unknown; desconto?: unknown; tamanho_barra?: unknown; tipo_barra?: unknown }>(item: T, ajuste?: AjusteMedida): T {
   if (!ajuste) return item;
   return {
     ...item,
     largura: ajuste.largura,
     altura: ajuste.altura,
     ...(ajuste.desconto ? { desconto: ajuste.desconto } : {}),
+    ...(ajuste.tamanho_barra !== undefined ? { tamanho_barra: ajuste.tamanho_barra } : {}),
+    ...(ajuste.tipo_barra ? { tipo_barra: ajuste.tipo_barra } : {}),
   };
 }
 

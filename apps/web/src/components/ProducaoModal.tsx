@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye, faFilePdf, faTag } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
@@ -37,7 +36,17 @@ interface MedicaoItem {
   largura: number;
   altura: number;
   desconto?: DescontoCortina;
+  tamanho_barra?: number;
+  tipo_barra?: 'simples' | 'dupla';
 }
+
+type MedidaFinal = {
+  largura: string;
+  altura: string;
+  desconto: DescontoCortina;
+  tamanhoBarra: string;
+  tipoBarra: '' | 'simples' | 'dupla';
+};
 
 interface PreviaMedicao {
   valor_original: number;
@@ -60,6 +69,10 @@ interface DetalheDiferencaMedicao {
   altura_final: number;
   desconto_vendido: string | null;
   desconto_final: string | null;
+  tamanho_barra_vendida: number | null;
+  tamanho_barra_final: number | null;
+  tipo_barra_vendido: string | null;
+  tipo_barra_final: string | null;
   alterado: boolean;
 }
 
@@ -90,6 +103,11 @@ function numeroInput(v: unknown): string {
   return Number.isFinite(n) ? n.toFixed(2) : '';
 }
 
+function numeroCmInput(v: unknown): string {
+  const n = Number(v);
+  return Number.isFinite(n) ? String(Math.round(n * 100)) : '';
+}
+
 function numeroMedida(v: unknown): string {
   const n = Number(v);
   if (!Number.isFinite(n)) return '-';
@@ -114,6 +132,18 @@ function descontoLabel(v: string | null | undefined): string {
   return DESCONTOS_CORTINA.find((d) => d.value === v)?.label ?? 'Sem desconto';
 }
 
+function tipoBarraLabel(v: string | null | undefined): string {
+  if (v === 'simples') return 'Simples';
+  if (v === 'dupla') return 'Dupla';
+  return 'Não informado';
+}
+
+function ehCortinaItem(item: ItemSnapshot): boolean {
+  const extra = item as ItemSnapshot & { camadas?: unknown[]; fixacao?: unknown; abertura?: unknown; tamanho_barra?: unknown; tipo_barra?: unknown };
+  const texto = `${item.nome_produto ?? ''} ${item.tipo ?? ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return Boolean(extra.camadas?.length || extra.fixacao || extra.abertura || extra.tamanho_barra != null || extra.tipo_barra || texto.includes('cortina') || texto.includes('wave') || texto.includes('prega'));
+}
+
 function assinaturaMedicoes(medicoes: MedicaoItem[]): string {
   return JSON.stringify([...medicoes]
     .sort((a, b) => a.index - b.index)
@@ -122,6 +152,8 @@ function assinaturaMedicoes(medicoes: MedicaoItem[]): string {
       largura: Math.round(m.largura * 100) / 100,
       altura: Math.round(m.altura * 100) / 100,
       desconto: m.desconto ?? null,
+      tamanho_barra: m.tamanho_barra != null ? Math.round(m.tamanho_barra * 100) / 100 : null,
+      tipo_barra: m.tipo_barra ?? null,
     })));
 }
 
@@ -138,12 +170,11 @@ export function ProducaoModal({
 }) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin';
-  const navigate = useNavigate();
   const [dados, setDados] = useState<ProducaoPayload | null>(null);
   const [pedido, setPedido] = useState('');
   const [entrega, setEntrega] = useState('');
   const [selecionados, setSelecionados] = useState<number[]>([]);
-  const [medidasFinais, setMedidasFinais] = useState<Record<number, { largura: string; altura: string; desconto: DescontoCortina }>>({});
+  const [medidasFinais, setMedidasFinais] = useState<Record<number, MedidaFinal>>({});
   const [previa, setPrevia] = useState<PreviaMedicao | null>(null);
   const [diferencaAbsorvida, setDiferencaAbsorvida] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -153,7 +184,7 @@ export function ProducaoModal({
   const [gerandoAjuste, setGerandoAjuste] = useState(false);
   const [solicitandoAbsorcao, setSolicitandoAbsorcao] = useState(false);
   const [decidindoAbsorcao, setDecidindoAbsorcao] = useState<'aprovar' | 'reprovar' | null>(null);
-  const [editandoOrcamentoIndex, setEditandoOrcamentoIndex] = useState<number | null>(null);
+  const [editandoIndex, setEditandoIndex] = useState<number | null>(null);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | null>(null);
   const [previaEtiqueta, setPreviaEtiqueta] = useState<EtiquetaPreviewOrdem | null>(null);
@@ -166,11 +197,13 @@ export function ProducaoModal({
     setErro(null);
     try {
       const r = await api.get<ProducaoPayload>(`/orcamentos/${orcamento.id}/producao`);
-      const medidasBase = Object.fromEntries(r.itens.map(({ index, item }) => [index, {
+      const medidasBase: Record<number, MedidaFinal> = Object.fromEntries(r.itens.map(({ index, item }) => [index, {
         largura: numeroInput(item.largura_m),
         altura: numeroInput(item.altura_m),
         desconto: descontoInicial(item),
-      }]));
+        tamanhoBarra: numeroCmInput(item.tamanho_barra),
+        tipoBarra: item.tipo_barra === 'simples' || item.tipo_barra === 'dupla' ? item.tipo_barra : '',
+      } as MedidaFinal]));
       const absorcao = r.orcamento.medicao_absorcao;
       const medidasComSolicitacao = absorcao && absorcao.status !== 'reprovada'
         ? {
@@ -179,6 +212,8 @@ export function ProducaoModal({
             largura: numeroInput(m.largura),
             altura: numeroInput(m.altura),
             desconto: m.desconto ?? medidasBase[m.index]?.desconto ?? 'sem_desconto',
+            tamanhoBarra: m.tamanho_barra != null ? numeroCmInput(m.tamanho_barra) : medidasBase[m.index]?.tamanhoBarra ?? '',
+            tipoBarra: m.tipo_barra ?? medidasBase[m.index]?.tipoBarra ?? '',
           }])),
         }
         : medidasBase;
@@ -222,9 +257,18 @@ export function ProducaoModal({
       const originalL = Number(item.largura_m);
       const originalA = Number(item.altura_m);
       const originalDesconto = descontoInicial(item);
+      const tamanhoBarra = final?.tamanhoBarra === '' || final?.tamanhoBarra == null ? undefined : Number(final.tamanhoBarra.replace(',', '.')) / 100;
+      const tipoBarra = final?.tipoBarra || undefined;
+      const originalBarra = item.tamanho_barra == null ? undefined : Number(item.tamanho_barra);
+      const originalTipoBarra = item.tipo_barra === 'simples' || item.tipo_barra === 'dupla' ? item.tipo_barra : undefined;
+      const barraAlterada = ehCortinaItem(item) && (
+        (tamanhoBarra !== undefined && Math.abs(tamanhoBarra - (originalBarra ?? 0)) >= 0.005)
+        || (tamanhoBarra === undefined && originalBarra !== undefined)
+        || tipoBarra !== originalTipoBarra
+      );
       if (!(largura > 0) || !(altura > 0)) return [];
-      if (Math.abs(largura - originalL) < 0.005 && Math.abs(altura - originalA) < 0.005 && desconto === originalDesconto) return [];
-      return [{ index, largura, altura, desconto }];
+      if (Math.abs(largura - originalL) < 0.005 && Math.abs(altura - originalA) < 0.005 && desconto === originalDesconto && !barraAlterada) return [];
+      return [{ index, largura, altura, desconto, ...(tamanhoBarra !== undefined ? { tamanho_barra: tamanhoBarra } : {}), ...(tipoBarra ? { tipo_barra: tipoBarra as 'simples' | 'dupla' } : {}) }];
     });
   }, [dados, medidasFinais]);
 
@@ -330,30 +374,35 @@ export function ProducaoModal({
   }
 
   function alterarMedida(index: number, campo: 'largura' | 'altura', valor: string) {
-    setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', desconto: prev[index]?.desconto ?? 'sem_desconto', [campo]: valor } }));
+    setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', desconto: prev[index]?.desconto ?? 'sem_desconto', tamanhoBarra: prev[index]?.tamanhoBarra ?? '', tipoBarra: prev[index]?.tipoBarra ?? '', [campo]: valor } }));
     setPrevia(null);
     setDiferencaAbsorvida(false);
   }
 
   function alterarDesconto(index: number, valor: DescontoCortina) {
-    setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', desconto: valor } }));
+    setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', desconto: valor, tamanhoBarra: prev[index]?.tamanhoBarra ?? '', tipoBarra: prev[index]?.tipoBarra ?? '' } }));
     setPrevia(null);
     setDiferencaAbsorvida(false);
   }
 
-  async function editarOrcamentoItem(index: number) {
-    if (!orcamento) return;
-    setEditandoOrcamentoIndex(index);
-    setErro(null);
-    setSucesso(null);
-    try {
-      const r = await api.post<{ orcamento: { id: string } }>(`/orcamentos/${orcamento.id}/duplicar`);
-      navigate(`/orcamentos/novo?editar=${encodeURIComponent(r.orcamento.id)}&item=${index}`);
-    } catch (e) {
-      setErro(e instanceof ApiError ? e.message : 'Falha ao criar cópia editável do orçamento.');
-    } finally {
-      setEditandoOrcamentoIndex(null);
-    }
+  function alterarTecnicoCortina(index: number, campo: 'tamanhoBarra' | 'tipoBarra', valor: string) {
+    setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', desconto: prev[index]?.desconto ?? 'sem_desconto', tamanhoBarra: prev[index]?.tamanhoBarra ?? '', tipoBarra: prev[index]?.tipoBarra ?? '', [campo]: valor } }));
+    setPrevia(null);
+    setDiferencaAbsorvida(false);
+  }
+
+  function editarItemDiferenca(index: number) {
+    setEditandoIndex(index);
+    const linhas = Array.from(document.querySelectorAll<HTMLElement>(`[data-medicao-item="${index}"]`));
+    const linhaVisivel = linhas.find((el) => el.offsetParent !== null) ?? linhas[0];
+    linhaVisivel?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.setTimeout(() => {
+      const campos = Array.from(document.querySelectorAll<HTMLInputElement>(`[data-medicao-barra="${index}"], [data-medicao-largura="${index}"]`));
+      const campoVisivel = campos.find((el) => el.offsetParent !== null) ?? campos[0];
+      campoVisivel?.focus();
+      campoVisivel?.select();
+    }, 250);
+    window.setTimeout(() => setEditandoIndex((atual) => atual === index ? null : atual), 2500);
   }
 
   async function recalcularMedicao() {
@@ -426,14 +475,28 @@ export function ProducaoModal({
   function camposMedida(index: number, item: ItemSnapshot, bloqueado: boolean, ordem?: OrdemProducao | null) {
     const itemFinal = ordem?.item_snapshot_json ?? item;
     const final = bloqueado
-      ? { largura: numeroInput(itemFinal.largura_m), altura: numeroInput(itemFinal.altura_m), desconto: descontoInicial(itemFinal) }
-      : (medidasFinais[index] ?? { largura: numeroInput(item.largura_m), altura: numeroInput(item.altura_m), desconto: descontoInicial(item) });
+      ? {
+        largura: numeroInput(itemFinal.largura_m),
+        altura: numeroInput(itemFinal.altura_m),
+        desconto: descontoInicial(itemFinal),
+        tamanhoBarra: numeroCmInput(itemFinal.tamanho_barra),
+        tipoBarra: itemFinal.tipo_barra === 'simples' || itemFinal.tipo_barra === 'dupla' ? itemFinal.tipo_barra : '',
+      }
+      : (medidasFinais[index] ?? {
+        largura: numeroInput(item.largura_m),
+        altura: numeroInput(item.altura_m),
+        desconto: descontoInicial(item),
+        tamanhoBarra: numeroCmInput(item.tamanho_barra),
+        tipoBarra: item.tipo_barra === 'simples' || item.tipo_barra === 'dupla' ? item.tipo_barra : '',
+      });
     const opcoesDesconto = descontosDisponiveis(itemFinal);
+    const itemCortina = ehCortinaItem(itemFinal);
     return (
       <div style={{ display: 'grid', gap: 6 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
           <input
             className="input"
+            data-medicao-largura={index}
             value={final.largura}
             disabled={bloqueado}
             onChange={(e) => alterarMedida(index, 'largura', e.target.value)}
@@ -461,6 +524,38 @@ export function ProducaoModal({
         >
           {opcoesDesconto.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
         </select>
+        {itemCortina && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 6 }}>
+            <div>
+              <label className="text-2xs-ui text-neutral-500" htmlFor={`barra-producao-${index}`}>Barra (cm)</label>
+              <input
+                id={`barra-producao-${index}`}
+                data-medicao-barra={index}
+                className="input"
+                value={final.tamanhoBarra}
+                disabled={bloqueado}
+                onChange={(e) => alterarTecnicoCortina(index, 'tamanhoBarra', e.target.value)}
+                inputMode="decimal"
+                style={{ height: 32, padding: '5px 8px', fontSize: 12 }}
+              />
+            </div>
+            <div>
+              <label className="text-2xs-ui text-neutral-500" htmlFor={`tipo-barra-producao-${index}`}>Tipo</label>
+              <select
+                id={`tipo-barra-producao-${index}`}
+                className="input"
+                value={final.tipoBarra}
+                disabled={bloqueado}
+                onChange={(e) => alterarTecnicoCortina(index, 'tipoBarra', e.target.value)}
+                style={{ height: 32, padding: '5px 8px', fontSize: 12 }}
+              >
+                <option value="">Selecione...</option>
+                <option value="simples">Simples</option>
+                <option value="dupla">Dupla</option>
+              </select>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -659,7 +754,15 @@ export function ProducaoModal({
                 <tr><td colSpan={6} style={{ padding: 16, color: '#6c757d' }}>Nenhum produto encontrado no orçamento.</td></tr>
               ) : (
                 dados?.itens.map(({ index, item, ordem }) => (
-                  <tr key={index} style={{ borderTop: '1px solid #dee2e6' }}>
+                  <tr
+                    key={index}
+                    data-medicao-item={index}
+                    style={{
+                      borderTop: '1px solid #dee2e6',
+                      background: editandoIndex === index ? '#fff3cd' : undefined,
+                      transition: 'background 150ms ease',
+                    }}
+                  >
                     <td style={{ padding: 10 }}>
                       <input
                         type="checkbox"
@@ -701,7 +804,16 @@ export function ProducaoModal({
             <div style={{ padding: 16, color: '#6c757d' }}>Nenhum produto encontrado no orçamento.</div>
           ) : (
             dados?.itens.map(({ index, item, ordem }) => (
-              <div key={index} style={{ padding: 12, borderTop: index === 0 ? undefined : '1px solid #dee2e6' }}>
+              <div
+                key={index}
+                data-medicao-item={index}
+                style={{
+                  padding: 12,
+                  borderTop: index === 0 ? undefined : '1px solid #dee2e6',
+                  background: editandoIndex === index ? '#fff3cd' : undefined,
+                  transition: 'background 150ms ease',
+                }}
+              >
                 <div className="flex items-start gap-2">
                   <input
                     type="checkbox"
@@ -783,7 +895,12 @@ export function ProducaoModal({
                             {numeroMedida(d.largura_vendida)} x {numeroMedida(d.altura_vendida)} → {numeroMedida(d.largura_final)} x {numeroMedida(d.altura_final)}
                           </td>
                           <td style={{ padding: 8 }} className="text-sm-ui">
-                            {descontoLabel(d.desconto_vendido)} → {descontoLabel(d.desconto_final)}
+                            <div>{descontoLabel(d.desconto_vendido)} → {descontoLabel(d.desconto_final)}</div>
+                            {(d.tamanho_barra_vendida !== null || d.tamanho_barra_final !== null || d.tipo_barra_vendido || d.tipo_barra_final) && (
+                              <div className="text-xs-ui text-neutral-600 mt-1">
+                                Barra: {d.tamanho_barra_vendida !== null ? numeroMedida(d.tamanho_barra_vendida * 100) : '-'} cm → {d.tamanho_barra_final !== null ? numeroMedida(d.tamanho_barra_final * 100) : '-'} cm · {tipoBarraLabel(d.tipo_barra_vendido)} → {tipoBarraLabel(d.tipo_barra_final)}
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: 8, textAlign: 'right' }} className="font-mono text-sm-ui">{dinheiro(d.valor_vendido)}</td>
                           <td style={{ padding: 8, textAlign: 'right' }} className="font-mono text-sm-ui">{dinheiro(d.valor_conferido)}</td>
@@ -792,11 +909,11 @@ export function ProducaoModal({
                             <button
                               type="button"
                               className="btn btn-default btn-xs"
-                              disabled={editandoOrcamentoIndex !== null}
-                              onClick={() => void editarOrcamentoItem(d.index)}
-                              title="Criar uma cópia editável do orçamento e abrir este item"
+                              disabled={orcamento.status !== 'enviado'}
+                              onClick={() => editarItemDiferenca(d.index)}
+                              title="Editar os dados técnicos deste item"
                             >
-                              {editandoOrcamentoIndex === d.index ? 'Abrindo...' : 'Editar orçamento'}
+                              Editar item
                             </button>
                           </td>
                         </tr>
@@ -811,6 +928,11 @@ export function ProducaoModal({
                       <div className="text-xs-ui text-neutral-600">{d.produto}</div>
                       <div className="font-mono text-sm-ui mt-1">{numeroMedida(d.largura_vendida)} x {numeroMedida(d.altura_vendida)} → {numeroMedida(d.largura_final)} x {numeroMedida(d.altura_final)}</div>
                       <div className="text-sm-ui mt-1">{descontoLabel(d.desconto_vendido)} → {descontoLabel(d.desconto_final)}</div>
+                      {(d.tamanho_barra_vendida !== null || d.tamanho_barra_final !== null || d.tipo_barra_vendido || d.tipo_barra_final) && (
+                        <div className="text-xs-ui text-neutral-600 mt-1">
+                          Barra: {d.tamanho_barra_vendida !== null ? numeroMedida(d.tamanho_barra_vendida * 100) : '-'} cm → {d.tamanho_barra_final !== null ? numeroMedida(d.tamanho_barra_final * 100) : '-'} cm · {tipoBarraLabel(d.tipo_barra_vendido)} → {tipoBarraLabel(d.tipo_barra_final)}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-3 mt-1 text-sm-ui">
                         <span>Vendido: <strong>{dinheiro(d.valor_vendido)}</strong></span>
                         <span>Conferido: <strong>{dinheiro(d.valor_conferido)}</strong></span>
@@ -819,11 +941,11 @@ export function ProducaoModal({
                       <button
                         type="button"
                         className="btn btn-default btn-xs mt-2"
-                        disabled={editandoOrcamentoIndex !== null}
-                        onClick={() => void editarOrcamentoItem(d.index)}
-                        title="Criar uma cópia editável do orçamento e abrir este item"
+                        disabled={orcamento.status !== 'enviado'}
+                        onClick={() => editarItemDiferenca(d.index)}
+                        title="Editar os dados técnicos deste item"
                       >
-                        {editandoOrcamentoIndex === d.index ? 'Abrindo...' : 'Editar orçamento'}
+                        Editar item
                       </button>
                     </div>
                   ))}
