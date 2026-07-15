@@ -40,8 +40,6 @@ interface OrcamentoCriado {
   codigo?: string; // nº sequencial gerado pelo GestãoClick
 }
 
-export type OrcamentoGcDetalhado = Record<string, unknown>;
-
 export interface ResultadoOrcamento {
   gc_orcamento_id: string;
   gc_codigo: string | null; // nº sequencial devolvido pelo GestãoClick
@@ -93,14 +91,6 @@ export async function criarOrcamento(o: NovoOrcamentoGc): Promise<ResultadoOrcam
     throw new Error('GestãoClick não retornou o id do orçamento.');
   }
   return { gc_orcamento_id, gc_codigo: env.data?.codigo ?? null, payload, resposta: env };
-}
-
-export async function buscarOrcamentoGc(id: string): Promise<OrcamentoGcDetalhado> {
-  const env = await gcRequest<GcEnvelope<OrcamentoGcDetalhado>>({
-    method: 'GET',
-    url: `/api/orcamentos/${encodeURIComponent(id)}`,
-  });
-  return env.data ?? {};
 }
 
 export async function deletarOrcamento(id: string): Promise<void> {
