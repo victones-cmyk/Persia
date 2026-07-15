@@ -63,6 +63,7 @@ interface AjusteMedida {
   index: number;
   largura: number;
   altura: number;
+  desconto?: string;
 }
 
 interface PreviaMedicao {
@@ -213,30 +214,42 @@ function totalItens(itens: ItemProducaoSnapshot[]): number {
 function validarMedicoes(body: unknown): AjusteMedida[] {
   const raw = (body as { medicoes?: unknown } | null)?.medicoes;
   if (!Array.isArray(raw)) return [];
+  const descontosValidos = new Set(['teto_ao_chao', 'gesso_ao_chao', 'sem_desconto', 'varao_ao_chao', 'suporte_de_teto']);
   return raw.map((m) => {
     const obj = m && typeof m === 'object' ? m as Record<string, unknown> : {};
     const index = Number(obj.index);
     const largura = Number(obj.largura);
     const altura = Number(obj.altura);
     if (!Number.isInteger(index) || index < 0 || !(largura > 0) || !(altura > 0)) {
-      throw new AppError(400, 'MEDICAO_INVALIDA', 'Informe medidas finais validas para todos os itens alterados.');
+      throw new AppError(400, 'MEDICAO_INVALIDA', 'Informe medidas finais válidas para todos os itens alterados.');
     }
-    return { index, largura, altura };
+    const desconto = typeof obj.desconto === 'string' && obj.desconto.trim()
+      ? obj.desconto.trim()
+      : undefined;
+    if (desconto && !descontosValidos.has(desconto)) {
+      throw new AppError(400, 'DESCONTO_INVALIDO', 'Informe um tipo de desconto válido.');
+    }
+    return { index, largura, altura, ...(desconto ? { desconto } : {}) };
   });
 }
 
 function medicoesPorIndex(medicoes: AjusteMedida[], total: number): Map<number, AjusteMedida> {
   const map = new Map<number, AjusteMedida>();
   for (const m of medicoes) {
-    if (m.index >= total) throw new AppError(400, 'ITEM_INVALIDO', 'Produto selecionado invalido.');
+    if (m.index >= total) throw new AppError(400, 'ITEM_INVALIDO', 'Produto selecionado inválido.');
     map.set(m.index, m);
   }
   return map;
 }
 
-function aplicarMedida<T extends { largura?: unknown; altura?: unknown }>(item: T, ajuste?: AjusteMedida): T {
+function aplicarMedida<T extends { largura?: unknown; altura?: unknown; desconto?: unknown }>(item: T, ajuste?: AjusteMedida): T {
   if (!ajuste) return item;
-  return { ...item, largura: ajuste.largura, altura: ajuste.altura };
+  return {
+    ...item,
+    largura: ajuste.largura,
+    altura: ajuste.altura,
+    ...(ajuste.desconto ? { desconto: ajuste.desconto } : {}),
+  };
 }
 
 async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Promise<PreviaMedicao> {

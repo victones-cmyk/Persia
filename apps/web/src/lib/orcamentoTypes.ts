@@ -39,6 +39,8 @@ export interface ItemSnapshot {
   base: string | null;
   comando?: string | null;
   fixacao_instalacao?: string | null;
+  desconto?: string | null;
+  fixacao?: string | null;
   qtd_venda: number;
   qtd_producao: number;
   valor_bruto: number;

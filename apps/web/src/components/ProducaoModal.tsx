@@ -5,6 +5,7 @@ import { api, ApiError } from '../lib/api';
 import type { ItemSnapshot, OrcamentoListItem } from '../lib/orcamentoTypes';
 import { useAuth } from '../hooks/useAuth';
 import { EtiquetaPreviewModal, type EtiquetaPreviewOrdem } from './EtiquetaPreviewModal';
+import { DESCONTOS_CORTINA, type DescontoCortina, type FixacaoCortina } from '../lib/cortinaTypes';
 
 interface OrdemProducao {
   id: string;
@@ -31,6 +32,7 @@ interface MedicaoItem {
   index: number;
   largura: number;
   altura: number;
+  desconto?: DescontoCortina;
 }
 
 interface PreviaMedicao {
@@ -61,6 +63,16 @@ function produtoLabel(item: ItemSnapshot): string {
   return item.nome_produto || item.tipo || 'Produto';
 }
 
+function descontoInicial(item: ItemSnapshot): DescontoCortina {
+  const v = String(item.desconto ?? 'sem_desconto');
+  return DESCONTOS_CORTINA.some((d) => d.value === v) ? (v as DescontoCortina) : 'sem_desconto';
+}
+
+function descontosDisponiveis(item: ItemSnapshot) {
+  const fixacao = String(item.fixacao ?? '').trim() as FixacaoCortina;
+  return DESCONTOS_CORTINA.filter((d) => !d.fixacoes || d.fixacoes.includes(fixacao));
+}
+
 export function ProducaoModal({
   aberto,
   orcamento,
@@ -78,7 +90,7 @@ export function ProducaoModal({
   const [pedido, setPedido] = useState('');
   const [entrega, setEntrega] = useState('');
   const [selecionados, setSelecionados] = useState<number[]>([]);
-  const [medidasFinais, setMedidasFinais] = useState<Record<number, { largura: string; altura: string }>>({});
+  const [medidasFinais, setMedidasFinais] = useState<Record<number, { largura: string; altura: string; desconto: DescontoCortina }>>({});
   const [previa, setPrevia] = useState<PreviaMedicao | null>(null);
   const [diferencaAbsorvida, setDiferencaAbsorvida] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -105,6 +117,7 @@ export function ProducaoModal({
       setMedidasFinais(Object.fromEntries(r.itens.map(({ index, item }) => [index, {
         largura: numeroInput(item.largura_m),
         altura: numeroInput(item.altura_m),
+        desconto: descontoInicial(item),
       }])));
       setPrevia(null);
       setDiferencaAbsorvida(false);
@@ -137,11 +150,13 @@ export function ProducaoModal({
       const final = medidasFinais[index];
       const largura = Number(final?.largura?.replace(',', '.'));
       const altura = Number(final?.altura?.replace(',', '.'));
+      const desconto = final?.desconto ?? descontoInicial(item);
       const originalL = Number(item.largura_m);
       const originalA = Number(item.altura_m);
+      const originalDesconto = descontoInicial(item);
       if (!(largura > 0) || !(altura > 0)) return [];
-      if (Math.abs(largura - originalL) < 0.005 && Math.abs(altura - originalA) < 0.005) return [];
-      return [{ index, largura, altura }];
+      if (Math.abs(largura - originalL) < 0.005 && Math.abs(altura - originalA) < 0.005 && desconto === originalDesconto) return [];
+      return [{ index, largura, altura, desconto }];
     });
   }, [dados, medidasFinais]);
 
@@ -242,7 +257,13 @@ export function ProducaoModal({
   }
 
   function alterarMedida(index: number, campo: 'largura' | 'altura', valor: string) {
-    setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', [campo]: valor } }));
+    setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', desconto: prev[index]?.desconto ?? 'sem_desconto', [campo]: valor } }));
+    setPrevia(null);
+    setDiferencaAbsorvida(false);
+  }
+
+  function alterarDesconto(index: number, valor: DescontoCortina) {
+    setMedidasFinais((prev) => ({ ...prev, [index]: { largura: prev[index]?.largura ?? '', altura: prev[index]?.altura ?? '', desconto: valor } }));
     setPrevia(null);
     setDiferencaAbsorvida(false);
   }
@@ -282,28 +303,41 @@ export function ProducaoModal({
   function camposMedida(index: number, item: ItemSnapshot, bloqueado: boolean, ordem?: OrdemProducao | null) {
     const itemFinal = ordem?.item_snapshot_json ?? item;
     const final = bloqueado
-      ? { largura: numeroInput(itemFinal.largura_m), altura: numeroInput(itemFinal.altura_m) }
-      : (medidasFinais[index] ?? { largura: numeroInput(item.largura_m), altura: numeroInput(item.altura_m) });
+      ? { largura: numeroInput(itemFinal.largura_m), altura: numeroInput(itemFinal.altura_m), desconto: descontoInicial(itemFinal) }
+      : (medidasFinais[index] ?? { largura: numeroInput(item.largura_m), altura: numeroInput(item.altura_m), desconto: descontoInicial(item) });
+    const opcoesDesconto = descontosDisponiveis(itemFinal);
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-        <input
+      <div style={{ display: 'grid', gap: 6 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          <input
+            className="input"
+            value={final.largura}
+            disabled={bloqueado}
+            onChange={(e) => alterarMedida(index, 'largura', e.target.value)}
+            aria-label={`Largura final item ${index + 1}`}
+            inputMode="decimal"
+            style={{ height: 34, padding: '6px 8px' }}
+          />
+          <input
+            className="input"
+            value={final.altura}
+            disabled={bloqueado}
+            onChange={(e) => alterarMedida(index, 'altura', e.target.value)}
+            aria-label={`Altura final item ${index + 1}`}
+            inputMode="decimal"
+            style={{ height: 34, padding: '6px 8px' }}
+          />
+        </div>
+        <select
           className="input"
-          value={final.largura}
+          value={final.desconto}
           disabled={bloqueado}
-          onChange={(e) => alterarMedida(index, 'largura', e.target.value)}
-          aria-label={`Largura final item ${index + 1}`}
-          inputMode="decimal"
-          style={{ height: 34, padding: '6px 8px' }}
-        />
-        <input
-          className="input"
-          value={final.altura}
-          disabled={bloqueado}
-          onChange={(e) => alterarMedida(index, 'altura', e.target.value)}
-          aria-label={`Altura final item ${index + 1}`}
-          inputMode="decimal"
-          style={{ height: 34, padding: '6px 8px' }}
-        />
+          onChange={(e) => alterarDesconto(index, e.target.value as DescontoCortina)}
+          aria-label={`Tipo de desconto da medição item ${index + 1}`}
+          style={{ height: 32, padding: '5px 8px', fontSize: 12 }}
+        >
+          {opcoesDesconto.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+        </select>
       </div>
     );
   }
@@ -632,7 +666,7 @@ export function ProducaoModal({
           </div>
         )}
         {temMedidaAlterada && !previa && (
-          <div className="text-xs-ui text-neutral-500 mt-2">Recalcule a diferença para liberar a OS com medidas alteradas.</div>
+          <div className="text-xs-ui text-neutral-500 mt-2">Recalcule a diferença para liberar a OS com medidas ou descontos alterados.</div>
         )}
       </div>
       <EtiquetaPreviewModal
