@@ -443,9 +443,11 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                           <FontAwesomeIcon icon={faFileInvoiceDollar} />
                         </button>
                       )}
-                      <button className="btn btn-default btn-xs text-primary" disabled={acaoEmId === o.id} onClick={() => duplicar(o.id)} title="Duplicar como rascunho">
-                        <FontAwesomeIcon icon={faCopy} />
-                      </button>
+                      {!somenteVendas && (
+                        <button className="btn btn-default btn-xs text-primary" disabled={acaoEmId === o.id} onClick={() => duplicar(o.id)} title="Duplicar como rascunho">
+                          <FontAwesomeIcon icon={faCopy} />
+                        </button>
+                      )}
                       {!somenteVendas && (
                         <button
                           className="btn btn-warning btn-xs"

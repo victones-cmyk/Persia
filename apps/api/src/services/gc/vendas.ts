@@ -34,8 +34,36 @@ function servicoVenda(v: unknown): Record<string, unknown> {
   };
 }
 
-export function montarPayloadVenda(payloadOrcamento: unknown): Record<string, unknown> {
+const CAMPOS_OBSERVACOES_CONTRATO = [
+  'observacoes',
+  'observacao',
+  'observacoes_internas',
+  'observacao_interna',
+  'observacoes_contrato',
+  'observacao_contrato',
+  'contrato_observacoes',
+  'texto_contrato',
+  'contrato',
+  'termos',
+  'termos_contrato',
+  'informacoes_adicionais',
+];
+
+function valorPreenchido(v: unknown): boolean {
+  if (v === null || v === undefined) return false;
+  return typeof v !== 'string' || v.trim().length > 0;
+}
+
+function copiarObservacoesContrato(payload: Record<string, unknown>, origem: Record<string, unknown>): void {
+  for (const campo of CAMPOS_OBSERVACOES_CONTRATO) {
+    const valor = origem[campo];
+    if (valorPreenchido(valor)) payload[campo] = valor;
+  }
+}
+
+export function montarPayloadVenda(payloadOrcamento: unknown, orcamentoGcAtual?: unknown): Record<string, unknown> {
   const origem = objeto(payloadOrcamento);
+  const remoto = objeto(orcamentoGcAtual);
   const produtos = Array.isArray(origem.produtos) ? origem.produtos : [];
   const servicos = Array.isArray(origem.servicos) ? origem.servicos : [];
 
@@ -50,6 +78,9 @@ export function montarPayloadVenda(payloadOrcamento: unknown): Record<string, un
   delete payload.id;
   delete payload.hash;
 
+  copiarObservacoesContrato(payload, origem);
+  copiarObservacoesContrato(payload, remoto);
+
   if (servicos.length > 0) {
     payload.servicos = servicos.map((s) => ({ servico: servicoVenda(s) }));
   } else {
@@ -59,8 +90,8 @@ export function montarPayloadVenda(payloadOrcamento: unknown): Record<string, un
   return payload;
 }
 
-export async function criarVendaDePayload(payloadOrcamento: unknown): Promise<ResultadoVenda> {
-  const payload = montarPayloadVenda(payloadOrcamento);
+export async function criarVendaDePayload(payloadOrcamento: unknown, orcamentoGcAtual?: unknown): Promise<ResultadoVenda> {
+  const payload = montarPayloadVenda(payloadOrcamento, orcamentoGcAtual);
   return criarVendaComPayload(payload);
 }
 

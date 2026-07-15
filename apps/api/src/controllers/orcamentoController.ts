@@ -25,7 +25,7 @@ import {
 import { descricaoProdutoPersiana, nomeProdutoPersiana } from '../services/calc/persianaProduto';
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
-import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
+import { buscarOrcamentoGc, criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
 import { criarVendaDePayload } from '../services/gc/vendas';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
@@ -689,7 +689,15 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
   }
 
   try {
-    const venda = await criarVendaDePayload(orc.payload_gc_enviado);
+    let orcamentoGcAtual: Record<string, unknown> | undefined;
+    if (orc.gc_orcamento_id) {
+      try {
+        orcamentoGcAtual = await buscarOrcamentoGc(orc.gc_orcamento_id);
+      } catch (err) {
+        console.warn('[gc] Não foi possível buscar observações atuais do orçamento antes da venda:', err);
+      }
+    }
+    const venda = await criarVendaDePayload(orc.payload_gc_enviado, orcamentoGcAtual);
     const respostaAnterior = orc.resposta_gc && typeof orc.resposta_gc === 'object' && !Array.isArray(orc.resposta_gc)
       ? orc.resposta_gc as Prisma.JsonObject
       : {};
