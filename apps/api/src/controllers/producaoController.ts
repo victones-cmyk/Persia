@@ -72,6 +72,35 @@ interface PreviaMedicao {
   valor_conferido: number;
   diferenca: number;
   alterados: number[];
+  detalhes: DetalheDiferencaMedicao[];
+}
+
+interface DetalheDiferencaMedicao {
+  index: number;
+  ambiente: string;
+  produto: string;
+  valor_vendido: number;
+  valor_conferido: number;
+  diferenca: number;
+  largura_vendida: number;
+  altura_vendida: number;
+  largura_final: number;
+  altura_final: number;
+  desconto_vendido: string | null;
+  desconto_final: string | null;
+  alterado: boolean;
+}
+
+interface AbsorcaoMedicao {
+  status: 'solicitada' | 'aprovada' | 'reprovada';
+  assinatura: string;
+  medicoes: AjusteMedida[];
+  previa: Omit<PreviaMedicao, 'itens'>;
+  solicitante_id: string;
+  solicitado_em: string;
+  admin_id?: string;
+  decidido_em?: string;
+  motivo?: string;
 }
 
 function diferencaRelevante(v: number): boolean {
@@ -84,8 +113,34 @@ function respostaGcObj(orc: Pick<Orcamento, 'resposta_gc'>): Prisma.JsonObject {
     : {};
 }
 
+function medicaoAbsorcao(orc: Pick<Orcamento, 'resposta_gc'>): AbsorcaoMedicao | null {
+  const raw = respostaGcObj(orc).medicao_absorcao;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  const status = obj.status;
+  const assinatura = obj.assinatura;
+  if (!['solicitada', 'aprovada', 'reprovada'].includes(String(status)) || typeof assinatura !== 'string') return null;
+  return obj as unknown as AbsorcaoMedicao;
+}
+
 function vendaAjusteMedicaoGerada(orc: Pick<Orcamento, 'resposta_gc'>): boolean {
   return Boolean(respostaGcObj(orc).venda_ajuste_medicao);
+}
+
+function assinaturaMedicoes(medicoes: AjusteMedida[]): string {
+  return JSON.stringify([...medicoes]
+    .sort((a, b) => a.index - b.index)
+    .map((m) => ({
+      index: m.index,
+      largura: roundHalfUp(m.largura),
+      altura: roundHalfUp(m.altura),
+      desconto: m.desconto ?? null,
+    })));
+}
+
+function absorcaoAprovadaParaMedicoes(orc: Pick<Orcamento, 'resposta_gc'>, medicoes: AjusteMedida[]): boolean {
+  const absorcao = medicaoAbsorcao(orc);
+  return Boolean(absorcao && absorcao.status === 'aprovada' && absorcao.assinatura === assinaturaMedicoes(medicoes));
 }
 
 function numeroProducao(v: unknown): string {
@@ -211,6 +266,60 @@ function totalItens(itens: ItemProducaoSnapshot[]): number {
   return roundHalfUp(itens.reduce((s, item) => s + valorItemProducao(item), 0));
 }
 
+function numeroItem(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function nomeItemMedicao(item: ItemProducaoSnapshot, index: number): string {
+  return String(item.nome_produto ?? item.tipo ?? `Item ${index + 1}`);
+}
+
+function detalhesDiferencaMedicao(
+  vendidos: ItemProducaoSnapshot[],
+  conferidos: ItemProducaoSnapshot[],
+  ajustes: Map<number, AjusteMedida>,
+): DetalheDiferencaMedicao[] {
+  const total = Math.max(vendidos.length, conferidos.length);
+  const detalhes: DetalheDiferencaMedicao[] = [];
+  for (let index = 0; index < total; index += 1) {
+    const vendido = vendidos[index];
+    const conferido = conferidos[index] ?? vendido;
+    if (!vendido || !conferido) continue;
+    const valorVendido = roundHalfUp(valorItemProducao(vendido));
+    const valorConferido = roundHalfUp(valorItemProducao(conferido));
+    const diff = roundHalfUp(valorConferido - valorVendido);
+    const alterado = ajustes.has(index);
+    if (!alterado && !diferencaRelevante(diff)) continue;
+    detalhes.push({
+      index,
+      ambiente: String(conferido.ambiente ?? vendido.ambiente ?? `Item ${index + 1}`),
+      produto: nomeItemMedicao(conferido, index),
+      valor_vendido: valorVendido,
+      valor_conferido: valorConferido,
+      diferenca: diff,
+      largura_vendida: numeroItem(vendido.largura_m),
+      altura_vendida: numeroItem(vendido.altura_m),
+      largura_final: numeroItem(conferido.largura_m),
+      altura_final: numeroItem(conferido.altura_m),
+      desconto_vendido: typeof vendido.desconto === 'string' ? vendido.desconto : null,
+      desconto_final: typeof conferido.desconto === 'string' ? conferido.desconto : null,
+      alterado,
+    });
+  }
+  return detalhes;
+}
+
+function previaParaAbsorcao(previa: PreviaMedicao): Omit<PreviaMedicao, 'itens'> {
+  return {
+    valor_original: previa.valor_original,
+    valor_conferido: previa.valor_conferido,
+    diferenca: previa.diferenca,
+    alterados: previa.alterados,
+    detalhes: previa.detalhes,
+  };
+}
+
 function validarMedicoes(body: unknown): AjusteMedida[] {
   const raw = (body as { medicoes?: unknown } | null)?.medicoes;
   if (!Array.isArray(raw)) return [];
@@ -265,6 +374,7 @@ async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Prom
       valor_conferido: roundHalfUp(valorOriginal),
       diferenca: 0,
       alterados: [],
+      detalhes: [],
     };
   }
 
@@ -284,12 +394,14 @@ async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Prom
     const ajustadas = cortinasEntrada.map((c, index) => aplicarMedida(c, ajustes.get(index)));
     const preparadas = await recalcularCortinasDeEntrada(ajustadas, Number(entrada.rt_pct) || 0);
     const itens = preparadas.map((p) => cortinaParaItem(p.snapshot as CortinaSnapshotProducao));
+    const valorConferido = totalItens(itens);
     return {
       itens,
       valor_original: roundHalfUp(valorOriginal),
-      valor_conferido: totalItens(itens),
-      diferenca: roundHalfUp(totalItens(itens) - valorOriginal),
+      valor_conferido: valorConferido,
+      diferenca: roundHalfUp(valorConferido - valorOriginal),
       alterados: Array.from(ajustes.keys()).sort((a, b) => a - b),
+      detalhes: detalhesDiferencaMedicao(itensAtuais, itens, ajustes),
     };
   }
 
@@ -310,12 +422,14 @@ async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Prom
       ...(persSnaps as unknown as ItemProducaoSnapshot[]),
       ...cortPrep.map((p) => cortinaParaItem(p.snapshot as CortinaSnapshotProducao)),
     ];
+    const valorConferido = totalItens(itens);
     return {
       itens,
       valor_original: roundHalfUp(valorOriginal),
-      valor_conferido: totalItens(itens),
-      diferenca: roundHalfUp(totalItens(itens) - valorOriginal),
+      valor_conferido: valorConferido,
+      diferenca: roundHalfUp(valorConferido - valorOriginal),
       alterados: Array.from(ajustes.keys()).sort((a, b) => a - b),
+      detalhes: detalhesDiferencaMedicao(itensAtuais, itens, ajustes),
     };
   }
 
@@ -325,12 +439,14 @@ async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Prom
   const preparados = await recalcularPersianasDeEntrada(isTipoPersiana(entrada.tipo ?? '') ? (entrada.tipo as TipoPersiana) : null, ajustados, Number(entrada.rt_pct) || 0);
   const idsAtuais = ((orc.itens_json as unknown as ItemSnapshot[] | null) ?? []).map((s) => s.gc_produto_id ?? null);
   const itens = snapshotsDe(preparados, idsAtuais.filter((id): id is string => Boolean(id))) as unknown as ItemProducaoSnapshot[];
+  const valorConferido = totalItens(itens);
   return {
     itens,
     valor_original: roundHalfUp(valorOriginal),
-    valor_conferido: totalItens(itens),
-    diferenca: roundHalfUp(totalItens(itens) - valorOriginal),
+    valor_conferido: valorConferido,
+    diferenca: roundHalfUp(valorConferido - valorOriginal),
     alterados: Array.from(ajustes.keys()).sort((a, b) => a - b),
+    detalhes: detalhesDiferencaMedicao(itensAtuais, itens, ajustes),
   };
 }
 
@@ -446,6 +562,7 @@ export async function getProducaoOrcamento(req: Request, res: Response): Promise
       pedido_confirmado_em: orc.pedido_confirmado_em,
       pedido_entrega_em: orc.pedido_entrega_em,
       ajuste_medicao_gerado: vendaAjusteMedicaoGerada(orc),
+      medicao_absorcao: medicaoAbsorcao(orc),
     },
     itens: itens.map((item, index) => ({
       index,
@@ -485,7 +602,8 @@ export async function criarOrdensProducao(req: Request, res: Response): Promise<
   if (itens.length === 0) throw new AppError(409, 'SEM_ITENS', 'Este orçamento não possui itens para produção.');
   const absorverDiferenca = (req.body as { absorver_diferenca?: unknown } | null)?.absorver_diferenca === true;
   const ajusteGerado = vendaAjusteMedicaoGerada(orc);
-  if (diferencaRelevante(previa.diferenca) && !absorverDiferenca && !ajusteGerado) {
+  const absorcaoAprovada = absorcaoAprovadaParaMedicoes(orc, validarMedicoes(req.body));
+  if (diferencaRelevante(previa.diferenca) && !absorverDiferenca && !ajusteGerado && !absorcaoAprovada) {
     throw new AppError(409, 'DIFERENCA_NAO_AUTORIZADA', 'A diferença da medição deve ser absorvida por um admin ou cobrada em venda complementar antes de gerar a OS.');
   }
   if (absorverDiferenca && req.session.usuario?.perfil !== 'admin') {
@@ -525,7 +643,7 @@ export async function criarOrdensProducao(req: Request, res: Response): Promise<
       }));
     }
     await tx.logAcao.create({
-      data: { usuario_id: req.session.usuario!.id, acao: 'ordens_producao_criadas', detalhe: { orcamento_id: orc.id, itens: indices, medicao: previa, diferenca_absorvida: absorverDiferenca, venda_ajuste_medicao_gerada: ajusteGerado } as unknown as Prisma.InputJsonValue },
+      data: { usuario_id: req.session.usuario!.id, acao: 'ordens_producao_criadas', detalhe: { orcamento_id: orc.id, itens: indices, medicao: previa, diferenca_absorvida: absorverDiferenca || absorcaoAprovada, venda_ajuste_medicao_gerada: ajusteGerado } as unknown as Prisma.InputJsonValue },
     });
     return out;
   });
@@ -538,6 +656,85 @@ export async function preverMedicaoProducao(req: Request, res: Response): Promis
   validarOrcamentoParaProducao(orc);
   const previa = await recalcularMedicao(orc, validarMedicoes(req.body));
   res.json({ previa });
+}
+
+export async function solicitarAbsorcaoMedicao(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  validarOrcamentoParaProducao(orc);
+  const medicoes = validarMedicoes(req.body);
+  const previa = await recalcularMedicao(orc, medicoes);
+  if (!diferencaRelevante(previa.diferenca)) {
+    throw new AppError(400, 'SEM_DIFERENCA', 'Não há diferença relevante para solicitar absorção.');
+  }
+  const respostaAtual = respostaGcObj(orc);
+  const absorcao: AbsorcaoMedicao = {
+    status: 'solicitada',
+    assinatura: assinaturaMedicoes(medicoes),
+    medicoes,
+    previa: previaParaAbsorcao(previa),
+    solicitante_id: req.session.usuario!.id,
+    solicitado_em: new Date().toISOString(),
+  };
+  const atualizado = await prisma.orcamento.update({
+    where: { id: orc.id },
+    data: {
+      resposta_gc: {
+        ...respostaAtual,
+        medicao_absorcao: absorcao,
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: req.session.usuario!.id,
+      acao: 'medicao_absorcao_solicitada',
+      detalhe: { orcamento_id: orc.id, gc_pedido_codigo: pedidoCodigo(orc), medicao_absorcao: absorcao } as unknown as Prisma.InputJsonValue,
+    },
+  });
+  res.json({ orcamento: atualizado, medicao_absorcao: absorcao });
+}
+
+export async function decidirAbsorcaoMedicao(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  validarOrcamentoParaProducao(orc);
+  if (req.session.usuario?.perfil !== 'admin') {
+    throw new AppError(403, 'APENAS_ADMIN', 'Apenas administradores podem aprovar absorção de diferença.');
+  }
+  const acao = String((req.body as { acao?: unknown } | null)?.acao ?? '').trim();
+  if (!['aprovar', 'reprovar'].includes(acao)) {
+    throw new AppError(400, 'ACAO_INVALIDA', 'Informe se a diferença deve ser aprovada ou reprovada.');
+  }
+  const atual = medicaoAbsorcao(orc);
+  if (!atual || atual.status !== 'solicitada') {
+    throw new AppError(409, 'SEM_SOLICITACAO', 'Não há solicitação pendente de absorção para este orçamento.');
+  }
+  const motivoRaw = (req.body as { motivo?: unknown } | null)?.motivo;
+  const motivo = typeof motivoRaw === 'string' && motivoRaw.trim() ? motivoRaw.trim().slice(0, 500) : undefined;
+  const decisao: AbsorcaoMedicao = {
+    ...atual,
+    status: acao === 'aprovar' ? 'aprovada' : 'reprovada',
+    admin_id: req.session.usuario.id,
+    decidido_em: new Date().toISOString(),
+    ...(motivo ? { motivo } : {}),
+  };
+  const respostaAtual = respostaGcObj(orc);
+  const atualizado = await prisma.orcamento.update({
+    where: { id: orc.id },
+    data: {
+      resposta_gc: {
+        ...respostaAtual,
+        medicao_absorcao: decisao,
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: req.session.usuario.id,
+      acao: decisao.status === 'aprovada' ? 'medicao_absorcao_aprovada' : 'medicao_absorcao_reprovada',
+      detalhe: { orcamento_id: orc.id, gc_pedido_codigo: pedidoCodigo(orc), medicao_absorcao: decisao } as unknown as Prisma.InputJsonValue,
+    },
+  });
+  res.json({ orcamento: atualizado, medicao_absorcao: decisao });
 }
 
 export async function gerarVendaAjusteMedicao(req: Request, res: Response): Promise<void> {

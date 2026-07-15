@@ -24,7 +24,10 @@ interface ItemProducao {
 }
 
 interface ProducaoPayload {
-  orcamento: OrcamentoListItem & { ajuste_medicao_gerado?: boolean };
+  orcamento: OrcamentoListItem & {
+    ajuste_medicao_gerado?: boolean;
+    medicao_absorcao?: MedicaoAbsorcao | null;
+  };
   itens: ItemProducao[];
 }
 
@@ -40,6 +43,33 @@ interface PreviaMedicao {
   valor_conferido: number;
   diferenca: number;
   alterados: number[];
+  detalhes: DetalheDiferencaMedicao[];
+}
+
+interface DetalheDiferencaMedicao {
+  index: number;
+  ambiente: string;
+  produto: string;
+  valor_vendido: number;
+  valor_conferido: number;
+  diferenca: number;
+  largura_vendida: number;
+  altura_vendida: number;
+  largura_final: number;
+  altura_final: number;
+  desconto_vendido: string | null;
+  desconto_final: string | null;
+  alterado: boolean;
+}
+
+interface MedicaoAbsorcao {
+  status: 'solicitada' | 'aprovada' | 'reprovada';
+  assinatura: string;
+  medicoes: MedicaoItem[];
+  previa: PreviaMedicao;
+  solicitado_em: string;
+  decidido_em?: string;
+  motivo?: string;
 }
 
 function medida(v: unknown): string {
@@ -59,6 +89,12 @@ function numeroInput(v: unknown): string {
   return Number.isFinite(n) ? n.toFixed(2) : '';
 }
 
+function numeroMedida(v: unknown): string {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '-';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function produtoLabel(item: ItemSnapshot): string {
   return item.nome_produto || item.tipo || 'Produto';
 }
@@ -71,6 +107,21 @@ function descontoInicial(item: ItemSnapshot): DescontoCortina {
 function descontosDisponiveis(item: ItemSnapshot) {
   const fixacao = String(item.fixacao ?? '').trim() as FixacaoCortina;
   return DESCONTOS_CORTINA.filter((d) => !d.fixacoes || d.fixacoes.includes(fixacao));
+}
+
+function descontoLabel(v: string | null | undefined): string {
+  return DESCONTOS_CORTINA.find((d) => d.value === v)?.label ?? 'Sem desconto';
+}
+
+function assinaturaMedicoes(medicoes: MedicaoItem[]): string {
+  return JSON.stringify([...medicoes]
+    .sort((a, b) => a.index - b.index)
+    .map((m) => ({
+      index: m.index,
+      largura: Math.round(m.largura * 100) / 100,
+      altura: Math.round(m.altura * 100) / 100,
+      desconto: m.desconto ?? null,
+    })));
 }
 
 export function ProducaoModal({
@@ -98,6 +149,8 @@ export function ProducaoModal({
   const [gerando, setGerando] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
   const [gerandoAjuste, setGerandoAjuste] = useState(false);
+  const [solicitandoAbsorcao, setSolicitandoAbsorcao] = useState(false);
+  const [decidindoAbsorcao, setDecidindoAbsorcao] = useState<'aprovar' | 'reprovar' | null>(null);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | null>(null);
   const [previaEtiqueta, setPreviaEtiqueta] = useState<EtiquetaPreviewOrdem | null>(null);
@@ -110,17 +163,29 @@ export function ProducaoModal({
     setErro(null);
     try {
       const r = await api.get<ProducaoPayload>(`/orcamentos/${orcamento.id}/producao`);
+      const medidasBase = Object.fromEntries(r.itens.map(({ index, item }) => [index, {
+        largura: numeroInput(item.largura_m),
+        altura: numeroInput(item.altura_m),
+        desconto: descontoInicial(item),
+      }]));
+      const absorcao = r.orcamento.medicao_absorcao;
+      const medidasComSolicitacao = absorcao && absorcao.status !== 'reprovada'
+        ? {
+          ...medidasBase,
+          ...Object.fromEntries(absorcao.medicoes.map((m) => [m.index, {
+            largura: numeroInput(m.largura),
+            altura: numeroInput(m.altura),
+            desconto: m.desconto ?? medidasBase[m.index]?.desconto ?? 'sem_desconto',
+          }])),
+        }
+        : medidasBase;
       setDados(r);
       setPedido(r.orcamento.gc_pedido_codigo ?? '');
       setEntrega(r.orcamento.pedido_entrega_em ? r.orcamento.pedido_entrega_em.slice(0, 10) : '');
       setSelecionados(r.itens.filter((it) => !it.ordem).map((it) => it.index));
-      setMedidasFinais(Object.fromEntries(r.itens.map(({ index, item }) => [index, {
-        largura: numeroInput(item.largura_m),
-        altura: numeroInput(item.altura_m),
-        desconto: descontoInicial(item),
-      }])));
-      setPrevia(null);
-      setDiferencaAbsorvida(false);
+      setMedidasFinais(medidasComSolicitacao);
+      setPrevia(absorcao && absorcao.status !== 'reprovada' ? absorcao.previa : null);
+      setDiferencaAbsorvida(absorcao?.status === 'aprovada');
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao carregar os itens.');
     } finally {
@@ -163,7 +228,12 @@ export function ProducaoModal({
   const temMedidaAlterada = medicoes.length > 0;
   const temDiferencaCalculada = previa ? Math.abs(Number(previa.diferenca)) >= 0.01 : false;
   const precisaAutorizarDiferenca = temMedidaAlterada && (!previa || temDiferencaCalculada);
-  const diferencaAutorizada = !precisaAutorizarDiferenca || diferencaAbsorvida || Boolean(dados?.orcamento.ajuste_medicao_gerado);
+  const absorcaoAtual = dados?.orcamento.medicao_absorcao ?? null;
+  const assinaturaAtual = assinaturaMedicoes(medicoes);
+  const absorcaoPendente = absorcaoAtual?.status === 'solicitada' && absorcaoAtual.assinatura === assinaturaAtual;
+  const absorcaoAprovada = absorcaoAtual?.status === 'aprovada' && absorcaoAtual.assinatura === assinaturaAtual;
+  const absorcaoReprovada = absorcaoAtual?.status === 'reprovada' && absorcaoAtual.assinatura === assinaturaAtual;
+  const diferencaAutorizada = !precisaAutorizarDiferenca || diferencaAbsorvida || absorcaoAprovada || Boolean(dados?.orcamento.ajuste_medicao_gerado);
 
   const podeGerar = useMemo(() => {
     return dados?.orcamento.status === 'enviado' && pedido.trim().length > 0 && selecionados.length > 0 && diferencaAutorizada;
@@ -297,6 +367,41 @@ export function ProducaoModal({
       setErro(e instanceof ApiError ? e.message : 'Falha ao gerar venda complementar.');
     } finally {
       setGerandoAjuste(false);
+    }
+  }
+
+  async function solicitarAbsorcao() {
+    if (!orcamento || !previa || !temDiferencaCalculada) return;
+    setSolicitandoAbsorcao(true);
+    setErro(null);
+    setSucesso(null);
+    try {
+      const r = await api.post<{ medicao_absorcao: MedicaoAbsorcao }>(`/orcamentos/${orcamento.id}/producao/medicao/solicitar-absorcao`, { medicoes });
+      setDados((atual) => atual ? { ...atual, orcamento: { ...atual.orcamento, medicao_absorcao: r.medicao_absorcao } } : atual);
+      setSucesso('Solicitação de absorção enviada para aprovação do administrador.');
+      onAtualizar();
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Falha ao solicitar absorção da diferença.');
+    } finally {
+      setSolicitandoAbsorcao(false);
+    }
+  }
+
+  async function decidirAbsorcao(acao: 'aprovar' | 'reprovar') {
+    if (!orcamento) return;
+    setDecidindoAbsorcao(acao);
+    setErro(null);
+    setSucesso(null);
+    try {
+      const r = await api.post<{ medicao_absorcao: MedicaoAbsorcao }>(`/orcamentos/${orcamento.id}/producao/medicao/decidir-absorcao`, { acao });
+      setDados((atual) => atual ? { ...atual, orcamento: { ...atual.orcamento, medicao_absorcao: r.medicao_absorcao } } : atual);
+      setDiferencaAbsorvida(r.medicao_absorcao.status === 'aprovada');
+      setSucesso(r.medicao_absorcao.status === 'aprovada' ? 'Absorção aprovada. A OS está liberada.' : 'Absorção reprovada.');
+      onAtualizar();
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Falha ao decidir a solicitação de absorção.');
+    } finally {
+      setDecidindoAbsorcao(null);
     }
   }
 
@@ -631,8 +736,60 @@ export function ProducaoModal({
               <span>Valor conferido: <strong>{dinheiro(previa.valor_conferido)}</strong></span>
               <span>Diferença: <strong className={previa.diferenca > 0 ? 'text-danger' : previa.diferenca < 0 ? 'text-success' : ''}>{dinheiro(previa.diferenca)}</strong></span>
             </div>
-            {previa.alterados.length > 0 && (
-              <div className="text-xs-ui text-neutral-600 mt-1">Itens alterados: {previa.alterados.map((i) => i + 1).join(', ')}</div>
+            {previa.detalhes.length > 0 && (
+              <div className="mt-3" style={{ border: '1px solid #dee2e6', borderRadius: 3, background: '#fff', overflow: 'hidden' }}>
+                <div className="text-sm-ui font-bold" style={{ padding: '8px 10px', borderBottom: '1px solid #dee2e6', background: '#f4f4f4' }}>
+                  Onde a diferença apareceu
+                </div>
+                <div className="table-scroll hidden md:block">
+                  <table className="data-table" style={{ minWidth: 720 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding: 8, textAlign: 'left' }}>Item</th>
+                        <th style={{ padding: 8, textAlign: 'left' }}>Medida</th>
+                        <th style={{ padding: 8, textAlign: 'left' }}>Desconto</th>
+                        <th style={{ padding: 8, textAlign: 'right' }}>Vendido</th>
+                        <th style={{ padding: 8, textAlign: 'right' }}>Conferido</th>
+                        <th style={{ padding: 8, textAlign: 'right' }}>Diferença</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previa.detalhes.map((d) => (
+                        <tr key={d.index} style={{ borderTop: '1px solid #dee2e6' }}>
+                          <td style={{ padding: 8 }}>
+                            <div className="td-strong">{d.index + 1}. {d.ambiente}</div>
+                            <div className="text-xs-ui text-neutral-600" style={{ overflowWrap: 'anywhere' }}>{d.produto}</div>
+                          </td>
+                          <td style={{ padding: 8 }} className="font-mono text-sm-ui">
+                            {numeroMedida(d.largura_vendida)} x {numeroMedida(d.altura_vendida)} → {numeroMedida(d.largura_final)} x {numeroMedida(d.altura_final)}
+                          </td>
+                          <td style={{ padding: 8 }} className="text-sm-ui">
+                            {descontoLabel(d.desconto_vendido)} → {descontoLabel(d.desconto_final)}
+                          </td>
+                          <td style={{ padding: 8, textAlign: 'right' }} className="font-mono text-sm-ui">{dinheiro(d.valor_vendido)}</td>
+                          <td style={{ padding: 8, textAlign: 'right' }} className="font-mono text-sm-ui">{dinheiro(d.valor_conferido)}</td>
+                          <td style={{ padding: 8, textAlign: 'right' }} className={`font-mono text-sm-ui ${d.diferenca > 0 ? 'text-danger' : d.diferenca < 0 ? 'text-success' : ''}`}>{dinheiro(d.diferenca)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="md:hidden">
+                  {previa.detalhes.map((d) => (
+                    <div key={d.index} style={{ padding: 10, borderTop: d.index === previa.detalhes[0]?.index ? undefined : '1px solid #dee2e6' }}>
+                      <div className="td-strong">{d.index + 1}. {d.ambiente}</div>
+                      <div className="text-xs-ui text-neutral-600">{d.produto}</div>
+                      <div className="font-mono text-sm-ui mt-1">{numeroMedida(d.largura_vendida)} x {numeroMedida(d.altura_vendida)} → {numeroMedida(d.largura_final)} x {numeroMedida(d.altura_final)}</div>
+                      <div className="text-sm-ui mt-1">{descontoLabel(d.desconto_vendido)} → {descontoLabel(d.desconto_final)}</div>
+                      <div className="flex flex-wrap gap-3 mt-1 text-sm-ui">
+                        <span>Vendido: <strong>{dinheiro(d.valor_vendido)}</strong></span>
+                        <span>Conferido: <strong>{dinheiro(d.valor_conferido)}</strong></span>
+                        <span>Diferença: <strong className={d.diferenca > 0 ? 'text-danger' : d.diferenca < 0 ? 'text-success' : ''}>{dinheiro(d.diferenca)}</strong></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
             {previa.diferenca > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
@@ -643,21 +800,59 @@ export function ProducaoModal({
               </div>
             )}
             {Math.abs(previa.diferenca) >= 0.01 && !dados?.orcamento.ajuste_medicao_gerado && (
-              <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
-                <span className="text-sm-ui text-neutral-700">
-                  {diferencaAbsorvida
-                    ? `Diferença absorvida pela loja: ${dinheiro(previa.diferenca)}. OS liberada por administrador.`
-                    : 'Para seguir sem venda complementar, um administrador deve absorver a diferença.'}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-info btn-sm"
-                  disabled={!isAdmin || diferencaAbsorvida}
-                  title={isAdmin ? 'Autorizar geração da OS absorvendo a diferença' : 'Apenas administradores podem absorver diferença'}
-                  onClick={() => setDiferencaAbsorvida(true)}
-                >
-                  {diferencaAbsorvida ? 'Diferença absorvida' : 'Absorver diferença'}
-                </button>
+              <div
+                className="flex flex-wrap items-center justify-between gap-2 mt-2"
+                style={{
+                  border: absorcaoPendente && isAdmin ? '1px solid #f39c12' : '1px solid transparent',
+                  borderRadius: 3,
+                  padding: absorcaoPendente && isAdmin ? 10 : 0,
+                  background: absorcaoPendente && isAdmin ? '#fff3cd' : 'transparent',
+                }}
+              >
+                <div className="text-sm-ui text-neutral-700" style={{ maxWidth: 560 }}>
+                  {absorcaoAprovada || diferencaAbsorvida
+                    ? `Absorção aprovada: ${dinheiro(previa.diferenca)}. OS liberada.`
+                    : absorcaoReprovada
+                      ? 'Absorção reprovada. Gere venda complementar ou peça nova aprovação se as medidas mudarem.'
+                      : absorcaoPendente
+                        ? isAdmin
+                          ? `Solicitação pendente para absorver ${dinheiro(previa.diferenca)}. Confira os itens acima antes de aprovar.`
+                          : 'Solicitação enviada ao administrador. A OS fica bloqueada até aprovação ou cobrança da diferença.'
+                        : isAdmin
+                          ? 'Para seguir sem venda complementar, aprove a absorção da diferença.'
+                          : 'Para seguir sem venda complementar, solicite aprovação de um administrador.'}
+                </div>
+                {isAdmin ? (
+                  absorcaoPendente ? (
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" className="btn btn-default btn-sm" disabled={decidindoAbsorcao !== null} onClick={() => void decidirAbsorcao('reprovar')}>
+                        {decidindoAbsorcao === 'reprovar' ? 'Reprovando...' : 'Reprovar'}
+                      </button>
+                      <button type="button" className="btn btn-info btn-sm" disabled={decidindoAbsorcao !== null} onClick={() => void decidirAbsorcao('aprovar')}>
+                        {decidindoAbsorcao === 'aprovar' ? 'Aprovando...' : 'Aprovar absorção'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-info btn-sm"
+                      disabled={diferencaAbsorvida || absorcaoAprovada || absorcaoReprovada}
+                      title="Autorizar geração da OS absorvendo a diferença"
+                      onClick={() => setDiferencaAbsorvida(true)}
+                    >
+                      {diferencaAbsorvida || absorcaoAprovada ? 'Diferença absorvida' : 'Absorver diferença'}
+                    </button>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-info btn-sm"
+                    disabled={solicitandoAbsorcao || absorcaoPendente || absorcaoAprovada}
+                    onClick={() => void solicitarAbsorcao()}
+                  >
+                    {solicitandoAbsorcao ? 'Solicitando...' : absorcaoPendente ? 'Solicitação enviada' : absorcaoAprovada ? 'Aprovada' : 'Solicitar absorção'}
+                  </button>
+                )}
               </div>
             )}
             {dados?.orcamento.ajuste_medicao_gerado && (
