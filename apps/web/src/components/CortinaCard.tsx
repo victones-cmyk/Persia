@@ -418,7 +418,12 @@ export function CortinaCard({
           {calc && calc.n_camadas > 1 && <span className="badge" style={{ background: 'var(--neutral-200)' }}>{calc.n_camadas} camadas</span>}
           {calculando && <FontAwesomeIcon icon={faSpinner} spin className="text-neutral-400" />}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-3">
+          {minimizado && (
+            <span className="font-mono tabular-nums text-xs-ui font-semibold text-neutral-800">
+              {calculando ? 'Calculando...' : formatBRL(resumo.total)}
+            </span>
+          )}
           {minimizado && onDuplicar && (
             <button type="button" className="text-primary hover:opacity-80 text-xs-ui flex items-center gap-1" onClick={duplicarEColapsar} title="Duplicar cortina">
               <FontAwesomeIcon icon={faCopy} /> Duplicar

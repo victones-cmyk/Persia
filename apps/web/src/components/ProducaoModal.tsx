@@ -355,15 +355,20 @@ export function ProducaoModal({
     if (!orcamento || !podeGerar) return;
     setGerando(true);
     setErro(null);
+    setSucesso(null);
     try {
       if (pedido.trim() !== dados?.orcamento.gc_pedido_codigo || entrega !== (dados?.orcamento.pedido_entrega_em?.slice(0, 10) ?? '')) {
         await api.put(`/orcamentos/${orcamento.id}/pedido`, { gc_pedido_codigo: pedido.trim(), pedido_entrega_em: entrega || null });
       }
-      await api.post(`/orcamentos/${orcamento.id}/ordens-producao`, { itens: selecionados, medicoes, absorver_diferenca: diferencaAbsorvida });
+      const r = await api.post<{ ordens: OrdemProducao[] }>(`/orcamentos/${orcamento.id}/ordens-producao`, { itens: selecionados, medicoes, absorver_diferenca: diferencaAbsorvida });
+      for (const ordem of r.ordens) {
+        await api.post(`/orcamentos/ordens-producao/${ordem.id}/imprimir-etiqueta`);
+      }
+      setSucesso(`${r.ordens.length} ordem(ns) gerada(s) e etiqueta(s) enviada(s) para impressão.`);
       await carregar();
       onAtualizar();
     } catch (e) {
-      setErro(e instanceof ApiError ? e.message : 'Falha ao gerar as ordens.');
+      setErro(e instanceof ApiError ? e.message : 'Falha ao gerar as ordens ou imprimir as etiquetas.');
     } finally {
       setGerando(false);
     }
@@ -855,7 +860,7 @@ export function ProducaoModal({
             </button>
             <button type="button" className="btn btn-default" onClick={onFechar}>Cancelar</button>
             <button type="button" className="btn btn-success" disabled={!podeGerar || gerando} onClick={gerarOrdens}>
-              {gerando ? 'Gerando...' : 'Gerar OS e Etiquetas'}
+              {gerando ? 'Gerando e imprimindo...' : 'Gerar OS e imprimir etiquetas'}
             </button>
           </div>
         </div>
