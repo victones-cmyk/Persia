@@ -466,7 +466,12 @@ export function PersianaForm({
                 <span className="text-xs-ui font-bold text-neutral-600 whitespace-nowrap">Item {idx + 1}</span>
                 <span className="truncate text-sm-ui font-semibold text-neutral-800" title={nomeProduto}>{nomeProduto}</span>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex shrink-0 items-center gap-3">
+                {minimizado && resultPorIdx[idx]?.valor_bruto != null && (
+                  <span className="font-mono tabular-nums text-xs-ui font-semibold text-neutral-800">
+                    {formatBRL(resultPorIdx[idx].valor_bruto)}
+                  </span>
+                )}
                 {minimizado && (
                   <button
                     type="button"
