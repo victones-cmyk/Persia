@@ -17,6 +17,8 @@ export interface CalculadoraTrilhoEspecial {
   nome: string;
   db_tipo_produto: 'trilho_especial';
   ativo?: boolean;
+  /** Trilhos motorizados são exportados ao GestãoClick sem descrição técnica. */
+  motorizado?: boolean;
   componentes: ComponenteCalculadoraTrilho[];
 }
 
@@ -29,6 +31,9 @@ function normalizar(calculadoras: CalculadoraTrilhoEspecial[]): CalculadoraTrilh
     ...c,
     db_tipo_produto: 'trilho_especial',
     ativo: c.ativo !== false,
+    // Mantém as calculadoras já cadastradas funcionando ao reconhecer o nome
+    // enquanto o administrador ainda não salvou a nova opção explicitamente.
+    motorizado: c.motorizado === true || /motoriz/i.test(c.nome),
     componentes: Array.isArray(c.componentes) ? c.componentes : [],
   }));
 }

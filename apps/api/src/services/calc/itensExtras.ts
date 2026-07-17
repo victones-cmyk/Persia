@@ -28,6 +28,8 @@ export interface TrilhoEspecialEntrada {
   largura: number;
   quantidade: number;
   emendas?: number;
+  lado_motor?: 'direito' | 'esquerdo';
+  tipo_abertura?: 'direita' | 'esquerda';
   ambiente?: string;
   observacao?: string;
 }
@@ -36,7 +38,7 @@ export interface ItemExtraPreparado {
   tipo: 'produto_avulso' | 'trilho_especial';
   produto_id: string;
   nome_produto: string;
-  descricao_produto: string;
+  descricao_produto?: string;
   quantidade: number;
   largura?: number;
   valor_unitario: number;
@@ -64,6 +66,7 @@ export interface CalculoTrilhoEspecial {
   largura: number;
   quantidade: number;
   emendas: number;
+  motorizado: boolean;
   componentes: ComponenteTrilhoCalculado[];
   valor_unitario: number;
   valor_total: number;
@@ -150,6 +153,7 @@ export function calcularComposicaoTrilho(
     largura,
     quantidade,
     emendas,
+    motorizado: calculadora.motorizado === true,
     componentes,
     valor_unitario: roundHalfUp(valorTotal / quantidade),
     valor_total: valorTotal,
@@ -189,6 +193,14 @@ function emendasValida(v: unknown): number {
   return n;
 }
 
+function ladoMotor(v: unknown): 'direito' | 'esquerdo' {
+  return v === 'esquerdo' ? 'esquerdo' : 'direito';
+}
+
+function tipoAbertura(v: unknown): 'direita' | 'esquerda' {
+  return v === 'esquerda' ? 'esquerda' : 'direita';
+}
+
 export async function prepararProdutosAvulsos(entradas: ProdutoAvulsoEntrada[] = []): Promise<ItemExtraPreparado[]> {
   const out: ItemExtraPreparado[] = [];
   for (const entrada of entradas) {
@@ -225,14 +237,19 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
       const calculo = await calcularTrilhoEspecial(entrada.calculadora_id, entrada.largura, entrada.quantidade, entrada.emendas ?? 0);
       const ambiente = texto(entrada.ambiente);
       const observacao = texto(entrada.observacao);
+      const lado = ladoMotor(entrada.lado_motor);
+      const abertura = tipoAbertura(entrada.tipo_abertura);
       out.push({
         tipo: 'trilho_especial',
         produto_id: '',
         nome_produto: `Trilho especial ${calculo.nome}`,
-        descricao_produto: [
+        // Para trilhos motorizados o produto sintético do GestãoClick precisa
+        // apenas do nome. Os demais mantêm a ficha técnica para produção.
+        descricao_produto: calculo.motorizado ? undefined : [
           ambiente ? `Ambiente: ${ambiente}` : null,
           `Modelo: ${calculo.nome}`,
           `Largura: ${calculo.largura} m | Quantidade: ${calculo.quantidade} | Emendas por trilho: ${calculo.emendas}`,
+          `Lado do motor: ${lado} | Tipo de abertura: ${abertura}`,
           ...calculo.componentes.map((c) => `${c.nome} (${c.codigo_interno}): ${c.quantidade} x ${c.preco_venda}`),
           observacao ? `Obs.: ${observacao}` : null,
         ].filter(Boolean).join('\n'),
