@@ -73,6 +73,11 @@ describe('evalQuantidade', () => {
     expect(evalQuantidade('CEIL(LARGURA/0.5)*2', { largura: 1.1, altura: 0, tc: 0 })).toBe(6);
   });
 
+  it('usa a quantidade de emendas informada no orçamento', () => {
+    expect(evalQuantidade('EMENDAS', { largura: 3, altura: 0, tc: 0, emendas: 0 })).toBe(0);
+    expect(evalQuantidade('EMENDAS*2', { largura: 3, altura: 0, tc: 0, emendas: 3 })).toBe(6);
+  });
+
   it('rejeita MAX sem fechamento', () => {
     expect(() => evalQuantidade('MAX(LARGURA,1.5', { largura: 1, altura: 1, tc: 0.75 })).toThrow();
   });

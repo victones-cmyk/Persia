@@ -83,7 +83,7 @@ export async function listarCalculadorasTrilhoEspecialController(_req: Request, 
 
 export async function calcularTrilhoEspecialController(req: Request, res: Response): Promise<void> {
   const b = req.body ?? {};
-  res.json({ resultado: await calcularTrilhoEspecial(String(b.calculadora_id ?? ''), b.largura, b.quantidade) });
+  res.json({ resultado: await calcularTrilhoEspecial(String(b.calculadora_id ?? ''), b.largura, b.quantidade, b.emendas ?? 0) });
 }
 
 /**

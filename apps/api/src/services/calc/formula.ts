@@ -50,18 +50,19 @@ export function evalFormula(formula: string, vars: VarsFormula): number {
 // Avaliador das fórmulas de QUANTIDADE das receitas de persiana (planilhas do
 // Victor). Diferente do evalFormula acima, este RESPEITA PARÊNTESES — necessário
 // para "(LARGURA-0.025)*2", "LARGURA*(ALTURA+0.2)*1.2" etc. Sem eval/Function:
-// parser recursivo (expr → term → factor). Variáveis: LARGURA, ALTURA, TC e,
+// parser recursivo (expr → term → factor). Variáveis: LARGURA, ALTURA, TC, EMENDAS e,
 // para a persiana romana, CAVALETES e HASTES (quantidades derivadas, calculadas
 // em persianaPreco.ts e injetadas aqui). Funções suportadas: MAX(a,b,...) e
 // CEIL(valor), que arredonda para o próximo inteiro.
 // ---------------------------------------------------------------------------
-export interface VarsQtd { largura: number; altura: number; tc: number; cavaletes?: number; hastes?: number; }
+export interface VarsQtd { largura: number; altura: number; tc: number; cavaletes?: number; hastes?: number; emendas?: number; }
 
 export function evalQuantidade(formula: string, vars: VarsQtd): number {
   let subst = formula.toUpperCase();
   // Derivadas da romana primeiro (não são substring de LARGURA/ALTURA/TC).
   if (vars.cavaletes !== undefined) subst = subst.replace(/CAVALETES/g, `(${vars.cavaletes})`);
   if (vars.hastes !== undefined) subst = subst.replace(/HASTES/g, `(${vars.hastes})`);
+  if (vars.emendas !== undefined) subst = subst.replace(/EMENDAS/g, `(${vars.emendas})`);
   subst = subst
     .replace(/LARGURA/g, `(${vars.largura})`)
     .replace(/ALTURA/g, `(${vars.altura})`)

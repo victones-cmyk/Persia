@@ -27,6 +27,7 @@ export interface TrilhoEspecialEntrada {
   produto_id?: string; // legado: trilhos salvos antes da integração com as calculadoras
   largura: number;
   quantidade: number;
+  emendas?: number;
   ambiente?: string;
   observacao?: string;
 }
@@ -62,6 +63,7 @@ export interface CalculoTrilhoEspecial {
   nome: string;
   largura: number;
   quantidade: number;
+  emendas: number;
   componentes: ComponenteTrilhoCalculado[];
   valor_unitario: number;
   valor_total: number;
@@ -109,6 +111,7 @@ export function calcularComposicaoTrilho(
   calculadora: CalculadoraTrilhoEspecial,
   largura: number,
   quantidade: number,
+  emendas: number,
   produtos: ProdutoCatalogoOrcamento[],
 ): CalculoTrilhoEspecial {
   const porCodigo = new Map(produtos.map((p) => [p.codigo_interno.trim().toLowerCase(), p]));
@@ -120,11 +123,11 @@ export function calcularComposicaoTrilho(
     }
     let quantidadeFormula: number;
     try {
-      quantidadeFormula = roundHalfUp(evalQuantidade(componente.qtd, { largura, altura: 0, tc: 0 }), 4);
+      quantidadeFormula = roundHalfUp(evalQuantidade(componente.qtd, { largura, altura: 0, tc: 0, emendas }), 4);
     } catch (e) {
       throw new AppError(400, 'FORMULA_TRILHO_INVALIDA', e instanceof Error ? e.message : `Fórmula inválida em "${componente.descricao}".`);
     }
-    if (!(quantidadeFormula > 0)) {
+    if (!Number.isFinite(quantidadeFormula) || quantidadeFormula < 0) {
       throw new AppError(400, 'QUANTIDADE_TRILHO_INVALIDA', `A fórmula de "${componente.descricao}" resultou em uma quantidade inválida.`);
     }
     const quantidadeTotal = roundHalfUp(quantidadeFormula * quantidade, 4);
@@ -146,6 +149,7 @@ export function calcularComposicaoTrilho(
     nome: calculadora.nome,
     largura,
     quantidade,
+    emendas,
     componentes,
     valor_unitario: roundHalfUp(valorTotal / quantidade),
     valor_total: valorTotal,
@@ -153,13 +157,14 @@ export function calcularComposicaoTrilho(
   };
 }
 
-export async function calcularTrilhoEspecial(calculadoraId: string, larguraEntrada: unknown, quantidadeEntrada: unknown): Promise<CalculoTrilhoEspecial> {
+export async function calcularTrilhoEspecial(calculadoraId: string, larguraEntrada: unknown, quantidadeEntrada: unknown, emendasEntrada: unknown = 0): Promise<CalculoTrilhoEspecial> {
   const calculadora = encontrarCalculadoraTrilhoEspecial(String(calculadoraId ?? '').trim());
   if (!calculadora) throw new AppError(400, 'CALCULADORA_TRILHO_INVALIDA', 'Selecione uma calculadora de trilho especial válida.');
   const largura = medidaValida(larguraEntrada);
   const quantidade = quantidadeValida(quantidadeEntrada);
+  const emendas = emendasValida(emendasEntrada);
   const produtos = (await listarProdutos({ ativo: 1 })).map(normalizarProduto);
-  return calcularComposicaoTrilho(calculadora, largura, quantidade, produtos);
+  return calcularComposicaoTrilho(calculadora, largura, quantidade, emendas, produtos);
 }
 
 function texto(v: unknown): string {
@@ -176,6 +181,12 @@ function medidaValida(v: unknown): number {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) throw new AppError(400, 'MEDIDA_INVALIDA', 'Informe uma medida válida.');
   return roundHalfUp(n);
+}
+
+function emendasValida(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0) throw new AppError(400, 'EMENDAS_INVALIDAS', 'Informe uma quantidade de emendas igual ou maior que zero.');
+  return n;
 }
 
 export async function prepararProdutosAvulsos(entradas: ProdutoAvulsoEntrada[] = []): Promise<ItemExtraPreparado[]> {
@@ -211,7 +222,7 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
   const out: ItemExtraPreparado[] = [];
   for (const entrada of entradas) {
     if (entrada.calculadora_id) {
-      const calculo = await calcularTrilhoEspecial(entrada.calculadora_id, entrada.largura, entrada.quantidade);
+      const calculo = await calcularTrilhoEspecial(entrada.calculadora_id, entrada.largura, entrada.quantidade, entrada.emendas ?? 0);
       const ambiente = texto(entrada.ambiente);
       const observacao = texto(entrada.observacao);
       out.push({
@@ -221,7 +232,7 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
         descricao_produto: [
           ambiente ? `Ambiente: ${ambiente}` : null,
           `Modelo: ${calculo.nome}`,
-          `Largura: ${calculo.largura} m | Quantidade: ${calculo.quantidade}`,
+          `Largura: ${calculo.largura} m | Quantidade: ${calculo.quantidade} | Emendas por trilho: ${calculo.emendas}`,
           ...calculo.componentes.map((c) => `${c.nome} (${c.codigo_interno}): ${c.quantidade} x ${c.preco_venda}`),
           observacao ? `Obs.: ${observacao}` : null,
         ].filter(Boolean).join('\n'),
