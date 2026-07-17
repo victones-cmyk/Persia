@@ -21,12 +21,14 @@ import {
   faBan,
   faCircleCheck,
   faMagnifyingGlass,
+  faGripLines,
 } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { formatBRL, formatQtd } from '../../lib/formatacao';
 import type { CalculadoraPersiana, ComponenteCalculadora, ReceitaCalculadora, CalculadoraCortina, CamadaCalculadoraCortina } from '../../lib/calcTypes';
+import { CalculadorasTrilhoEspecial } from './CalculadorasTrilhoEspecial';
 
 // Mapeamentos de enums fixos no BD/API
 const DB_TIPOS_PRODUTO = [
@@ -96,7 +98,7 @@ export function AdminCalculadoras() {
   const { showToast } = useToast();
   
   // Abas
-  const [secaoAtiva, setSecaoAtiva] = useState<'persiana' | 'cortina'>('persiana');
+  const [secaoAtiva, setSecaoAtiva] = useState<'persiana' | 'cortina' | 'trilho'>('persiana');
   
   // Dados
   const [calculadorasPersiana, setCalculadorasPersiana] = useState<CalculadoraPersiana[]>([]);
@@ -690,7 +692,7 @@ export function AdminCalculadoras() {
       {/* SELETOR DE ABA (APENAS SE NÃO ESTIVER EDITANDO) */}
       {!editorAberto && (
         <div className="flex justify-between items-center mb-6">
-          <div className="flex border-b border-neutral-300 w-full max-w-md">
+          <div className="flex border-b border-neutral-300 w-full max-w-2xl">
             <button
               className={`py-3 px-6 font-semibold flex items-center gap-2 transition-all ${
                 secaoAtiva === 'persiana'
@@ -711,9 +713,19 @@ export function AdminCalculadoras() {
             >
               <FontAwesomeIcon icon={faLayerGroup} /> Cortinas (Modelos)
             </button>
+            <button
+              className={`py-3 px-6 font-semibold flex items-center gap-2 transition-all ${
+                secaoAtiva === 'trilho'
+                  ? 'border-b-2 border-primary text-primary font-bold'
+                  : 'text-neutral-500 hover:text-neutral-700'
+              }`}
+              onClick={() => setSecaoAtiva('trilho')}
+            >
+              <FontAwesomeIcon icon={faGripLines} /> Trilhos especiais
+            </button>
           </div>
           
-          <div className="flex gap-2">
+          {secaoAtiva !== 'trilho' && <div className="flex gap-2">
             <button className="btn btn-default" onClick={() => setRestaurarAberto(true)}>
               <FontAwesomeIcon icon={faRotateLeft} /> Restaurar Padrões
             </button>
@@ -723,7 +735,7 @@ export function AdminCalculadoras() {
             >
               <FontAwesomeIcon icon={faPlus} /> {secaoAtiva === 'persiana' ? 'Nova Persiana' : 'Novo Modelo Cortina'}
             </button>
-          </div>
+          </div>}
         </div>
       )}
 
@@ -1582,12 +1594,14 @@ export function AdminCalculadoras() {
         </div>
       )}
 
+      {secaoAtiva === 'trilho' && <CalculadorasTrilhoEspecial />}
+
       {/* MODAL CONFIRMAÇÃO DE RESTAURAÇÃO */}
       <ConfirmModal
         aberto={restaurarAberto}
         titulo="Restaurar Padrões"
         mensagem={`Deseja realmente restaurar todos os modelos padrões de ${
-          secaoAtiva === 'persiana' ? 'Persiana' : 'Cortina'
+          secaoAtiva === 'persiana' ? 'Persiana' : secaoAtiva === 'cortina' ? 'Cortina' : 'Trilho especial'
         }? Todas as alterações personalizadas e registros novos serão perdidos.`}
         confirmarLabel="Restaurar"
         cancelarLabel="Voltar"

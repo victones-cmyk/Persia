@@ -96,7 +96,8 @@ export function ItensExtrasOrcamento({
       const produto = porId.get(linha.produto_id);
       const quantidade = Number(linha.quantidade);
       const largura = modo === 'trilho' ? Number(linha.largura) : undefined;
-      const temConteudo = Boolean(linha.produto_id || linha.ambiente || linha.largura || linha.observacao || linha.quantidade !== '1');
+      const ambiente = modo === 'trilho' ? linha.ambiente.trim() : '';
+      const temConteudo = Boolean(linha.produto_id || ambiente || linha.largura || linha.observacao || linha.quantidade !== '1');
       if (!temConteudo) continue;
       if (!produto || !(quantidade > 0) || (modo === 'trilho' && !(Number(largura) > 0))) {
         incompleto = true;
@@ -108,7 +109,7 @@ export function ItensExtrasOrcamento({
         produto_id: produto.id,
         quantidade,
         ...(modo === 'trilho' ? { largura: Number(largura) } : {}),
-        ...(linha.ambiente.trim() ? { ambiente: linha.ambiente.trim() } : {}),
+        ...(ambiente ? { ambiente } : {}),
         ...(linha.observacao.trim() ? { observacao: linha.observacao.trim() } : {}),
       });
     }
@@ -119,12 +120,12 @@ export function ItensExtrasOrcamento({
   useEffect(() => {
     onSnapshot?.(linhas.map((l) => ({
       produto_id: l.produto_id,
-      ambiente: l.ambiente,
+      ambiente: modo === 'trilho' ? l.ambiente : '',
       ...(modo === 'trilho' ? { largura: l.largura } : {}),
       quantidade: l.quantidade,
       observacao: l.observacao,
     })));
-    onDirtyChange?.(linhas.some((l) => l.produto_id || l.ambiente || l.largura || l.observacao || l.quantidade !== '1'));
+    onDirtyChange?.(linhas.some((l) => l.produto_id || (modo === 'trilho' && l.ambiente) || l.largura || l.observacao || l.quantidade !== '1'));
   }, [linhas, modo, onDirtyChange, onSnapshot]);
 
   function alterar(id: string, patch: Partial<LinhaState>) {
@@ -155,7 +156,7 @@ export function ItensExtrasOrcamento({
           return (
             <div key={linha.id} className="rounded-sm border border-neutral-300 p-3" style={{ background: 'var(--neutral-50)' }}>
               <div className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-12 md:col-span-5">
+                <div className={modo === 'trilho' ? 'col-span-12 md:col-span-5' : 'col-span-12 md:col-span-8'}>
                   <label className="form-label">Produto</label>
                   <BuscaSelect
                     options={produtos.map((p) => ({ id: p.id, nome: `${p.nome}${p.codigo_interno ? ` (${p.codigo_interno})` : ''}`, preco: p.preco_venda }))}
@@ -166,10 +167,12 @@ export function ItensExtrasOrcamento({
                     ariaLabel={`Buscar produto ${index + 1}`}
                   />
                 </div>
-                <div className="col-span-12 md:col-span-3">
-                  <label className="form-label">Ambiente</label>
-                  <input className="input" value={linha.ambiente} onChange={(e) => alterar(linha.id, { ambiente: e.target.value })} placeholder="Ex.: Sala" />
-                </div>
+                {modo === 'trilho' && (
+                  <div className="col-span-12 md:col-span-3">
+                    <label className="form-label">Ambiente</label>
+                    <input className="input" value={linha.ambiente} onChange={(e) => alterar(linha.id, { ambiente: e.target.value })} placeholder="Ex.: Sala" />
+                  </div>
+                )}
                 {modo === 'trilho' && (
                   <div className="col-span-6 md:col-span-1">
                     <label className="form-label">Largura</label>
