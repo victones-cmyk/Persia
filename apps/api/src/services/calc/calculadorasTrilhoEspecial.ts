@@ -41,6 +41,10 @@ export function getCalculadorasTrilhoEspecialAtivas(): CalculadoraTrilhoEspecial
   return getCalculadorasTrilhoEspecial().filter((c) => c.ativo !== false);
 }
 
+export function encontrarCalculadoraTrilhoEspecial(id: string): CalculadoraTrilhoEspecial | undefined {
+  return getCalculadorasTrilhoEspecial().find((c) => c.id === id);
+}
+
 export async function carregarCalculadorasTrilhoEspecial(prisma: PrismaClient): Promise<void> {
   try {
     const config = await prisma.configuracao.findUnique({ where: { chave: CHAVE_CALCULADORAS_TRILHO_ESPECIAL } });
