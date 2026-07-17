@@ -504,19 +504,6 @@ export function CortinaCard({
             <option value="1">Sem abertura</option>
           </select>
         </div>
-        <div>
-          <label className="form-label" htmlFor={`bainhas-laterais-cortina-${indice}`}>Bainhas laterais (cm)</label>
-          <input
-            id={`bainhas-laterais-cortina-${indice}`}
-            type="number"
-            className="input"
-            min={0}
-            step={1}
-            value={bainhasLaterais}
-            onChange={(e) => setBainhasLaterais(e.target.value)}
-          />
-          <div className="helper-text">{aberturas === '2' ? 'A abertura central acrescenta duas vezes este valor por camada.' : 'Acrescenta este valor uma vez por camada.'}</div>
-        </div>
       </div>
 
       <label className="flex items-center gap-2 text-sm-ui mb-3">
