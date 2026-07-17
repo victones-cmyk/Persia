@@ -15,6 +15,8 @@ interface LinhaState {
   largura: string;
   quantidade: string;
   emendas: string;
+  lado_motor: 'direito' | 'esquerdo';
+  tipo_abertura: 'direita' | 'esquerda';
   observacao: string;
 }
 
@@ -46,6 +48,8 @@ const vazia = (): LinhaState => ({
   largura: '',
   quantidade: '1',
   emendas: '0',
+  lado_motor: 'direito',
+  tipo_abertura: 'direita',
   observacao: '',
 });
 
@@ -58,6 +62,8 @@ function normalizarInicial(inicial?: ProdutoExtraSnap[]): LinhaState[] {
     largura: item.largura ?? '',
     quantidade: item.quantidade ?? '1',
     emendas: item.emendas ?? '0',
+    lado_motor: item.lado_motor === 'esquerdo' ? 'esquerdo' : 'direito',
+    tipo_abertura: item.tipo_abertura === 'esquerda' ? 'esquerda' : 'direita',
     observacao: item.observacao ?? '',
   }));
 }
@@ -150,6 +156,8 @@ export function TrilhosEspeciaisOrcamento({
         largura: Number(linha.largura),
         quantidade: Number(linha.quantidade),
         emendas: Number(linha.emendas),
+        lado_motor: linha.lado_motor,
+        tipo_abertura: linha.tipo_abertura,
         ...(linha.ambiente.trim() ? { ambiente: linha.ambiente.trim() } : {}),
         ...(linha.observacao.trim() ? { observacao: linha.observacao.trim() } : {}),
       });
@@ -165,6 +173,8 @@ export function TrilhosEspeciaisOrcamento({
       largura: l.largura,
       quantidade: l.quantidade,
       emendas: l.emendas,
+      lado_motor: l.lado_motor,
+      tipo_abertura: l.tipo_abertura,
       observacao: l.observacao,
     })));
     onDirtyChange?.(linhas.some((l) => l.calculadora_id || l.ambiente || l.largura || l.observacao || l.quantidade !== '1' || l.emendas !== '0'));
@@ -225,6 +235,20 @@ export function TrilhosEspeciaisOrcamento({
                 <div className="col-span-4 md:col-span-2">
                   <label className="form-label">Quantidade<span className="label-required">*</span></label>
                   <input className="input input-mono" type="number" min={1} step={1} value={linha.quantidade} onChange={(e) => alterar(linha.id, { quantidade: e.target.value })} />
+                </div>
+                <div className="col-span-6 md:col-span-3">
+                  <label className="form-label">Lado do motor<span className="label-required">*</span></label>
+                  <select className="input" value={linha.lado_motor} onChange={(e) => alterar(linha.id, { lado_motor: e.target.value as LinhaState['lado_motor'] })}>
+                    <option value="direito">Direito</option>
+                    <option value="esquerdo">Esquerdo</option>
+                  </select>
+                </div>
+                <div className="col-span-6 md:col-span-3">
+                  <label className="form-label">Tipo de abertura<span className="label-required">*</span></label>
+                  <select className="input" value={linha.tipo_abertura} onChange={(e) => alterar(linha.id, { tipo_abertura: e.target.value as LinhaState['tipo_abertura'] })}>
+                    <option value="direita">Direita</option>
+                    <option value="esquerda">Esquerda</option>
+                  </select>
                 </div>
               </div>
 

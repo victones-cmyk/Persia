@@ -22,6 +22,8 @@ export interface ItemExtraPayload {
   largura?: number;
   quantidade: number;
   emendas?: number;
+  lado_motor?: 'direito' | 'esquerdo';
+  tipo_abertura?: 'direita' | 'esquerda';
   observacao?: string;
 }
 

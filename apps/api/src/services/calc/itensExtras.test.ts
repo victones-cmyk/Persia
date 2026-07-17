@@ -7,6 +7,7 @@ const calculadora: CalculadoraTrilhoEspecial = {
   nome: 'Trilho Teste',
   db_tipo_produto: 'trilho_especial',
   ativo: true,
+  motorizado: true,
   componentes: [
     { codigo_interno: 'TR-001', descricao: 'Perfil', qtd: 'LARGURA' },
     { codigo_interno: 'AC-002', descricao: 'Acessório', qtd: 'LARGURA*2' },
@@ -33,6 +34,7 @@ describe('calculadora de trilhos especiais', () => {
     expect(r.valor_unitario).toBe(42);
     expect(r.valor_total).toBe(84);
     expect(r.custo_total).toBe(42);
+    expect(r.motorizado).toBe(true);
   });
 
   it('multiplica as emendas informadas pela quantidade de trilhos', () => {

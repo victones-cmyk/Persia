@@ -71,6 +71,7 @@ export interface CalculadoraTrilhoEspecial {
   nome: string;
   db_tipo_produto: 'trilho_especial';
   ativo?: boolean;
+  motorizado?: boolean;
   componentes: ComponenteCalculadoraTrilho[];
 }
 

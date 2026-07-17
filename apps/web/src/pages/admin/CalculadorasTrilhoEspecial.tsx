@@ -47,7 +47,7 @@ export function CalculadorasTrilhoEspecial() {
   }
 
   function iniciarNova() {
-    setEditando({ id: '', nome: '', db_tipo_produto: 'trilho_especial', ativo: true, componentes: [componenteVazio()] });
+    setEditando({ id: '', nome: '', db_tipo_produto: 'trilho_especial', ativo: true, motorizado: false, componentes: [componenteVazio()] });
     setCriando(true);
   }
 
@@ -126,6 +126,10 @@ export function CalculadorasTrilhoEspecial() {
               <label className="form-label">Nome de Exibição<span className="label-required">*</span></label>
               <input className="input" value={editando.nome} placeholder="ex: Trilho Wave" onChange={(e) => setEditando({ ...editando, nome: e.target.value })} />
             </div>
+            <label className="flex items-start gap-2 cursor-pointer text-sm-ui text-neutral-700">
+              <input type="checkbox" className="mt-0.5" checked={editando.motorizado === true} onChange={(e) => setEditando({ ...editando, motorizado: e.target.checked })} />
+              <span><span className="font-medium">Trilho motorizado</span><span className="block text-xs-ui text-neutral-500 mt-0.5">Ao exportar, o GestãoClick receberá apenas o nome do produto, sem a descrição técnica da composição.</span></span>
+            </label>
             <div className="alert alert-info text-xs-ui">
               As fórmulas podem usar <span className="font-mono">LARGURA</span> e <span className="font-mono">EMENDAS</span>. Para o produto da emenda, use apenas <span className="font-mono">EMENDAS</span>.
             </div>
@@ -179,7 +183,7 @@ export function CalculadorasTrilhoEspecial() {
         {calculadoras.map((calc) => {
           const ativa = calc.ativo !== false;
           return <div key={calc.id} className="card p-4 flex flex-col justify-between" style={{ opacity: ativa ? 1 : 0.62 }}>
-            <div><div className="flex justify-between items-start mb-2"><div className="font-bold text-md-ui text-neutral-800">{calc.nome}{!ativa && <span className="badge badge-secondary ml-2">Inativa</span>}</div><span className="text-2xs-ui bg-neutral-200 px-2 py-0.5 rounded-sm font-mono text-neutral-600">ID: {calc.id}</span></div><p className="text-xs-ui text-neutral-500 mb-4">{calc.componentes.length} produto(s) · cálculo por largura</p></div>
+            <div><div className="flex justify-between items-start mb-2"><div className="font-bold text-md-ui text-neutral-800">{calc.nome}{calc.motorizado && <span className="badge badge-primary ml-2">Motorizado</span>}{!ativa && <span className="badge badge-secondary ml-2">Inativa</span>}</div><span className="text-2xs-ui bg-neutral-200 px-2 py-0.5 rounded-sm font-mono text-neutral-600">ID: {calc.id}</span></div><p className="text-xs-ui text-neutral-500 mb-4">{calc.componentes.length} produto(s) · cálculo por largura</p></div>
             <div className="flex flex-wrap gap-2 border-t border-neutral-200 pt-3"><button className="btn btn-default btn-xs flex-1" onClick={() => iniciarEdicao(calc)}><FontAwesomeIcon icon={faPen} /> Editar</button><button className="btn btn-default btn-xs text-primary flex-1" onClick={() => duplicar(calc)}><FontAwesomeIcon icon={faCopy} /> Duplicar</button><button className={`btn btn-default btn-xs flex-1 ${ativa ? 'text-warning' : 'text-success'}`} onClick={() => void salvar(calculadoras.map((c) => c.id === calc.id ? { ...c, ativo: !ativa } : c))}><FontAwesomeIcon icon={ativa ? faBan : faCircleCheck} /> {ativa ? 'Inativar' : 'Reativar'}</button><button className="btn btn-default btn-xs text-error flex-1" onClick={() => { if (window.confirm('Deseja realmente excluir esta calculadora?')) void salvar(calculadoras.filter((c) => c.id !== calc.id)); }}><FontAwesomeIcon icon={faTrash} /> Excluir</button></div>
           </div>;
         })}
