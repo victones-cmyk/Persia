@@ -12,6 +12,13 @@ export interface ComponenteCalculadoraTrilho {
   qtd: string;
 }
 
+export interface VarianteCalculadoraTrilho {
+  id: string;
+  nome: string;
+  motorizado?: boolean;
+  componentes: ComponenteCalculadoraTrilho[];
+}
+
 export interface CalculadoraTrilhoEspecial {
   id: string;
   nome: string;
@@ -19,6 +26,8 @@ export interface CalculadoraTrilhoEspecial {
   ativo?: boolean;
   /** Trilhos motorizados são exportados ao GestãoClick sem descrição técnica. */
   motorizado?: boolean;
+  /** Composições alternativas do mesmo modelo de trilho. */
+  variantes?: VarianteCalculadoraTrilho[];
   componentes: ComponenteCalculadoraTrilho[];
 }
 
@@ -31,9 +40,19 @@ function normalizar(calculadoras: CalculadoraTrilhoEspecial[]): CalculadoraTrilh
     ...c,
     db_tipo_produto: 'trilho_especial',
     ativo: c.ativo !== false,
-    // Mantém as calculadoras já cadastradas funcionando ao reconhecer o nome
-    // enquanto o administrador ainda não salvou a nova opção explicitamente.
-    motorizado: c.motorizado === true || /motoriz/i.test(c.nome),
+    variantes: (Array.isArray(c.variantes) && c.variantes.length > 0 ? c.variantes : [{
+      id: 'padrao',
+      nome: 'Padrão',
+      // Mantém os modelos atuais motorizados funcionando sem recadastro.
+      motorizado: c.motorizado === true || /motoriz/i.test(c.nome),
+      componentes: Array.isArray(c.componentes) ? c.componentes : [],
+    }]).map((v, index) => ({
+      id: String(v.id || `variante_${index + 1}`),
+      nome: String(v.nome || `Variante ${index + 1}`),
+      motorizado: v.motorizado === true,
+      componentes: Array.isArray(v.componentes) ? v.componentes : [],
+    })),
+    // Compatibilidade com registros e integrações antigas.
     componentes: Array.isArray(c.componentes) ? c.componentes : [],
   }));
 }

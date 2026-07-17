@@ -11,6 +11,7 @@ import type { ItemExtraPayload, ItensExtrasEstado } from './ItensExtrasOrcamento
 interface LinhaState {
   id: string;
   calculadora_id: string;
+  variante_id: string;
   ambiente: string;
   largura: string;
   quantidade: string;
@@ -32,6 +33,8 @@ interface ComponenteCalculado {
 
 interface ResultadoTrilho {
   calculadora_id: string;
+  variante_id: string;
+  variante_nome: string;
   nome: string;
   largura: number;
   quantidade: number;
@@ -44,6 +47,7 @@ interface ResultadoTrilho {
 const vazia = (): LinhaState => ({
   id: crypto.randomUUID(),
   calculadora_id: '',
+  variante_id: '',
   ambiente: '',
   largura: '',
   quantidade: '1',
@@ -58,6 +62,7 @@ function normalizarInicial(inicial?: ProdutoExtraSnap[]): LinhaState[] {
   return inicial.map((item) => ({
     id: crypto.randomUUID(),
     calculadora_id: item.calculadora_id ?? '',
+    variante_id: item.variante_id ?? '',
     ambiente: item.ambiente ?? '',
     largura: item.largura ?? '',
     quantidade: item.quantidade ?? '1',
@@ -71,6 +76,7 @@ function normalizarInicial(inicial?: ProdutoExtraSnap[]): LinhaState[] {
 function resultadoCorresponde(linha: LinhaState, resultado?: ResultadoTrilho): resultado is ResultadoTrilho {
   return !!resultado
     && resultado.calculadora_id === linha.calculadora_id
+    && resultado.variante_id === linha.variante_id
     && resultado.largura === Number(linha.largura)
     && resultado.quantidade === Number(linha.quantidade)
     && resultado.emendas === Number(linha.emendas);
@@ -102,10 +108,10 @@ export function TrilhosEspeciaisOrcamento({
       .finally(() => setCarregando(false));
   }, []);
 
-  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, l: l.largura, q: l.quantidade, e: l.emendas })));
+  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, v: l.variante_id, l: l.largura, q: l.quantidade, e: l.emendas })));
   useEffect(() => {
     const seq = ++sequencia.current;
-    const validas = linhas.filter((l) => l.calculadora_id && Number(l.largura) > 0 && Number(l.quantidade) > 0 && Number.isInteger(Number(l.emendas)) && Number(l.emendas) >= 0);
+    const validas = linhas.filter((l) => l.calculadora_id && l.variante_id && Number(l.largura) > 0 && Number(l.quantidade) > 0 && Number.isInteger(Number(l.emendas)) && Number(l.emendas) >= 0);
     setResultados({});
     setErros({});
     if (validas.length === 0) {
@@ -120,6 +126,7 @@ export function TrilhosEspeciaisOrcamento({
         try {
           const r = await api.post<{ resultado: ResultadoTrilho }>('/calcular/trilho-especial', {
             calculadora_id: linha.calculadora_id,
+            variante_id: linha.variante_id,
             largura: Number(linha.largura),
             quantidade: Number(linha.quantidade),
             emendas: Number(linha.emendas),
@@ -146,13 +153,14 @@ export function TrilhosEspeciaisOrcamento({
       const temConteudo = Boolean(linha.calculadora_id || linha.ambiente || linha.largura || linha.observacao || linha.quantidade !== '1' || linha.emendas !== '0');
       if (!temConteudo) continue;
       const resultado = resultados[linha.id];
-      if (!linha.calculadora_id || !(Number(linha.largura) > 0) || !(Number(linha.quantidade) > 0) || !Number.isInteger(Number(linha.emendas)) || Number(linha.emendas) < 0 || !resultadoCorresponde(linha, resultado) || erros[linha.id]) {
+      if (!linha.calculadora_id || !linha.variante_id || !(Number(linha.largura) > 0) || !(Number(linha.quantidade) > 0) || !Number.isInteger(Number(linha.emendas)) || Number(linha.emendas) < 0 || !resultadoCorresponde(linha, resultado) || erros[linha.id]) {
         incompleto = true;
         continue;
       }
       total += resultado.valor_total;
       itens.push({
         calculadora_id: linha.calculadora_id,
+        variante_id: linha.variante_id,
         largura: Number(linha.largura),
         quantidade: Number(linha.quantidade),
         emendas: Number(linha.emendas),
@@ -169,6 +177,7 @@ export function TrilhosEspeciaisOrcamento({
   useEffect(() => {
     onSnapshot?.(linhas.map((l) => ({
       calculadora_id: l.calculadora_id,
+      variante_id: l.variante_id,
       ambiente: l.ambiente,
       largura: l.largura,
       quantidade: l.quantidade,
@@ -213,11 +222,21 @@ export function TrilhosEspeciaisOrcamento({
           return (
             <div key={linha.id} className="rounded-sm border border-neutral-300 p-3 bg-neutral-50">
               <div className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-12 md:col-span-4">
+                <div className="col-span-12 md:col-span-3">
                   <label className="form-label">Modelo de trilho<span className="label-required">*</span></label>
-                  <select className="input" value={linha.calculadora_id} onChange={(e) => alterar(linha.id, { calculadora_id: e.target.value })} disabled={carregando || calculadoras.length === 0}>
+                  <select className="input" value={linha.calculadora_id} onChange={(e) => {
+                    const calculadora = calculadoras.find((c) => c.id === e.target.value);
+                    alterar(linha.id, { calculadora_id: e.target.value, variante_id: calculadora?.variantes?.[0]?.id ?? '' });
+                  }} disabled={carregando || calculadoras.length === 0}>
                     <option value="">{carregando ? 'Carregando calculadoras…' : 'Selecione a calculadora…'}</option>
                     {calculadoras.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-12 md:col-span-3">
+                  <label className="form-label">Variante<span className="label-required">*</span></label>
+                  <select className="input" value={linha.variante_id} onChange={(e) => alterar(linha.id, { variante_id: e.target.value })} disabled={!linha.calculadora_id}>
+                    <option value="">Selecione a variante…</option>
+                    {(calculadoras.find((c) => c.id === linha.calculadora_id)?.variantes ?? []).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
                   </select>
                 </div>
                 <div className="col-span-12 md:col-span-2">
@@ -253,7 +272,7 @@ export function TrilhosEspeciaisOrcamento({
               </div>
 
               {erros[linha.id] && <div className="helper-error mt-2">{erros[linha.id]}</div>}
-              {calculando && linha.calculadora_id && Number(linha.largura) > 0 && Number.isInteger(Number(linha.emendas)) && Number(linha.emendas) >= 0 && !calculado && !erros[linha.id] && (
+              {calculando && linha.calculadora_id && linha.variante_id && Number(linha.largura) > 0 && Number.isInteger(Number(linha.emendas)) && Number(linha.emendas) >= 0 && !calculado && !erros[linha.id] && (
                 <div className="text-xs-ui text-neutral-500 mt-2"><FontAwesomeIcon icon={faSpinner} spin /> Calculando composição…</div>
               )}
 

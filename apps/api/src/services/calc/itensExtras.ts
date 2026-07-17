@@ -24,6 +24,7 @@ export interface ProdutoAvulsoEntrada {
 
 export interface TrilhoEspecialEntrada {
   calculadora_id?: string;
+  variante_id?: string;
   produto_id?: string; // legado: trilhos salvos antes da integração com as calculadoras
   largura: number;
   quantidade: number;
@@ -62,6 +63,8 @@ export interface ComponenteTrilhoCalculado {
 
 export interface CalculoTrilhoEspecial {
   calculadora_id: string;
+  variante_id: string;
+  variante_nome: string;
   nome: string;
   largura: number;
   quantidade: number;
@@ -112,13 +115,17 @@ async function buscarProdutoParaOrcamento(id: string): Promise<ProdutoCatalogoOr
 
 export function calcularComposicaoTrilho(
   calculadora: CalculadoraTrilhoEspecial,
+  varianteId: string | undefined,
   largura: number,
   quantidade: number,
   emendas: number,
   produtos: ProdutoCatalogoOrcamento[],
 ): CalculoTrilhoEspecial {
+  const variantes = calculadora.variantes ?? [];
+  const variante = variantes.find((v) => v.id === varianteId) ?? variantes[0];
+  if (!variante) throw new AppError(400, 'VARIANTE_TRILHO_INVALIDA', 'Selecione uma variante válida do trilho especial.');
   const porCodigo = new Map(produtos.map((p) => [p.codigo_interno.trim().toLowerCase(), p]));
-  const componentes = calculadora.componentes.map((componente) => {
+  const componentes = variante.componentes.map((componente) => {
     const codigo = componente.codigo_interno.trim();
     const produto = porCodigo.get(codigo.toLowerCase());
     if (!produto) {
@@ -149,11 +156,13 @@ export function calcularComposicaoTrilho(
   const valorTotal = roundHalfUp(componentes.reduce((s, c) => s + c.subtotal, 0));
   return {
     calculadora_id: calculadora.id,
+    variante_id: variante.id,
+    variante_nome: variante.nome,
     nome: calculadora.nome,
     largura,
     quantidade,
     emendas,
-    motorizado: calculadora.motorizado === true,
+    motorizado: variante.motorizado === true,
     componentes,
     valor_unitario: roundHalfUp(valorTotal / quantidade),
     valor_total: valorTotal,
@@ -161,14 +170,14 @@ export function calcularComposicaoTrilho(
   };
 }
 
-export async function calcularTrilhoEspecial(calculadoraId: string, larguraEntrada: unknown, quantidadeEntrada: unknown, emendasEntrada: unknown = 0): Promise<CalculoTrilhoEspecial> {
+export async function calcularTrilhoEspecial(calculadoraId: string, varianteId: string | undefined, larguraEntrada: unknown, quantidadeEntrada: unknown, emendasEntrada: unknown = 0): Promise<CalculoTrilhoEspecial> {
   const calculadora = encontrarCalculadoraTrilhoEspecial(String(calculadoraId ?? '').trim());
   if (!calculadora) throw new AppError(400, 'CALCULADORA_TRILHO_INVALIDA', 'Selecione uma calculadora de trilho especial válida.');
   const largura = medidaValida(larguraEntrada);
   const quantidade = quantidadeValida(quantidadeEntrada);
   const emendas = emendasValida(emendasEntrada);
   const produtos = (await listarProdutos({ ativo: 1 })).map(normalizarProduto);
-  return calcularComposicaoTrilho(calculadora, largura, quantidade, emendas, produtos);
+  return calcularComposicaoTrilho(calculadora, varianteId, largura, quantidade, emendas, produtos);
 }
 
 function texto(v: unknown): string {
@@ -234,7 +243,7 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
   const out: ItemExtraPreparado[] = [];
   for (const entrada of entradas) {
     if (entrada.calculadora_id) {
-      const calculo = await calcularTrilhoEspecial(entrada.calculadora_id, entrada.largura, entrada.quantidade, entrada.emendas ?? 0);
+      const calculo = await calcularTrilhoEspecial(entrada.calculadora_id, entrada.variante_id, entrada.largura, entrada.quantidade, entrada.emendas ?? 0);
       const ambiente = texto(entrada.ambiente);
       const observacao = texto(entrada.observacao);
       const lado = ladoMotor(entrada.lado_motor);
@@ -242,12 +251,12 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
       out.push({
         tipo: 'trilho_especial',
         produto_id: '',
-        nome_produto: `Trilho especial ${calculo.nome}`,
+        nome_produto: `Trilho especial ${calculo.nome} — ${calculo.variante_nome}`,
         // Para trilhos motorizados o produto sintético do GestãoClick precisa
         // apenas do nome. Os demais mantêm a ficha técnica para produção.
         descricao_produto: calculo.motorizado ? undefined : [
           ambiente ? `Ambiente: ${ambiente}` : null,
-          `Modelo: ${calculo.nome}`,
+          `Modelo: ${calculo.nome} | Variante: ${calculo.variante_nome}`,
           `Largura: ${calculo.largura} m | Quantidade: ${calculo.quantidade} | Emendas por trilho: ${calculo.emendas}`,
           `Lado do motor: ${lado} | Tipo de abertura: ${abertura}`,
           ...calculo.componentes.map((c) => `${c.nome} (${c.codigo_interno}): ${c.quantidade} x ${c.preco_venda}`),

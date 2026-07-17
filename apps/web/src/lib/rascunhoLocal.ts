@@ -55,6 +55,7 @@ export interface CortinaSnapshot {
 export interface ProdutoExtraSnap {
   produto_id?: string;
   calculadora_id?: string;
+  variante_id?: string;
   ambiente: string;
   largura?: string;
   quantidade: string;

@@ -7,12 +7,14 @@ const calculadora: CalculadoraTrilhoEspecial = {
   nome: 'Trilho Teste',
   db_tipo_produto: 'trilho_especial',
   ativo: true,
-  motorizado: true,
-  componentes: [
-    { codigo_interno: 'TR-001', descricao: 'Perfil', qtd: 'LARGURA' },
-    { codigo_interno: 'AC-002', descricao: 'Acessório', qtd: 'LARGURA*2' },
-    { codigo_interno: 'EM-003', descricao: 'Emenda', qtd: 'EMENDAS' },
-  ],
+  componentes: [],
+  variantes: [{
+    id: 'motorizada', nome: 'Motorizada', motorizado: true, componentes: [
+      { codigo_interno: 'TR-001', descricao: 'Perfil', qtd: 'LARGURA' },
+      { codigo_interno: 'AC-002', descricao: 'Acessório', qtd: 'LARGURA*2' },
+      { codigo_interno: 'EM-003', descricao: 'Emenda', qtd: 'EMENDAS' },
+    ],
+  }],
 };
 
 const produtos: ProdutoCatalogoOrcamento[] = [
@@ -23,7 +25,7 @@ const produtos: ProdutoCatalogoOrcamento[] = [
 
 describe('calculadora de trilhos especiais', () => {
   it('calcula todos os produtos da composição pela largura e quantidade de trilhos', () => {
-    const r = calcularComposicaoTrilho(calculadora, 3, 2, 0, produtos);
+    const r = calcularComposicaoTrilho(calculadora, 'motorizada', 3, 2, 0, produtos);
 
     expect(r.componentes[0].quantidade).toBe(6);
     expect(r.componentes[0].subtotal).toBe(60);
@@ -38,7 +40,7 @@ describe('calculadora de trilhos especiais', () => {
   });
 
   it('multiplica as emendas informadas pela quantidade de trilhos', () => {
-    const r = calcularComposicaoTrilho(calculadora, 3, 2, 2, produtos);
+    const r = calcularComposicaoTrilho(calculadora, 'motorizada', 3, 2, 2, produtos);
 
     expect(r.emendas).toBe(2);
     expect(r.componentes[2].quantidade).toBe(4);
@@ -47,7 +49,7 @@ describe('calculadora de trilhos especiais', () => {
   });
 
   it('informa quando um produto configurado não existe no catálogo local', () => {
-    expect(() => calcularComposicaoTrilho(calculadora, 3, 1, 0, produtos.slice(0, 1)))
+    expect(() => calcularComposicaoTrilho(calculadora, 'motorizada', 3, 1, 0, produtos.slice(0, 1)))
       .toThrow(/AC-002.*não foi encontrado/i);
   });
 });

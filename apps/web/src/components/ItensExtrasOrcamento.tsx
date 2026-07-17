@@ -18,6 +18,7 @@ export interface ProdutoCatalogoOrcamento {
 export interface ItemExtraPayload {
   produto_id?: string;
   calculadora_id?: string;
+  variante_id?: string;
   ambiente?: string;
   largura?: number;
   quantidade: number;

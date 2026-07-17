@@ -3,10 +3,11 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBan, faCircleCheck, faCopy, faCubes, faFloppyDisk, faPen, faPlus, faRotateLeft, faSliders as faSlidersIcon, faSpinner, faTrash, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
-import type { CalculadoraTrilhoEspecial, ComponenteCalculadoraTrilho } from '../../lib/calcTypes';
+import type { CalculadoraTrilhoEspecial, ComponenteCalculadoraTrilho, VarianteCalculadoraTrilho } from '../../lib/calcTypes';
 import { invalidarCacheado } from '../../lib/dadosCache';
 
 const componenteVazio = (): ComponenteCalculadoraTrilho => ({ codigo_interno: '', descricao: '', qtd: 'LARGURA' });
+const varianteVazia = (id: string = crypto.randomUUID()): VarianteCalculadoraTrilho => ({ id, nome: 'Nova variante', motorizado: false, componentes: [componenteVazio()] });
 
 export function CalculadorasTrilhoEspecial() {
   const { showToast } = useToast();
@@ -15,6 +16,7 @@ export function CalculadorasTrilhoEspecial() {
   const [criando, setCriando] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [varianteAtiva, setVarianteAtiva] = useState('padrao');
 
   async function carregar() {
     setCarregando(true);
@@ -47,17 +49,21 @@ export function CalculadorasTrilhoEspecial() {
   }
 
   function iniciarNova() {
-    setEditando({ id: '', nome: '', db_tipo_produto: 'trilho_especial', ativo: true, motorizado: false, componentes: [componenteVazio()] });
+    setEditando({ id: '', nome: '', db_tipo_produto: 'trilho_especial', ativo: true, componentes: [], variantes: [varianteVazia('padrao')] });
+    setVarianteAtiva('padrao');
     setCriando(true);
   }
 
   function iniciarEdicao(calc: CalculadoraTrilhoEspecial) {
     setEditando(JSON.parse(JSON.stringify(calc)));
+    setVarianteAtiva(calc.variantes?.[0]?.id ?? 'padrao');
     setCriando(false);
   }
 
   function duplicar(calc: CalculadoraTrilhoEspecial) {
-    setEditando({ ...JSON.parse(JSON.stringify(calc)), id: `${calc.id}_copia`, nome: `${calc.nome} (Cópia)`, ativo: true });
+    const copia = JSON.parse(JSON.stringify(calc)) as CalculadoraTrilhoEspecial;
+    setEditando({ ...copia, id: `${calc.id}_copia`, nome: `${calc.nome} (Cópia)`, ativo: true });
+    setVarianteAtiva(copia.variantes?.[0]?.id ?? 'padrao');
     setCriando(true);
   }
 
@@ -67,11 +73,12 @@ export function CalculadorasTrilhoEspecial() {
       showToast('warning', 'Dados obrigatórios', 'Informe o identificador e o nome da calculadora.');
       return;
     }
-    if (editando.componentes.length === 0) {
-      showToast('warning', 'Produtos necessários', 'Adicione ao menos um produto à composição.');
+    const variantes = editando.variantes ?? [];
+    if (variantes.length === 0) {
+      showToast('warning', 'Variantes necessárias', 'Adicione ao menos uma variante ao modelo.');
       return;
     }
-    if (editando.componentes.some((c) => !c.codigo_interno.trim() || !c.descricao.trim() || !c.qtd.trim())) {
+    if (variantes.some((v) => !v.nome.trim() || v.componentes.length === 0 || v.componentes.some((c) => !c.codigo_interno.trim() || !c.descricao.trim() || !c.qtd.trim()))) {
       showToast('warning', 'Composição incompleta', 'Preencha código, descrição e fórmula de todos os produtos.');
       return;
     }
@@ -80,14 +87,21 @@ export function CalculadorasTrilhoEspecial() {
       return;
     }
     const lista = criando
-      ? [...calculadoras, editando]
-      : calculadoras.map((c) => c.id === editando.id ? editando : c);
+      ? [...calculadoras, { ...editando, componentes: variantes[0].componentes }]
+      : calculadoras.map((c) => c.id === editando.id ? { ...editando, componentes: variantes[0].componentes } : c);
     void salvar(lista);
+  }
+
+  function atualizarVariante(id: string, patch: Partial<VarianteCalculadoraTrilho>) {
+    if (!editando) return;
+    setEditando({ ...editando, variantes: (editando.variantes ?? []).map((v) => v.id === id ? { ...v, ...patch } : v) });
   }
 
   function atualizarComponente(index: number, patch: Partial<ComponenteCalculadoraTrilho>) {
     if (!editando) return;
-    setEditando({ ...editando, componentes: editando.componentes.map((c, i) => i === index ? { ...c, ...patch } : c) });
+    const variante = (editando.variantes ?? []).find((v) => v.id === varianteAtiva);
+    if (!variante) return;
+    atualizarVariante(variante.id, { componentes: variante.componentes.map((c, i) => i === index ? { ...c, ...patch } : c) });
   }
 
   async function restaurar() {
@@ -107,6 +121,8 @@ export function CalculadorasTrilhoEspecial() {
   if (carregando) return <div className="text-neutral-500"><FontAwesomeIcon icon={faSpinner} spin /> Carregando calculadoras…</div>;
 
   if (editando) {
+    const variantes = editando.variantes ?? [];
+    const variante = variantes.find((v) => v.id === varianteAtiva) ?? variantes[0];
     return (
       <div className="card p-6">
         <div className="flex justify-between items-center mb-6 pb-2 border-b border-neutral-200">
@@ -126,10 +142,6 @@ export function CalculadorasTrilhoEspecial() {
               <label className="form-label">Nome de Exibição<span className="label-required">*</span></label>
               <input className="input" value={editando.nome} placeholder="ex: Trilho Wave" onChange={(e) => setEditando({ ...editando, nome: e.target.value })} />
             </div>
-            <label className="flex items-start gap-2 cursor-pointer text-sm-ui text-neutral-700">
-              <input type="checkbox" className="mt-0.5" checked={editando.motorizado === true} onChange={(e) => setEditando({ ...editando, motorizado: e.target.checked })} />
-              <span><span className="font-medium">Trilho motorizado</span><span className="block text-xs-ui text-neutral-500 mt-0.5">Ao exportar, o GestãoClick receberá apenas o nome do produto, sem a descrição técnica da composição.</span></span>
-            </label>
             <div className="alert alert-info text-xs-ui">
               As fórmulas podem usar <span className="font-mono">LARGURA</span> e <span className="font-mono">EMENDAS</span>. Para o produto da emenda, use apenas <span className="font-mono">EMENDAS</span>.
             </div>
@@ -137,12 +149,20 @@ export function CalculadorasTrilhoEspecial() {
 
           <div className="lg:col-span-2 space-y-4">
             <div className="flex justify-between items-center">
-              <h4 className="text-md-ui font-semibold text-neutral-700"><FontAwesomeIcon icon={faCubes} /> Produtos da composição</h4>
-              <button type="button" className="btn btn-default btn-xs" onClick={() => setEditando({ ...editando, componentes: [...editando.componentes, componenteVazio()] })}><FontAwesomeIcon icon={faPlus} /> Adicionar produto</button>
+              <h4 className="text-md-ui font-semibold text-neutral-700"><FontAwesomeIcon icon={faCubes} /> Fórmulas e componentes por variante</h4>
+              <button type="button" className="btn btn-default btn-xs" onClick={() => { const nova = varianteVazia(); setEditando({ ...editando, variantes: [...variantes, nova] }); setVarianteAtiva(nova.id); }}><FontAwesomeIcon icon={faPlus} /> Adicionar variante</button>
             </div>
-            <div className="text-xs-ui text-neutral-500">Cada linha representa um produto do Gestão Click. A quantidade pode ser calculada pela largura ou pelo número de emendas informado no orçamento.</div>
+            <div className="flex flex-wrap gap-2 border-b border-neutral-300 pb-2">
+              {variantes.map((v) => <button key={v.id} type="button" className={`btn btn-xs ${v.id === variante?.id ? 'btn-primary' : 'btn-default'}`} onClick={() => setVarianteAtiva(v.id)}><span className="w-2 h-2 rounded-full mr-1 inline-block bg-success" />{v.nome || 'Sem nome'}</button>)}
+            </div>
+            {variante && <>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-neutral-50 border border-neutral-300 rounded-sm p-3">
+                <div className="md:col-span-2"><label className="form-label">Nome da variante<span className="label-required">*</span></label><input className="input" value={variante.nome} placeholder="ex: Motorizado central" onChange={(e) => atualizarVariante(variante.id, { nome: e.target.value })} /></div>
+                <label className="flex items-center gap-2 mt-6 cursor-pointer text-sm-ui text-neutral-700"><input type="checkbox" checked={variante.motorizado === true} onChange={(e) => atualizarVariante(variante.id, { motorizado: e.target.checked })} /><span>Trilho motorizado</span></label>
+              </div>
+              <div className="flex justify-between items-center"><div className="text-xs-ui text-neutral-500">Cada linha representa um produto do Gestão Click. Variantes motorizadas são exportadas somente com o nome.</div><button type="button" className="btn btn-default btn-xs" onClick={() => atualizarVariante(variante.id, { componentes: [...variante.componentes, componenteVazio()] })}><FontAwesomeIcon icon={faPlus} /> Adicionar produto</button></div>
             <div className="space-y-3">
-              {editando.componentes.map((componente, index) => (
+              {variante.componentes.map((componente, index) => (
                 <div key={index} className="border border-neutral-300 rounded-sm bg-neutral-50 p-3">
                   <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                     <div className="md:col-span-3">
@@ -157,11 +177,13 @@ export function CalculadorasTrilhoEspecial() {
                       <label className="form-label">Fórmula da quantidade<span className="label-required">*</span></label>
                       <input className="input font-mono" value={componente.qtd} placeholder="LARGURA" onChange={(e) => atualizarComponente(index, { qtd: e.target.value })} />
                     </div>
-                    <button type="button" className="text-error hover:opacity-80 md:col-span-1 pb-2" title="Remover produto" onClick={() => setEditando({ ...editando, componentes: editando.componentes.filter((_, i) => i !== index) })}><FontAwesomeIcon icon={faTrash} /></button>
+                    <button type="button" className="text-error hover:opacity-80 md:col-span-1 pb-2" title="Remover produto" onClick={() => atualizarVariante(variante.id, { componentes: variante.componentes.filter((_, i) => i !== index) })}><FontAwesomeIcon icon={faTrash} /></button>
                   </div>
                 </div>
               ))}
             </div>
+            {variantes.length > 1 && <button type="button" className="text-error hover:opacity-80 text-xs-ui self-start" onClick={() => { const restantes = variantes.filter((v) => v.id !== variante.id); setEditando({ ...editando, variantes: restantes }); setVarianteAtiva(restantes[0]?.id ?? ''); }}><FontAwesomeIcon icon={faTrash} /> Remover esta variante</button>}
+            </>}
           </div>
         </div>
 
@@ -183,7 +205,7 @@ export function CalculadorasTrilhoEspecial() {
         {calculadoras.map((calc) => {
           const ativa = calc.ativo !== false;
           return <div key={calc.id} className="card p-4 flex flex-col justify-between" style={{ opacity: ativa ? 1 : 0.62 }}>
-            <div><div className="flex justify-between items-start mb-2"><div className="font-bold text-md-ui text-neutral-800">{calc.nome}{calc.motorizado && <span className="badge badge-primary ml-2">Motorizado</span>}{!ativa && <span className="badge badge-secondary ml-2">Inativa</span>}</div><span className="text-2xs-ui bg-neutral-200 px-2 py-0.5 rounded-sm font-mono text-neutral-600">ID: {calc.id}</span></div><p className="text-xs-ui text-neutral-500 mb-4">{calc.componentes.length} produto(s) · cálculo por largura</p></div>
+            <div><div className="flex justify-between items-start mb-2"><div className="font-bold text-md-ui text-neutral-800">{calc.nome}{!ativa && <span className="badge badge-secondary ml-2">Inativa</span>}</div><span className="text-2xs-ui bg-neutral-200 px-2 py-0.5 rounded-sm font-mono text-neutral-600">ID: {calc.id}</span></div><p className="text-xs-ui text-neutral-500 mb-4">{calc.variantes?.length ?? 1} variante(s) · cálculo por largura</p></div>
             <div className="flex flex-wrap gap-2 border-t border-neutral-200 pt-3"><button className="btn btn-default btn-xs flex-1" onClick={() => iniciarEdicao(calc)}><FontAwesomeIcon icon={faPen} /> Editar</button><button className="btn btn-default btn-xs text-primary flex-1" onClick={() => duplicar(calc)}><FontAwesomeIcon icon={faCopy} /> Duplicar</button><button className={`btn btn-default btn-xs flex-1 ${ativa ? 'text-warning' : 'text-success'}`} onClick={() => void salvar(calculadoras.map((c) => c.id === calc.id ? { ...c, ativo: !ativa } : c))}><FontAwesomeIcon icon={ativa ? faBan : faCircleCheck} /> {ativa ? 'Inativar' : 'Reativar'}</button><button className="btn btn-default btn-xs text-error flex-1" onClick={() => { if (window.confirm('Deseja realmente excluir esta calculadora?')) void salvar(calculadoras.filter((c) => c.id !== calc.id)); }}><FontAwesomeIcon icon={faTrash} /> Excluir</button></div>
           </div>;
         })}

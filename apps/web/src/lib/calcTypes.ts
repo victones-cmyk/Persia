@@ -66,12 +66,20 @@ export interface ComponenteCalculadoraTrilho {
   qtd: string;
 }
 
+export interface VarianteCalculadoraTrilho {
+  id: string;
+  nome: string;
+  motorizado?: boolean;
+  componentes: ComponenteCalculadoraTrilho[];
+}
+
 export interface CalculadoraTrilhoEspecial {
   id: string;
   nome: string;
   db_tipo_produto: 'trilho_especial';
   ativo?: boolean;
   motorizado?: boolean;
+  variantes?: VarianteCalculadoraTrilho[];
   componentes: ComponenteCalculadoraTrilho[];
 }
 
