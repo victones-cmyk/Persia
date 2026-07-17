@@ -57,10 +57,9 @@ function normalizarProduto(p: GcProduto): ProdutoCatalogoOrcamento {
 
 export async function listarProdutosParaOrcamento(q = ''): Promise<ProdutoCatalogoOrcamento[]> {
   const termo = q.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  // Produtos avulsos podem vir de qualquer grupo. O catálogo local é restrito
-  // aos grupos usados nos cálculos, então aqui consultamos todas as páginas do
-  // GestãoClick para não esconder produtos válidos do vendedor.
-  const produtos = await listarProdutosRemoto({ ativo: 1 });
+  // A sincronização local contém o catálogo completo. A consulta remota fica
+  // apenas como contingência quando a base local ainda não foi inicializada.
+  const produtos = await listarProdutos({ ativo: 1 });
   return produtos
     .map(normalizarProduto)
     .filter((p) => {

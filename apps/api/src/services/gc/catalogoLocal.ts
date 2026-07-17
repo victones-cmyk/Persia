@@ -25,6 +25,7 @@ export interface StatusCatalogoLocal {
   ultima_sync_em: string | null;
   em_andamento: boolean;
   sucesso: boolean | null;
+  catalogo_completo: boolean;
   total_produtos: number;
   grupos: number;
   erro: string | null;
@@ -123,6 +124,7 @@ export async function statusCatalogoLocal(): Promise<StatusCatalogoLocal> {
     ultima_sync_em: null,
     em_andamento: Boolean(sincronizacaoEmAndamento),
     sucesso: null,
+    catalogo_completo: false,
     total_produtos: total,
     grupos: gruposCatalogo().length,
     erro: null,
@@ -199,10 +201,12 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
   const inicioDate = new Date();
   const inicio = inicioDate.toISOString();
   const grupos = gruposCatalogo();
+  const statusAnterior = await statusCatalogoLocal();
   await salvarStatus({
     ultima_sync_em: null,
     em_andamento: true,
     sucesso: null,
+    catalogo_completo: statusAnterior.catalogo_completo,
     total_produtos: await prisma.gcProdutoLocal.count(),
     grupos: grupos.length,
     erro: null,
@@ -211,6 +215,14 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
   try {
     const porId = new Map<string, GcProduto>();
     const gruposPorProduto = new Map<string, Set<string>>();
+
+    // O catálogo completo abastece produtos avulsos e também serve de base para
+    // todos os cálculos. As consultas por grupo abaixo preservam o vínculo com
+    // grupos-pai retornado pelo GestãoClick para os filtros das calculadoras.
+    const todosProdutos = await listarProdutosRemoto({ ativo: 1 });
+    for (const produto of todosProdutos) {
+      porId.set(String(produto.id), produto);
+    }
     for (const grupoId of grupos) {
       const produtos = await listarProdutosRemoto({ grupo_id: grupoId, ativo: 1 });
       for (const produto of produtos) {
@@ -223,44 +235,51 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
 
     const agora = new Date();
     let salvos = 0;
-    for (const p of porId.values()) {
-      const gruposSync = [...(gruposPorProduto.get(String(p.id)) ?? new Set<string>())];
-      const rawComSync = { ...p, __catalogo_grupo_ids: gruposSync };
-      await prisma.gcProdutoLocal.upsert({
-        where: { id: String(p.id) },
-        create: {
-          id: String(p.id),
-          nome: p.nome,
-          codigo_interno: String(p.codigo_interno ?? '').trim() || null,
-          ativo: String(p.ativo) !== '0',
-          grupo_id: String(p.grupo_id ?? '') || null,
-          nome_grupo: p.nome_grupo || null,
-          largura: String(p.largura ?? '') || null,
-          valor_venda: new Prisma.Decimal(Number(p.valor_venda) || 0),
-          valores: jsonValue(p.valores ?? []),
-          atributos: jsonValue(p.atributos ?? []),
-          raw_json: jsonValue(rawComSync),
-          sincronizado_em: agora,
-        },
-        update: {
-          nome: p.nome,
-          codigo_interno: String(p.codigo_interno ?? '').trim() || null,
-          ativo: String(p.ativo) !== '0',
-          grupo_id: String(p.grupo_id ?? '') || null,
-          nome_grupo: p.nome_grupo || null,
-          largura: String(p.largura ?? '') || null,
-          valor_venda: new Prisma.Decimal(Number(p.valor_venda) || 0),
-          valores: jsonValue(p.valores ?? []),
-          atributos: jsonValue(p.atributos ?? []),
-          raw_json: jsonValue(rawComSync),
-          sincronizado_em: agora,
-        },
-      });
-      salvos += 1;
+    const produtosCatalogo = [...porId.values()];
+    const tamanhoLote = 10;
+    for (let inicioLote = 0; inicioLote < produtosCatalogo.length; inicioLote += tamanhoLote) {
+      const lote = produtosCatalogo.slice(inicioLote, inicioLote + tamanhoLote);
+      await Promise.all(lote.map(async (p) => {
+        const gruposSync = [...(gruposPorProduto.get(String(p.id)) ?? new Set<string>())];
+        const rawComSync = { ...p, __catalogo_grupo_ids: gruposSync };
+        await prisma.gcProdutoLocal.upsert({
+          where: { id: String(p.id) },
+          create: {
+            id: String(p.id),
+            nome: p.nome,
+            codigo_interno: String(p.codigo_interno ?? '').trim() || null,
+            ativo: String(p.ativo) !== '0',
+            grupo_id: String(p.grupo_id ?? '') || null,
+            nome_grupo: p.nome_grupo || null,
+            largura: String(p.largura ?? '') || null,
+            valor_venda: new Prisma.Decimal(Number(p.valor_venda) || 0),
+            valores: jsonValue(p.valores ?? []),
+            atributos: jsonValue(p.atributos ?? []),
+            raw_json: jsonValue(rawComSync),
+            sincronizado_em: agora,
+          },
+          update: {
+            nome: p.nome,
+            codigo_interno: String(p.codigo_interno ?? '').trim() || null,
+            ativo: String(p.ativo) !== '0',
+            grupo_id: String(p.grupo_id ?? '') || null,
+            nome_grupo: p.nome_grupo || null,
+            largura: String(p.largura ?? '') || null,
+            valor_venda: new Prisma.Decimal(Number(p.valor_venda) || 0),
+            valores: jsonValue(p.valores ?? []),
+            atributos: jsonValue(p.atributos ?? []),
+            raw_json: jsonValue(rawComSync),
+            sincronizado_em: agora,
+          },
+        });
+      }));
+      salvos += lote.length;
     }
 
     const inativados = await prisma.gcProdutoLocal.updateMany({
-      where: { sincronizado_em: { lt: agora }, grupo_id: { in: grupos } },
+      // Como a primeira consulta representa TODOS os produtos ativos, qualquer
+      // registro não visto nesta execução deixou de estar ativo no catálogo.
+      where: { sincronizado_em: { lt: agora } },
       data: { ativo: false, sincronizado_em: agora },
     });
 
@@ -277,6 +296,7 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
       ultima_sync_em: resumo.fim,
       em_andamento: false,
       sucesso: true,
+      catalogo_completo: true,
       total_produtos: await prisma.gcProdutoLocal.count(),
       grupos: grupos.length,
       erro: null,
@@ -297,6 +317,7 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
       ultima_sync_em: null,
       em_andamento: false,
       sucesso: false,
+      catalogo_completo: statusAnterior.catalogo_completo,
       total_produtos: await prisma.gcProdutoLocal.count(),
       grupos: grupos.length,
       erro: resumo.erro ?? null,
@@ -353,11 +374,31 @@ async function sincronizarSeMeiaNoite(): Promise<void> {
   }
 }
 
+async function sincronizarCatalogoCompletoAoIniciar(): Promise<void> {
+  const status = await statusCatalogoLocal();
+  if (status.catalogo_completo) {
+    await sincronizarSeMeiaNoite();
+    return;
+  }
+
+  const resumo = await sincronizarCatalogoLocal();
+  if (resumo.sucesso) {
+    const local = dataLocalSaoPaulo();
+    await prisma.configuracao.upsert({
+      where: { chave: CHAVE_SYNC_DIARIA },
+      create: { chave: CHAVE_SYNC_DIARIA, valor: local.data, descricao: 'Último dia da sincronização diária do catálogo GC' },
+      update: { valor: local.data },
+    });
+  }
+}
+
 export function iniciarAgendadorCatalogoLocal(): void {
   if (agendadorIniciado) return;
   agendadorIniciado = true;
   setInterval(() => {
     void sincronizarSeMeiaNoite();
   }, 15 * 60 * 1000).unref();
-  void sincronizarSeMeiaNoite();
+  // Versões antigas armazenavam apenas os grupos técnicos. Após o deploy desta
+  // versão, a primeira inicialização completa o catálogo automaticamente.
+  void sincronizarCatalogoCompletoAoIniciar();
 }
