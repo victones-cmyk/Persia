@@ -33,6 +33,8 @@ import { linhaInstalacaoBreakdown, componenteInstalacao } from '../services/calc
 import { listarAcessoriosCortina, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo } from '../services/gc/acessorios';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { listarProdutosParaOrcamento } from '../services/calc/itensExtras';
+import { calcularTrilhoEspecial } from '../services/calc/itensExtras';
+import { getCalculadorasTrilhoEspecialAtivas } from '../services/calc/calculadorasTrilhoEspecial';
 import { AppError } from '../middleware/errorHandler';
 
 /** GET /api/calcular/tecidos?tipo=persiana_rolo_blackout — tecidos reais do GestãoClick. */
@@ -73,6 +75,15 @@ export async function listarProdutosOrcamentoController(req: Request, res: Respo
   const q = String(req.query.q ?? '').trim();
   const produtos = await listarProdutosParaOrcamento(q);
   res.json({ produtos });
+}
+
+export async function listarCalculadorasTrilhoEspecialController(_req: Request, res: Response): Promise<void> {
+  res.json({ calculadoras: getCalculadorasTrilhoEspecialAtivas() });
+}
+
+export async function calcularTrilhoEspecialController(req: Request, res: Response): Promise<void> {
+  const b = req.body ?? {};
+  res.json({ resultado: await calcularTrilhoEspecial(String(b.calculadora_id ?? ''), b.largura, b.quantidade) });
 }
 
 /**

@@ -120,7 +120,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const produtosEnvio: LinhaProduto[] = [
     ...persPrep.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
     ...cortPrep.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
-    ...extrasPrep.map((p) => ({ gc_produto_id: p.produto_id, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+    ...extrasPrep.map((p) => ({ gc_produto_id: p.tipo === 'produto_avulso' ? p.produto_id : null, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
   ];
 
   const entradaJson = { tipo: persPrep[0]?.tipo ?? null, itens: itensEntrada, cortinas: cortinasEntrada, trilhos_especiais: trilhosEntrada, produtos_avulsos: avulsosEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue;
@@ -244,12 +244,15 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
   const trilhosPrep = trilhosEntrada.length > 0 ? await prepararTrilhosEspeciais(trilhosEntrada) : [];
   const avulsosPrep = avulsosEntrada.length > 0 ? await prepararProdutosAvulsos(avulsosEntrada) : [];
   const extrasPrep = [...trilhosPrep, ...avulsosPrep];
+  if (rtPct > 0) {
+    for (const p of extrasPrep) p.valor_final = valorComRt(p.valor_final, rtPct);
+  }
 
   const produtos: LinhaProduto[] = recalcular
     ? [
         ...(persPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
         ...(cortPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
-        ...extrasPrep.map((p) => ({ gc_produto_id: p.produto_id, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+        ...extrasPrep.map((p) => ({ gc_produto_id: p.tipo === 'produto_avulso' ? p.produto_id : null, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
       ]
     : [
         ...persSnaps.map((s) => ({ nome_produto: s.nome_produto, descricao_produto: s.descricao_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) })),

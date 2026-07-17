@@ -17,6 +17,7 @@ import { api, ApiError } from '../lib/api';
 import { PersianaForm } from '../components/PersianaForm';
 import { CortinaOrcamento, type CortinaOrcamentoEstado } from '../components/CortinaOrcamento';
 import { ItensExtrasOrcamento, type ItensExtrasEstado } from '../components/ItensExtrasOrcamento';
+import { TrilhosEspeciaisOrcamento } from '../components/TrilhosEspeciaisOrcamento';
 import { ClienteSearch } from '../components/ClienteSearch';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { formatBRL, roundHalfUp } from '../lib/formatacao';
@@ -48,7 +49,7 @@ function cortinaSnapTemConteudo(s?: CortinaSnapshot | null): boolean {
     c.modelo || c.fixacao || c.largura || c.altura || c.tamanhoBarra || (c.camadas?.some((ca) => ca.tecidoId || ca.franzido))) ?? false;
 }
 function extrasSnapTemConteudo(s?: ProdutoExtraSnap[] | null): boolean {
-  return s?.some((it) => it.produto_id || it.ambiente || it.largura || it.observacao || it.quantidade !== '1') ?? false;
+  return s?.some((it) => it.produto_id || it.calculadora_id || it.ambiente || it.largura || it.observacao || it.quantidade !== '1') ?? false;
 }
 
 export function OrcamentoNovo() {
@@ -132,7 +133,7 @@ export function OrcamentoNovo() {
     if (editarId) return; // em edição não há autosave local
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      if (!persianaSujoRef.current && !cortinaSujoRef.current) { limparRascunhoLocal(); return; }
+      if (!persianaSujoRef.current && !cortinaSujoRef.current && !trilhoSujoRef.current && !avulsoSujoRef.current) { limparRascunhoLocal(); return; }
       const cli = clienteRef.current;
       const r: RascunhoLocal = {
         tipo: 'misto',
@@ -306,7 +307,7 @@ export function OrcamentoNovo() {
   const trilhoTotal = trilhoEstado.total;
   const temAvulso = avulsoEstado.count > 0;
   const avulsoTotal = avulsoEstado.total;
-  const calculandoOrcamento = persianaCalculando || cortinaEstado.calculando;
+  const calculandoOrcamento = persianaCalculando || cortinaEstado.calculando || trilhoEstado.calculando === true;
 
   const algoPreenchido = temPersiana || temCortina || temTrilho || temAvulso;
   // Instalação já está embutida no valor de cada item (Victor 26/06/2026).
@@ -535,7 +536,7 @@ export function OrcamentoNovo() {
               <section key="trilho">
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faGripLines} className="text-neutral-500" /> Trilhos especiais</h2>
                 {prontoEdicao && (
-                  <ItensExtrasOrcamento titulo="Trilhos especiais" modo="trilho" inicial={rascunhoLocal?.trilhos_especiais ?? trilhoSnapRef.current ?? undefined} onEstado={setTrilhoEstado} onSnapshot={onSnapTrilho} onDirtyChange={onDirtyTrilho} />
+                  <TrilhosEspeciaisOrcamento inicial={rascunhoLocal?.trilhos_especiais ?? trilhoSnapRef.current ?? undefined} onEstado={setTrilhoEstado} onSnapshot={onSnapTrilho} onDirtyChange={onDirtyTrilho} />
                 )}
               </section>
             );
@@ -601,11 +602,11 @@ export function OrcamentoNovo() {
             <input id="total-misto" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}
               value={calculandoOrcamento ? 'Calculando...' : formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
 
-            {!algoPreenchido && <div className="alert alert-info mb-3 text-xs-ui"><span>Adicione ao menos uma <strong>persiana</strong> ou <strong>cortina</strong>.</span></div>}
+            {!algoPreenchido && <div className="alert alert-info mb-3 text-xs-ui"><span>Preencha ao menos um item das seções selecionadas.</span></div>}
             {algoPreenchido && usuario?.perfil === 'admin' && !lojaId && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione a <strong>Loja / Filial</strong> no topo.</span></div>}
             {temPersiana && persianaIncompleto && <div className="alert alert-warning mb-3 text-xs-ui"><span>Há <strong>persiana</strong> com campos obrigatórios em branco.</span></div>}
             {temCortina && !cortinaCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Escolha o <strong>produto de cada acessório</strong> em todas as cortinas.</span></div>}
-            {incluiTrilho && !trilhoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Complete produto, largura e quantidade dos <strong>trilhos especiais</strong>.</span></div>}
+            {incluiTrilho && !trilhoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Selecione a calculadora e complete largura e quantidade dos <strong>trilhos especiais</strong>.</span></div>}
             {incluiAvulso && !avulsoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Complete produto e quantidade dos <strong>produtos avulsos</strong>.</span></div>}
             {calculandoOrcamento && <div className="alert alert-info mb-3 text-xs-ui"><span>Aguarde o cálculo terminar para salvar ou enviar.</span></div>}
             {algoPreenchido && conteudoValido && !cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar (ou use <strong>Salvar</strong>).</span></div>}

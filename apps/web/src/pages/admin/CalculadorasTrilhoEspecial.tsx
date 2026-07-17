@@ -4,6 +4,7 @@ import { faBan, faCircleCheck, faCopy, faCubes, faFloppyDisk, faPen, faPlus, faR
 import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import type { CalculadoraTrilhoEspecial, ComponenteCalculadoraTrilho } from '../../lib/calcTypes';
+import { invalidarCacheado } from '../../lib/dadosCache';
 
 const componenteVazio = (): ComponenteCalculadoraTrilho => ({ codigo_interno: '', descricao: '', qtd: 'LARGURA' });
 
@@ -34,6 +35,7 @@ export function CalculadorasTrilhoEspecial() {
     try {
       const r = await api.put<{ calculadoras: CalculadoraTrilhoEspecial[] }>('/admin/calculadoras-trilho-especial', { calculadoras: lista });
       setCalculadoras(r.calculadoras);
+      invalidarCacheado('calculadoras-trilho-especial-v1');
       setEditando(null);
       setCriando(false);
       showToast('success', 'Calculadoras de trilhos salvas', 'As novas composições já estão disponíveis para uso.');
@@ -93,6 +95,7 @@ export function CalculadorasTrilhoEspecial() {
     try {
       const r = await api.put<{ calculadoras: CalculadoraTrilhoEspecial[] }>('/admin/calculadoras-trilho-especial', { calculadoras: null });
       setCalculadoras(r.calculadoras);
+      invalidarCacheado('calculadoras-trilho-especial-v1');
       showToast('success', 'Padrões restaurados', 'As calculadoras de trilhos especiais foram limpas.');
     } catch (e) {
       showToast('error', 'Falha ao restaurar padrões', e instanceof ApiError ? e.message : '');

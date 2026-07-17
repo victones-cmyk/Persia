@@ -16,7 +16,8 @@ export interface ProdutoCatalogoOrcamento {
   valor_custo: number;
 }
 export interface ItemExtraPayload {
-  produto_id: string;
+  produto_id?: string;
+  calculadora_id?: string;
   ambiente?: string;
   largura?: number;
   quantidade: number;
@@ -28,6 +29,7 @@ export interface ItensExtrasEstado {
   count: number;
   completos: boolean;
   itens: ItemExtraPayload[];
+  calculando?: boolean;
 }
 
 interface LinhaState {

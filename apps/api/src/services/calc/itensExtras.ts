@@ -2,6 +2,8 @@ import { listarProdutos, listarProdutosRemoto, type GcProduto } from '../gc/cata
 import { precoByTier } from '../gc/tecidos';
 import { roundHalfUp } from './arredondamento';
 import { AppError } from '../../middleware/errorHandler';
+import { encontrarCalculadoraTrilhoEspecial, type CalculadoraTrilhoEspecial } from './calculadorasTrilhoEspecial';
+import { evalQuantidade } from './formula';
 
 export interface ProdutoCatalogoOrcamento {
   id: string;
@@ -21,7 +23,8 @@ export interface ProdutoAvulsoEntrada {
 }
 
 export interface TrilhoEspecialEntrada {
-  produto_id: string;
+  calculadora_id?: string;
+  produto_id?: string; // legado: trilhos salvos antes da integração com as calculadoras
   largura: number;
   quantidade: number;
   ambiente?: string;
@@ -40,6 +43,29 @@ export interface ItemExtraPreparado {
   valor_custo: number;
   ambiente: string;
   observacao: string;
+}
+
+export interface ComponenteTrilhoCalculado {
+  produto_id: string;
+  codigo_interno: string;
+  nome: string;
+  formula: string;
+  quantidade: number;
+  preco_venda: number;
+  valor_custo: number;
+  subtotal: number;
+  subtotal_custo: number;
+}
+
+export interface CalculoTrilhoEspecial {
+  calculadora_id: string;
+  nome: string;
+  largura: number;
+  quantidade: number;
+  componentes: ComponenteTrilhoCalculado[];
+  valor_unitario: number;
+  valor_total: number;
+  custo_total: number;
 }
 
 function normalizarProduto(p: GcProduto): ProdutoCatalogoOrcamento {
@@ -79,6 +105,63 @@ async function buscarProdutoParaOrcamento(id: string): Promise<ProdutoCatalogoOr
   return normalizarProduto(localOuRemoto);
 }
 
+export function calcularComposicaoTrilho(
+  calculadora: CalculadoraTrilhoEspecial,
+  largura: number,
+  quantidade: number,
+  produtos: ProdutoCatalogoOrcamento[],
+): CalculoTrilhoEspecial {
+  const porCodigo = new Map(produtos.map((p) => [p.codigo_interno.trim().toLowerCase(), p]));
+  const componentes = calculadora.componentes.map((componente) => {
+    const codigo = componente.codigo_interno.trim();
+    const produto = porCodigo.get(codigo.toLowerCase());
+    if (!produto) {
+      throw new AppError(400, 'COMPONENTE_NAO_ENCONTRADO', `O produto de código "${codigo}" da calculadora "${calculadora.nome}" não foi encontrado no catálogo local.`);
+    }
+    let quantidadeFormula: number;
+    try {
+      quantidadeFormula = roundHalfUp(evalQuantidade(componente.qtd, { largura, altura: 0, tc: 0 }), 4);
+    } catch (e) {
+      throw new AppError(400, 'FORMULA_TRILHO_INVALIDA', e instanceof Error ? e.message : `Fórmula inválida em "${componente.descricao}".`);
+    }
+    if (!(quantidadeFormula > 0)) {
+      throw new AppError(400, 'QUANTIDADE_TRILHO_INVALIDA', `A fórmula de "${componente.descricao}" resultou em uma quantidade inválida.`);
+    }
+    const quantidadeTotal = roundHalfUp(quantidadeFormula * quantidade, 4);
+    return {
+      produto_id: produto.id,
+      codigo_interno: produto.codigo_interno,
+      nome: produto.nome,
+      formula: componente.qtd,
+      quantidade: quantidadeTotal,
+      preco_venda: produto.preco_venda,
+      valor_custo: produto.valor_custo,
+      subtotal: roundHalfUp(produto.preco_venda * quantidadeTotal),
+      subtotal_custo: roundHalfUp(produto.valor_custo * quantidadeTotal),
+    };
+  });
+  const valorTotal = roundHalfUp(componentes.reduce((s, c) => s + c.subtotal, 0));
+  return {
+    calculadora_id: calculadora.id,
+    nome: calculadora.nome,
+    largura,
+    quantidade,
+    componentes,
+    valor_unitario: roundHalfUp(valorTotal / quantidade),
+    valor_total: valorTotal,
+    custo_total: roundHalfUp(componentes.reduce((s, c) => s + c.subtotal_custo, 0)),
+  };
+}
+
+export async function calcularTrilhoEspecial(calculadoraId: string, larguraEntrada: unknown, quantidadeEntrada: unknown): Promise<CalculoTrilhoEspecial> {
+  const calculadora = encontrarCalculadoraTrilhoEspecial(String(calculadoraId ?? '').trim());
+  if (!calculadora) throw new AppError(400, 'CALCULADORA_TRILHO_INVALIDA', 'Selecione uma calculadora de trilho especial válida.');
+  const largura = medidaValida(larguraEntrada);
+  const quantidade = quantidadeValida(quantidadeEntrada);
+  const produtos = (await listarProdutos({ ativo: 1 })).map(normalizarProduto);
+  return calcularComposicaoTrilho(calculadora, largura, quantidade, produtos);
+}
+
 function texto(v: unknown): string {
   return String(v ?? '').trim().slice(0, 120);
 }
@@ -98,7 +181,7 @@ function medidaValida(v: unknown): number {
 export async function prepararProdutosAvulsos(entradas: ProdutoAvulsoEntrada[] = []): Promise<ItemExtraPreparado[]> {
   const out: ItemExtraPreparado[] = [];
   for (const entrada of entradas) {
-    const produto = await buscarProdutoParaOrcamento(entrada.produto_id);
+    const produto = await buscarProdutoParaOrcamento(entrada.produto_id ?? '');
     const quantidade = quantidadeValida(entrada.quantidade);
     const ambiente = texto(entrada.ambiente);
     const observacao = texto(entrada.observacao);
@@ -127,7 +210,32 @@ export async function prepararProdutosAvulsos(entradas: ProdutoAvulsoEntrada[] =
 export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[] = []): Promise<ItemExtraPreparado[]> {
   const out: ItemExtraPreparado[] = [];
   for (const entrada of entradas) {
-    const produto = await buscarProdutoParaOrcamento(entrada.produto_id);
+    if (entrada.calculadora_id) {
+      const calculo = await calcularTrilhoEspecial(entrada.calculadora_id, entrada.largura, entrada.quantidade);
+      const ambiente = texto(entrada.ambiente);
+      const observacao = texto(entrada.observacao);
+      out.push({
+        tipo: 'trilho_especial',
+        produto_id: '',
+        nome_produto: `Trilho especial ${calculo.nome}`,
+        descricao_produto: [
+          ambiente ? `Ambiente: ${ambiente}` : null,
+          `Modelo: ${calculo.nome}`,
+          `Largura: ${calculo.largura} m | Quantidade: ${calculo.quantidade}`,
+          ...calculo.componentes.map((c) => `${c.nome} (${c.codigo_interno}): ${c.quantidade} x ${c.preco_venda}`),
+          observacao ? `Obs.: ${observacao}` : null,
+        ].filter(Boolean).join('\n'),
+        quantidade: calculo.quantidade,
+        largura: calculo.largura,
+        valor_unitario: calculo.valor_unitario,
+        valor_final: calculo.valor_total,
+        valor_custo: calculo.custo_total,
+        ambiente,
+        observacao,
+      });
+      continue;
+    }
+    const produto = await buscarProdutoParaOrcamento(entrada.produto_id ?? '');
     const largura = medidaValida(entrada.largura);
     const quantidade = quantidadeValida(entrada.quantidade);
     const ambiente = texto(entrada.ambiente);
