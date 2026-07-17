@@ -32,6 +32,7 @@ import { listarInstalacoes, indiceInstalacoes, type TipoInstalacao } from '../se
 import { linhaInstalacaoBreakdown, componenteInstalacao } from '../services/calc/instalacaoCalc';
 import { listarAcessoriosCortina, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo } from '../services/gc/acessorios';
 import { roundHalfUp } from '../services/calc/arredondamento';
+import { listarProdutosParaOrcamento } from '../services/calc/itensExtras';
 import { AppError } from '../middleware/errorHandler';
 
 /** GET /api/calcular/tecidos?tipo=persiana_rolo_blackout — tecidos reais do GestãoClick. */
@@ -66,6 +67,12 @@ export async function listarComponentesController(req: Request, res: Response): 
     };
   });
   res.json({ componentes });
+}
+
+export async function listarProdutosOrcamentoController(req: Request, res: Response): Promise<void> {
+  const q = String(req.query.q ?? '').trim();
+  const produtos = await listarProdutosParaOrcamento(q);
+  res.json({ produtos });
 }
 
 /**

@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTriangleExclamation, faSpinner, faXmark, faRotateLeft, faPaperPlane, faFloppyDisk, faScroll, faLayerGroup } from '@fortawesome/free-solid-svg-icons';
+import { faTriangleExclamation, faSpinner, faXmark, faRotateLeft, faPaperPlane, faFloppyDisk, faScroll, faLayerGroup, faGripLines, faBoxOpen } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useGcHealth } from '../hooks/useGcHealth';
 import { useToast } from '../hooks/useToast';
@@ -16,6 +16,7 @@ import { useNavGuard } from '../hooks/useNavGuard';
 import { api, ApiError } from '../lib/api';
 import { PersianaForm } from '../components/PersianaForm';
 import { CortinaOrcamento, type CortinaOrcamentoEstado } from '../components/CortinaOrcamento';
+import { ItensExtrasOrcamento, type ItensExtrasEstado } from '../components/ItensExtrasOrcamento';
 import { ClienteSearch } from '../components/ClienteSearch';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { formatBRL, roundHalfUp } from '../lib/formatacao';
@@ -24,12 +25,13 @@ import type { OrcamentoCalculado, ClienteResumo, ItemInput, TipoPersiana, Cor, A
 import type { OrcamentoDetalhe, ItemSnapshot } from '../lib/orcamentoTypes';
 import {
   lerRascunhoLocal, salvarRascunhoLocal, limparRascunhoLocal,
-  type PersianaSnapshot, type CortinaSnapshot, type RascunhoLocal,
+  type PersianaSnapshot, type CortinaSnapshot, type ProdutoExtraSnap, type RascunhoLocal,
 } from '../lib/rascunhoLocal';
 
 const ESTADO_CORTINA_VAZIO: CortinaOrcamentoEstado = { total: 0, todasCompletas: false, temCortinas: false, count: 0, cortinas: [], totais: [], calculando: false };
+const ESTADO_EXTRA_VAZIO: ItensExtrasEstado = { total: 0, count: 0, completos: true, itens: [] };
 
-type Secao = 'persiana' | 'cortina';
+type Secao = 'persiana' | 'cortina' | 'trilho' | 'avulso';
 type FocoEdicaoItem = { secao: Secao; index: number } | null;
 
 // Recuperação: detecta se o rascunho local tem conteúdo real em cada seção (e não só
@@ -44,6 +46,9 @@ function cortinaSnapTemConteudo(s?: CortinaSnapshot | null): boolean {
   if (!s) return false;
   return s.cortinas?.some((c) =>
     c.modelo || c.fixacao || c.largura || c.altura || c.tamanhoBarra || (c.camadas?.some((ca) => ca.tecidoId || ca.franzido))) ?? false;
+}
+function extrasSnapTemConteudo(s?: ProdutoExtraSnap[] | null): boolean {
+  return s?.some((it) => it.produto_id || it.ambiente || it.largura || it.observacao || it.quantidade !== '1') ?? false;
 }
 
 export function OrcamentoNovo() {
@@ -76,6 +81,8 @@ export function OrcamentoNovo() {
   );
   const [resultado, setResultado] = useState<OrcamentoCalculado | null>(null); // persiana
   const [cortinaEstado, setCortinaEstado] = useState<CortinaOrcamentoEstado>(ESTADO_CORTINA_VAZIO);
+  const [trilhoEstado, setTrilhoEstado] = useState<ItensExtrasEstado>(ESTADO_EXTRA_VAZIO);
+  const [avulsoEstado, setAvulsoEstado] = useState<ItensExtrasEstado>(ESTADO_EXTRA_VAZIO);
   const [persianaCalculando, setPersianaCalculando] = useState(false);
   // O vendedor escolhe o que incluir; cada seção só aparece quando marcada e na
   // ORDEM em que foi selecionada (a 1ª escolhida fica em cima).
@@ -83,10 +90,14 @@ export function OrcamentoNovo() {
     const o: Secao[] = [];
     if (persianaSnapTemConteudo(rascunhoLocal?.persiana)) o.push('persiana');
     if (cortinaSnapTemConteudo(rascunhoLocal?.cortina)) o.push('cortina');
+    if (extrasSnapTemConteudo(rascunhoLocal?.trilhos_especiais)) o.push('trilho');
+    if (extrasSnapTemConteudo(rascunhoLocal?.produtos_avulsos)) o.push('avulso');
     return o;
   });
   const incluiPersiana = ordem.includes('persiana');
   const incluiCortina = ordem.includes('cortina');
+  const incluiTrilho = ordem.includes('trilho');
+  const incluiAvulso = ordem.includes('avulso');
   const [rt, setRt] = useState(rascunhoLocal?.rt_pct ?? '');
   const [recuperado] = useState(!!rascunhoLocal);
 
@@ -106,8 +117,12 @@ export function OrcamentoNovo() {
   // Refs para o autosave (sem re-render a cada tecla).
   const persianaSnapRef = useRef<PersianaSnapshot | null>(rascunhoLocal?.persiana ?? null);
   const cortinaSnapRef = useRef<CortinaSnapshot | null>(rascunhoLocal?.cortina ?? null);
+  const trilhoSnapRef = useRef<ProdutoExtraSnap[] | null>(rascunhoLocal?.trilhos_especiais ?? null);
+  const avulsoSnapRef = useRef<ProdutoExtraSnap[] | null>(rascunhoLocal?.produtos_avulsos ?? null);
   const persianaSujoRef = useRef(false);
   const cortinaSujoRef = useRef(false);
+  const trilhoSujoRef = useRef(false);
+  const avulsoSujoRef = useRef(false);
   const clienteRef = useRef(cliente); clienteRef.current = cliente;
   const lojaIdRef = useRef(lojaId); lojaIdRef.current = lojaId;
   const rtRef = useRef(rt); rtRef.current = rt;
@@ -125,6 +140,8 @@ export function OrcamentoNovo() {
         loja_id: usuario?.perfil === 'admin' ? lojaIdRef.current || undefined : undefined,
         persiana: persianaSnapRef.current ?? undefined,
         cortina: cortinaSnapRef.current ?? undefined,
+        trilhos_especiais: trilhoSnapRef.current ?? undefined,
+        produtos_avulsos: avulsoSnapRef.current ?? undefined,
         rt_pct: rtRef.current,
         ts: Date.now(),
       };
@@ -134,8 +151,15 @@ export function OrcamentoNovo() {
 
   const onSnapPersiana = useCallback((s: PersianaSnapshot) => { persianaSnapRef.current = s; agendarSalvar(); }, [agendarSalvar]);
   const onSnapCortina = useCallback((s: CortinaSnapshot) => { cortinaSnapRef.current = s; agendarSalvar(); }, [agendarSalvar]);
-  const onDirtyPersiana = useCallback((sujo: boolean) => { persianaSujoRef.current = sujo; setDirty(sujo || cortinaSujoRef.current); agendarSalvar(); }, [agendarSalvar, setDirty]);
-  const onDirtyCortina = useCallback((sujo: boolean) => { cortinaSujoRef.current = sujo; setDirty(sujo || persianaSujoRef.current); agendarSalvar(); }, [agendarSalvar, setDirty]);
+  const onSnapTrilho = useCallback((s: ProdutoExtraSnap[]) => { trilhoSnapRef.current = s; agendarSalvar(); }, [agendarSalvar]);
+  const onSnapAvulso = useCallback((s: ProdutoExtraSnap[]) => { avulsoSnapRef.current = s; agendarSalvar(); }, [agendarSalvar]);
+  const atualizarDirty = useCallback(() => {
+    setDirty(persianaSujoRef.current || cortinaSujoRef.current || trilhoSujoRef.current || avulsoSujoRef.current);
+  }, [setDirty]);
+  const onDirtyPersiana = useCallback((sujo: boolean) => { persianaSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
+  const onDirtyCortina = useCallback((sujo: boolean) => { cortinaSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
+  const onDirtyTrilho = useCallback((sujo: boolean) => { trilhoSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
+  const onDirtyAvulso = useCallback((sujo: boolean) => { avulsoSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
   const onSelecionarCliente = useCallback((c: ClienteResumo | null) => { setCliente(c); agendarSalvar(); }, [agendarSalvar]);
   const onSelecionarLoja = useCallback((id: string) => {
     lojaIdRef.current = id;
@@ -151,7 +175,7 @@ export function OrcamentoNovo() {
       setResultado(null);
       setPersianaCalculando(false);
       persianaSnapRef.current = null; persianaSujoRef.current = false;
-      setDirty(cortinaSujoRef.current); agendarSalvar();
+      atualizarDirty(); agendarSalvar();
     }
   }
   function toggleIncluiCortina(v: boolean) {
@@ -159,7 +183,23 @@ export function OrcamentoNovo() {
     if (!v) {
       setCortinaEstado(ESTADO_CORTINA_VAZIO);
       cortinaSnapRef.current = null; cortinaSujoRef.current = false;
-      setDirty(persianaSujoRef.current); agendarSalvar();
+      atualizarDirty(); agendarSalvar();
+    }
+  }
+  function toggleIncluiTrilho(v: boolean) {
+    setOrdem((prev) => (v ? (prev.includes('trilho') ? prev : [...prev, 'trilho']) : prev.filter((s) => s !== 'trilho')));
+    if (!v) {
+      setTrilhoEstado(ESTADO_EXTRA_VAZIO);
+      trilhoSnapRef.current = null; trilhoSujoRef.current = false;
+      atualizarDirty(); agendarSalvar();
+    }
+  }
+  function toggleIncluiAvulso(v: boolean) {
+    setOrdem((prev) => (v ? (prev.includes('avulso') ? prev : [...prev, 'avulso']) : prev.filter((s) => s !== 'avulso')));
+    if (!v) {
+      setAvulsoEstado(ESTADO_EXTRA_VAZIO);
+      avulsoSnapRef.current = null; avulsoSujoRef.current = false;
+      atualizarDirty(); agendarSalvar();
     }
   }
 
@@ -177,7 +217,7 @@ export function OrcamentoNovo() {
         }
         setCliente(o.gc_cliente_id ? { id: o.gc_cliente_id, nome: o.nome_cliente, tipo_pessoa: '', documento: null } : null);
         setLojaId(o.loja_id ?? '');
-        const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[]; rt_pct?: number } | null;
+        const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[]; trilhos_especiais?: ProdutoExtraSnap[]; produtos_avulsos?: ProdutoExtraSnap[]; rt_pct?: number } | null;
         const ehMisto = o.tipo_produto === 'misto';
         const ehCortina = o.tipo_produto === 'cortina';
         const itemFoco = Number(itemFocoParam);
@@ -190,6 +230,8 @@ export function OrcamentoNovo() {
           const qtdCortinas = entrada?.cortinas?.length ?? 0;
           if (entrada?.itens?.length) { setPersianaInicial({ tipo: entrada.tipo as TipoPersiana, itens: entrada.itens }); novaOrdem.push('persiana'); }
           if (entrada?.cortinas?.length) { setCortinaInicial({ cortinas: entrada.cortinas, instalacao_valor: 0 }); novaOrdem.push('cortina'); }
+          if (entrada?.trilhos_especiais?.length) { trilhoSnapRef.current = entrada.trilhos_especiais; novaOrdem.push('trilho'); }
+          if (entrada?.produtos_avulsos?.length) { avulsoSnapRef.current = entrada.produtos_avulsos; novaOrdem.push('avulso'); }
           if (Number.isInteger(itemFoco) && itemFoco >= 0) {
             if (itemFoco < qtdPersianas) foco = { secao: 'persiana', index: itemFoco };
             else if (itemFoco < qtdPersianas + qtdCortinas) foco = { secao: 'cortina', index: itemFoco - qtdPersianas };
@@ -260,9 +302,13 @@ export function OrcamentoNovo() {
   const temCortina = cortinaEstado.temCortinas;
   const cortinaTotal = cortinaEstado.total;
   const cortinaCompletas = cortinaEstado.todasCompletas;
+  const temTrilho = trilhoEstado.count > 0;
+  const trilhoTotal = trilhoEstado.total;
+  const temAvulso = avulsoEstado.count > 0;
+  const avulsoTotal = avulsoEstado.total;
   const calculandoOrcamento = persianaCalculando || cortinaEstado.calculando;
 
-  const algoPreenchido = temPersiana || temCortina;
+  const algoPreenchido = temPersiana || temCortina || temTrilho || temAvulso;
   // Instalação já está embutida no valor de cada item (Victor 26/06/2026).
   // RT do arquiteto (Victor 27/06/2026): gross-up por item (10% do valor final), pra
   // que a soma bata com o GestãoClick (servidor aplica o mesmo fator em cada produto).
@@ -271,15 +317,19 @@ export function OrcamentoNovo() {
   const grossItem = (v: number) => roundHalfUp(v * fatorRtUi);
   const persianaTotalRt = resultado ? roundHalfUp(resultado.itens.reduce((s, it) => s + grossItem(it.resultado.valor_bruto ?? 0), 0)) : 0;
   const cortinaTotalRt = roundHalfUp((cortinaEstado.totais ?? []).reduce((s, t) => s + grossItem(t), 0));
-  const totalBase = roundHalfUp(persianaTotal + cortinaTotal);
-  const totalGeral = roundHalfUp(persianaTotalRt + cortinaTotalRt);
+  const trilhoTotalRt = grossItem(trilhoTotal);
+  const avulsoTotalRt = grossItem(avulsoTotal);
+  const totalBase = roundHalfUp(persianaTotal + cortinaTotal + trilhoTotal + avulsoTotal);
+  const totalGeral = roundHalfUp(persianaTotalRt + cortinaTotalRt + trilhoTotalRt + avulsoTotalRt);
   const rtValor = roundHalfUp(totalGeral - totalBase);
 
   // Persiana (se houver) precisa estar completa; cortina (se houver) idem.
   const persianaOk = !temPersiana || !persianaIncompleto;
   const cortinaOk = !temCortina || cortinaCompletas;
+  const trilhoOk = !incluiTrilho || trilhoEstado.completos;
+  const avulsoOk = !incluiAvulso || avulsoEstado.completos;
   const adminLojaOk = usuario?.perfil !== 'admin' || !!lojaId;
-  const conteudoValido = algoPreenchido && persianaOk && cortinaOk && adminLojaOk && !calculandoOrcamento;
+  const conteudoValido = algoPreenchido && persianaOk && cortinaOk && trilhoOk && avulsoOk && adminLojaOk && !calculandoOrcamento;
 
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !usuario?.gc_usuario_id;
@@ -308,15 +358,25 @@ export function OrcamentoNovo() {
       };
       let endpoint: string;
       let body: Record<string, unknown>;
-      if (temPersiana && temCortina) {
+      if (temPersiana && temCortina && !temTrilho && !temAvulso) {
         endpoint = '/orcamentos/misto';
         body = { tipo: resultado!.tipo, itens: persianaItens, cortinas: cortinaEstado.cortinas, ...comum };
-      } else if (temPersiana) {
+      } else if (temPersiana && !temCortina && !temTrilho && !temAvulso) {
         endpoint = '/orcamentos';
         body = { tipo: resultado!.tipo, itens: persianaItens, ...comum };
-      } else {
+      } else if (temCortina && !temPersiana && !temTrilho && !temAvulso) {
         endpoint = '/orcamentos/cortina';
         body = { cortinas: cortinaEstado.cortinas, ...comum };
+      } else {
+        endpoint = '/orcamentos/misto';
+        body = {
+          tipo: resultado?.tipo,
+          itens: persianaItens,
+          cortinas: cortinaEstado.cortinas,
+          trilhos_especiais: trilhoEstado.itens,
+          produtos_avulsos: avulsoEstado.itens,
+          ...comum,
+        };
       }
       const r = await api.post<{ orcamento: OrcamentoSalvo }>(endpoint, body);
       showToast('success', apenasSalvar ? 'Orçamento salvo (rascunho)' : `Orçamento #${r.orcamento.gc_orcamento_id} criado no GestãoClick`, cliente?.nome);
@@ -335,7 +395,8 @@ export function OrcamentoNovo() {
   function descartarRecuperado() {
     limparRascunhoLocal();
     persianaSnapRef.current = null; cortinaSnapRef.current = null;
-    persianaSujoRef.current = false; cortinaSujoRef.current = false; setDirty(false);
+    trilhoSnapRef.current = null; avulsoSnapRef.current = null;
+    persianaSujoRef.current = false; cortinaSujoRef.current = false; trilhoSujoRef.current = false; avulsoSujoRef.current = false; setDirty(false);
     window.location.assign('/orcamentos/novo');
   }
 
@@ -344,7 +405,8 @@ export function OrcamentoNovo() {
   function doCancelar() {
     limparRascunhoLocal();
     persianaSnapRef.current = null; cortinaSnapRef.current = null;
-    persianaSujoRef.current = false; cortinaSujoRef.current = false; setDirty(false);
+    trilhoSnapRef.current = null; avulsoSnapRef.current = null;
+    persianaSujoRef.current = false; cortinaSujoRef.current = false; trilhoSujoRef.current = false; avulsoSujoRef.current = false; setDirty(false);
     navigate(editarId ? `/orcamentos/${editarId}` : '/orcamentos');
   }
 
@@ -420,6 +482,14 @@ export function OrcamentoNovo() {
             <input type="checkbox" checked={incluiCortina} onChange={(e) => toggleIncluiCortina(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
             <FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas
           </label>
+          <label className="flex items-center gap-2 text-md-ui cursor-pointer">
+            <input type="checkbox" checked={incluiTrilho} onChange={(e) => toggleIncluiTrilho(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
+            <FontAwesomeIcon icon={faGripLines} className="text-neutral-500" /> Trilhos especiais
+          </label>
+          <label className="flex items-center gap-2 text-md-ui cursor-pointer">
+            <input type="checkbox" checked={incluiAvulso} onChange={(e) => toggleIncluiAvulso(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
+            <FontAwesomeIcon icon={faBoxOpen} className="text-neutral-500" /> Produtos avulsos
+          </label>
         </div>
       </div>
 
@@ -427,20 +497,21 @@ export function OrcamentoNovo() {
         <div className="lg:col-span-2 space-y-6">
           {ordem.length === 0 && (
             <div className="card p-6 text-center text-neutral-500 text-sm-ui">
-              Marque acima o que deseja incluir: <strong>Persianas</strong>, <strong>Cortinas</strong> ou os dois.
+              Marque acima o que deseja incluir no orçamento.
             </div>
           )}
 
           {/* Seções renderizadas na ORDEM em que o vendedor as selecionou. */}
-          {ordem.map((s) =>
-            s === 'persiana' ? (
+          {ordem.map((s) => {
+            if (s === 'persiana') return (
               <section key="persiana">
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
                 {prontoEdicao && (
                   <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} onCalculandoChange={setPersianaCalculando} />
                 )}
               </section>
-            ) : (
+            );
+            if (s === 'cortina') return (
               <section key="cortina">
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas</h2>
                 {prontoEdicao && (
@@ -459,8 +530,24 @@ export function OrcamentoNovo() {
                   />
                 )}
               </section>
-            ),
-          )}
+            );
+            if (s === 'trilho') return (
+              <section key="trilho">
+                <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faGripLines} className="text-neutral-500" /> Trilhos especiais</h2>
+                {prontoEdicao && (
+                  <ItensExtrasOrcamento titulo="Trilhos especiais" modo="trilho" inicial={rascunhoLocal?.trilhos_especiais ?? trilhoSnapRef.current ?? undefined} onEstado={setTrilhoEstado} onSnapshot={onSnapTrilho} onDirtyChange={onDirtyTrilho} />
+                )}
+              </section>
+            );
+            return (
+              <section key="avulso">
+                <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faBoxOpen} className="text-neutral-500" /> Produtos avulsos</h2>
+                {prontoEdicao && (
+                  <ItensExtrasOrcamento titulo="Produtos avulsos" modo="avulso" inicial={rascunhoLocal?.produtos_avulsos ?? avulsoSnapRef.current ?? undefined} onEstado={setAvulsoEstado} onSnapshot={onSnapAvulso} onDirtyChange={onDirtyAvulso} />
+                )}
+              </section>
+            );
+          })}
         </div>
 
         {/* Painel unificado */}
@@ -480,6 +567,14 @@ export function OrcamentoNovo() {
                 <span className="font-mono tabular-nums text-neutral-800">
                   {cortinaEstado.calculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(cortinaTotal)}
                 </span>
+              </div>
+              <div className="flex justify-between text-xs-ui">
+                <span className="text-neutral-600">Trilhos especiais {temTrilho ? `(${trilhoEstado.count})` : ''}{incluiTrilho && !trilhoEstado.completos ? <span className="text-warning"> (incompleto)</span> : null}</span>
+                <span className="font-mono tabular-nums text-neutral-800">{formatBRL(trilhoTotal)}</span>
+              </div>
+              <div className="flex justify-between text-xs-ui">
+                <span className="text-neutral-600">Produtos avulsos {temAvulso ? `(${avulsoEstado.count})` : ''}{incluiAvulso && !avulsoEstado.completos ? <span className="text-warning"> (incompleto)</span> : null}</span>
+                <span className="font-mono tabular-nums text-neutral-800">{formatBRL(avulsoTotal)}</span>
               </div>
             </div>
 
@@ -510,6 +605,8 @@ export function OrcamentoNovo() {
             {algoPreenchido && usuario?.perfil === 'admin' && !lojaId && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione a <strong>Loja / Filial</strong> no topo.</span></div>}
             {temPersiana && persianaIncompleto && <div className="alert alert-warning mb-3 text-xs-ui"><span>Há <strong>persiana</strong> com campos obrigatórios em branco.</span></div>}
             {temCortina && !cortinaCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Escolha o <strong>produto de cada acessório</strong> em todas as cortinas.</span></div>}
+            {incluiTrilho && !trilhoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Complete produto, largura e quantidade dos <strong>trilhos especiais</strong>.</span></div>}
+            {incluiAvulso && !avulsoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Complete produto e quantidade dos <strong>produtos avulsos</strong>.</span></div>}
             {calculandoOrcamento && <div className="alert alert-info mb-3 text-xs-ui"><span>Aguarde o cálculo terminar para salvar ou enviar.</span></div>}
             {algoPreenchido && conteudoValido && !cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar (ou use <strong>Salvar</strong>).</span></div>}
             {algoPreenchido && gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong>.</span></div>}

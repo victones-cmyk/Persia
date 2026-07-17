@@ -4,6 +4,7 @@ import {
   listarTecidos,
   listarInstalacoesController,
   listarComponentesController,
+  listarProdutosOrcamentoController,
   calcularPersianaController,
   calcularPersianaLoteController,
   listarTecidosCortina,
@@ -22,6 +23,7 @@ router.get('/calculadoras-cortina', listarCalculadorasCortinaController);
 router.get('/tecidos', listarTecidos);
 router.get('/instalacoes', listarInstalacoesController);
 router.get('/componentes', listarComponentesController);
+router.get('/produtos', listarProdutosOrcamentoController);
 router.post('/persiana', calcularPersianaController);
 router.post('/persiana/lote', calcularPersianaLoteController);
 router.get('/cortina/tecidos', listarTecidosCortina);

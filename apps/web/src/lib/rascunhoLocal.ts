@@ -51,12 +51,22 @@ export interface CortinaSnapshot {
   instalacao_valor?: string; // legado (instalação agora é por cortina)
 }
 
+export interface ProdutoExtraSnap {
+  produto_id: string;
+  ambiente: string;
+  largura?: string;
+  quantidade: string;
+  observacao: string;
+}
+
 export interface RascunhoLocal {
   tipo: 'persiana' | 'cortina' | 'misto';
   cliente: { id: string; nome: string } | null;
   loja_id?: string;
   persiana?: PersianaSnapshot;
   cortina?: CortinaSnapshot;
+  trilhos_especiais?: ProdutoExtraSnap[];
+  produtos_avulsos?: ProdutoExtraSnap[];
   instalacao_valor?: string; // legado (instalação agora é por item)
   rt_pct?: string; // RT do arquiteto (% do orçamento todo)
   ts: number;

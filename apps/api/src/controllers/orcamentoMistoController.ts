@@ -19,11 +19,18 @@ import {
 } from './orcamentoController';
 import { prepararCortina, recalcularCortinasDeEntrada, type CortinaEntrada, type CortinaPreparada } from './orcamentoCortinaController';
 import { valorComRt, componenteRt } from '../services/calc/rtCalc';
+import {
+  prepararProdutosAvulsos,
+  prepararTrilhosEspeciais,
+  type ItemExtraPreparado,
+  type ProdutoAvulsoEntrada,
+  type TrilhoEspecialEntrada,
+} from '../services/calc/itensExtras';
 
 interface SessaoUsuario { id: string; perfil: 'vendedor' | 'admin'; gc_usuario_id: string | null; loja_id: string | null }
 
 /** Produto (linha) para o envio combinado ao GestãoClick. */
-type LinhaProduto = { nome_produto: string; descricao_produto?: string; valor_final: number; valor_custo: number };
+type LinhaProduto = { gc_produto_id?: string | null; nome_produto: string; descricao_produto?: string; valor_final: number; valor_custo: number };
 
 /** POST /api/orcamentos/misto — cria um orçamento com persianas E cortinas juntas. */
 export async function criarOrcamentoMisto(req: Request, res: Response): Promise<void> {
@@ -34,11 +41,13 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const tipoFallback = isTipoPersiana(b.tipo) ? (b.tipo as TipoPersiana) : null;
   const itensEntrada: ItemEntrada[] = Array.isArray(b.itens) ? b.itens : [];
   const cortinasEntrada: CortinaEntrada[] = Array.isArray(b.cortinas) ? b.cortinas : [];
-  // Misto = exige ao menos 1 de cada (casos puros usam /orcamentos ou /orcamentos/cortina).
-  if (itensEntrada.length === 0 || cortinasEntrada.length === 0) {
-    throw new AppError(400, 'MISTO_INVALIDO', 'Orçamento misto exige ao menos 1 persiana e 1 cortina.');
+  const trilhosEntrada: TrilhoEspecialEntrada[] = Array.isArray(b.trilhos_especiais) ? b.trilhos_especiais : [];
+  const avulsosEntrada: ProdutoAvulsoEntrada[] = Array.isArray(b.produtos_avulsos) ? b.produtos_avulsos : [];
+  const totalSecoes = [itensEntrada.length, cortinasEntrada.length, trilhosEntrada.length, avulsosEntrada.length].filter((n) => n > 0).length;
+  if (totalSecoes === 0) {
+    throw new AppError(400, 'MISTO_INVALIDO', 'Adicione ao menos um item ao orçamento.');
   }
-  if (!tipoFallback && !itensEntrada.every((it) => isTipoPersiana(it.tipo ?? ''))) {
+  if (itensEntrada.length > 0 && !tipoFallback && !itensEntrada.every((it) => isTipoPersiana(it.tipo ?? ''))) {
     throw new AppError(400, 'TIPO_INVALIDO', 'Selecione o produto sob medida de todas as persianas.');
   }
   if (!apenasSalvar && (!b.gc_cliente_id || !b.nome_cliente)) {
@@ -68,11 +77,16 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       tecidos.set(id, t);
     }
   }
-  const { preparados: persPrep } = await prepararItens(tipoFallback, itensEntrada, tecidos);
+  const { preparados: persPrep } = itensEntrada.length > 0
+    ? await prepararItens(tipoFallback, itensEntrada, tecidos)
+    : { preparados: [] };
 
   // --- Cortinas: recalcula cada uma ---
   const cortPrep: CortinaPreparada[] = [];
   for (const c of cortinasEntrada) cortPrep.push(await prepararCortina(c));
+  const trilhosPrep = await prepararTrilhosEspeciais(trilhosEntrada);
+  const avulsosPrep = await prepararProdutosAvulsos(avulsosEntrada);
+  const extrasPrep: ItemExtraPreparado[] = [...trilhosPrep, ...avulsosPrep];
 
   // RT do arquiteto (Victor 27/06/2026): gross-up embutido no valor de venda de cada
   // produto (persiana e cortina); custo inalterado; % vale para o orçamento todo.
@@ -86,12 +100,16 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       p.valor_total = valorComRt(p.valor_total, rtPct);
       (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
     }
+    for (const p of extrasPrep) {
+      p.valor_final = valorComRt(p.valor_final, rtPct);
+    }
   }
   const valorCortinas = roundHalfUp(cortPrep.reduce((s, p) => s + p.valor_total, 0));
   const persTotal = roundHalfUp(persPrep.reduce((s, p) => s + p.valor_final, 0));
+  const extrasTotal = roundHalfUp(extrasPrep.reduce((s, p) => s + p.valor_final, 0));
 
   // Instalação e RT já embutidos no valor de cada produto.
-  const valorTotal = roundHalfUp(persTotal + valorCortinas);
+  const valorTotal = roundHalfUp(persTotal + valorCortinas + extrasTotal);
 
   const lojaIdOrcamento = sessao.perfil === 'admin'
     ? (b.loja_id ?? editarOrc?.loja_id ?? sessao.loja_id)
@@ -102,10 +120,13 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const produtosEnvio: LinhaProduto[] = [
     ...persPrep.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
     ...cortPrep.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
+    ...extrasPrep.map((p) => ({ gc_produto_id: p.produto_id, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
   ];
 
-  const entradaJson = { tipo: persPrep[0].tipo, itens: itensEntrada, cortinas: cortinasEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue;
-  const primeiro = persPrep[0];
+  const entradaJson = { tipo: persPrep[0]?.tipo ?? null, itens: itensEntrada, cortinas: cortinasEntrada, trilhos_especiais: trilhosEntrada, produtos_avulsos: avulsosEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue;
+  const primeiro = persPrep[0] ?? null;
+  const primeiraCortina = cortPrep[0]?.snapshot as { largura_m?: number; altura_m?: number; nome_produto?: string } | undefined;
+  const primeiroExtra = extrasPrep[0] ?? null;
   const baseDados = {
     tipo_produto: 'misto' as const,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
@@ -113,15 +134,20 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
     entrada_json: entradaJson,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
-    tecido_codigo_gc: primeiro.tecido.id,
-    tecido_nome: `${persPrep.length} persiana(s) + ${cortPrep.length} cortina(s)`,
-    largura_m: primeiro.largura,
-    altura_m: primeiro.altura,
-    dimensao_m: primeiro.tecido.dimensao_m,
-    tc_m: primeiro.tc,
-    acionamento: primeiro.acionamento,
-    cor_acessorio: primeiro.cor_acessorio,
-    rolamento: primeiro.rolamento,
+    tecido_codigo_gc: primeiro?.tecido.id ?? primeiroExtra?.produto_id ?? '',
+    tecido_nome: [
+      persPrep.length ? `${persPrep.length} persiana(s)` : null,
+      cortPrep.length ? `${cortPrep.length} cortina(s)` : null,
+      trilhosPrep.length ? `${trilhosPrep.length} trilho(s) especial(is)` : null,
+      avulsosPrep.length ? `${avulsosPrep.length} produto(s) avulso(s)` : null,
+    ].filter(Boolean).join(' + '),
+    largura_m: primeiro?.largura ?? primeiraCortina?.largura_m ?? primeiroExtra?.largura ?? 0,
+    altura_m: primeiro?.altura ?? primeiraCortina?.altura_m ?? 0,
+    dimensao_m: primeiro?.tecido.dimensao_m ?? 0,
+    tc_m: primeiro?.tc ?? 0,
+    acionamento: primeiro?.acionamento ?? null,
+    cor_acessorio: primeiro?.cor_acessorio ?? null,
+    rolamento: primeiro?.rolamento ?? null,
     valor_bruto: valorTotal,
     valor_final: valorTotal,
   };
@@ -129,8 +155,10 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   // itens_json: persianas (com snapshot) + cortinas (snapshot). Instalação embutida nos valores.
   const itensJson = (persProdIds: string[]) =>
     ({
-      persiana: { tipo: persPrep[0].tipo, itens: snapshotsDe(persPrep, persProdIds) },
+      persiana: persPrep.length > 0 ? { tipo: persPrep[0].tipo, itens: snapshotsDe(persPrep, persProdIds) } : { tipo: null, itens: [] },
       cortinas: cortPrep.map((p) => p.snapshot),
+      trilhos_especiais: trilhosPrep,
+      produtos_avulsos: avulsosPrep,
     }) as unknown as Prisma.InputJsonValue;
 
   const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>
@@ -141,7 +169,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   // Apenas salvar: rascunho local, sem tocar no GestãoClick.
   if (apenasSalvar) {
     const orcamento = await persistir({ ...baseDados, status: 'rascunho', itens_json: itensJson([]) });
-    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_salvo_rascunho', detalhe: { orcamento_id: orcamento.id, tipo: 'misto', persianas: persPrep.length, cortinas: cortPrep.length, valor_final: valorTotal } } });
+    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_salvo_rascunho', detalhe: { orcamento_id: orcamento.id, tipo: 'misto', persianas: persPrep.length, cortinas: cortPrep.length, trilhos_especiais: trilhosPrep.length, produtos_avulsos: avulsosPrep.length, valor_final: valorTotal } } });
     res.status(201).json({ orcamento });
     return;
   }
@@ -164,7 +192,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
       resposta_gc: envio.resposta as Prisma.InputJsonValue,
     });
-    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_enviado_gc', detalhe: { orcamento_id: orcamento.id, tipo: 'misto', gc_orcamento_id: envio.gc_orcamento_id, persianas: persPrep.length, cortinas: cortPrep.length, valor_final: valorTotal } } });
+    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_enviado_gc', detalhe: { orcamento_id: orcamento.id, tipo: 'misto', gc_orcamento_id: envio.gc_orcamento_id, persianas: persPrep.length, cortinas: cortPrep.length, trilhos_especiais: trilhosPrep.length, produtos_avulsos: avulsosPrep.length, valor_final: valorTotal } } });
     res.status(201).json({ orcamento });
   } catch (err) {
     const gc = err instanceof GcError ? err : null;
@@ -183,20 +211,25 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
 }
 
 interface CortinaSnap { nome_produto?: string; descricao_produto?: string; valor_total?: number; valor_custo?: number }
-interface MistoItensJson { persiana?: { tipo: string; itens: ItemSnapshot[] }; cortinas?: CortinaSnap[]; instalacao?: number }
+interface ExtraSnap { produto_id?: string; nome_produto?: string; descricao_produto?: string; valor_final?: number; valor_custo?: number }
+interface MistoItensJson { persiana?: { tipo: string; itens: ItemSnapshot[] }; cortinas?: CortinaSnap[]; trilhos_especiais?: ExtraSnap[]; produtos_avulsos?: ExtraSnap[]; instalacao?: number }
 
 /** Reenvia um orçamento MISTO ao GestãoClick (replay do snapshot salvo). */
 export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
-  const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; cortinas?: CortinaEntrada[]; rt_pct?: number } | null;
+  const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; cortinas?: CortinaEntrada[]; trilhos_especiais?: TrilhoEspecialEntrada[]; produtos_avulsos?: ProdutoAvulsoEntrada[]; rt_pct?: number } | null;
   const itensEntrada = Array.isArray(entrada?.itens) ? entrada.itens : [];
   const cortinasEntrada = Array.isArray(entrada?.cortinas) ? entrada.cortinas : [];
-  const recalcular = itensEntrada.length > 0 || cortinasEntrada.length > 0;
+  const trilhosEntrada = Array.isArray(entrada?.trilhos_especiais) ? entrada.trilhos_especiais : [];
+  const avulsosEntrada = Array.isArray(entrada?.produtos_avulsos) ? entrada.produtos_avulsos : [];
+  const recalcular = itensEntrada.length > 0 || cortinasEntrada.length > 0 || trilhosEntrada.length > 0 || avulsosEntrada.length > 0;
 
   // Snapshot (fallback legado, quando não há entrada_json).
   const itens = orc.itens_json as unknown as MistoItensJson | null;
   const persSnaps = itens?.persiana?.itens ?? [];
   const cortSnaps = itens?.cortinas ?? [];
-  if (!recalcular && persSnaps.length === 0 && cortSnaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento misto sem itens para reenviar.');
+  const trilhoSnaps = itens?.trilhos_especiais ?? [];
+  const avulsoSnaps = itens?.produtos_avulsos ?? [];
+  if (!recalcular && persSnaps.length === 0 && cortSnaps.length === 0 && trilhoSnaps.length === 0 && avulsoSnaps.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento misto sem itens para reenviar.');
   const loja = await resolverLoja(orc.loja_id);
 
   // Recalcula a partir da entrada (preferido); garante valor derivado do servidor (RN-10).
@@ -208,15 +241,20 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
   const cortPrep = cortinasEntrada.length > 0
     ? await recalcularCortinasDeEntrada(cortinasEntrada, rtPct)
     : null;
+  const trilhosPrep = trilhosEntrada.length > 0 ? await prepararTrilhosEspeciais(trilhosEntrada) : [];
+  const avulsosPrep = avulsosEntrada.length > 0 ? await prepararProdutosAvulsos(avulsosEntrada) : [];
+  const extrasPrep = [...trilhosPrep, ...avulsosPrep];
 
   const produtos: LinhaProduto[] = recalcular
     ? [
         ...(persPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
         ...(cortPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
+        ...extrasPrep.map((p) => ({ gc_produto_id: p.produto_id, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
       ]
     : [
         ...persSnaps.map((s) => ({ nome_produto: s.nome_produto, descricao_produto: s.descricao_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) })),
         ...cortSnaps.map((s) => ({ nome_produto: String(s.nome_produto ?? 'Cortina'), descricao_produto: s.descricao_produto ? String(s.descricao_produto) : undefined, valor_final: Number(s.valor_total) || 0, valor_custo: Number(s.valor_custo) || 0 })),
+        ...[...trilhoSnaps, ...avulsoSnaps].map((s) => ({ gc_produto_id: s.produto_id ?? null, nome_produto: String(s.nome_produto ?? 'Produto'), descricao_produto: s.descricao_produto ? String(s.descricao_produto) : undefined, valor_final: Number(s.valor_final) || 0, valor_custo: Number(s.valor_custo) || 0 })),
       ];
 
   try {
@@ -229,10 +267,10 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
     // Quando recalculado, regrava o snapshot e o total a partir do que foi enviado.
     const persProdIds = envio.gc_produto_ids.slice(0, (persPrep ?? []).length);
     const novoItensJson = recalcular
-      ? ({ persiana: { tipo: persPrep?.[0]?.tipo ?? entrada?.tipo, itens: snapshotsDe(persPrep ?? [], persProdIds) }, cortinas: (cortPrep ?? []).map((p) => p.snapshot) } as unknown as Prisma.InputJsonValue)
+      ? ({ persiana: { tipo: persPrep?.[0]?.tipo ?? entrada?.tipo, itens: snapshotsDe(persPrep ?? [], persProdIds) }, cortinas: (cortPrep ?? []).map((p) => p.snapshot), trilhos_especiais: trilhosPrep, produtos_avulsos: avulsosPrep } as unknown as Prisma.InputJsonValue)
       : undefined;
     const novoTotal = recalcular
-      ? roundHalfUp([...(persPrep ?? []).map((p) => p.valor_final), ...(cortPrep ?? []).map((p) => p.valor_total)].reduce((s, v) => s + v, 0))
+      ? roundHalfUp([...(persPrep ?? []).map((p) => p.valor_final), ...(cortPrep ?? []).map((p) => p.valor_total), ...extrasPrep.map((p) => p.valor_final)].reduce((s, v) => s + v, 0))
       : null;
     const atualizado = await prisma.orcamento.update({
       where: { id: orc.id },

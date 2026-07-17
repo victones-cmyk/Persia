@@ -245,7 +245,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
  * Retorna os gc_produto_id na MESMA ORDEM dos itens.
  */
 export async function executarEnvioGc(args: {
-  itens: { nome_produto: string; descricao_produto?: string; valor_final: number; valor_custo: number }[];
+  itens: { gc_produto_id?: string | null; nome_produto: string; descricao_produto?: string; valor_final: number; valor_custo: number }[];
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
@@ -255,15 +255,20 @@ export async function executarEnvioGc(args: {
   try {
     const linhas: LinhaProdutoGc[] = [];
     for (const it of args.itens) {
-      const produto = await criarProduto({
-        nome: it.nome_produto,
-        descricao: it.descricao_produto,
-        valor_custo: it.valor_custo,
-        valor_venda: it.valor_final,
-      });
-      usados.push(produto.gc_produto_id);
-      if (produto.criado) criados.push(produto.gc_produto_id);
-      linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
+      if (it.gc_produto_id) {
+        usados.push(it.gc_produto_id);
+        linhas.push({ gc_produto_id: it.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
+      } else {
+        const produto = await criarProduto({
+          nome: it.nome_produto,
+          descricao: it.descricao_produto,
+          valor_custo: it.valor_custo,
+          valor_venda: it.valor_final,
+        });
+        usados.push(produto.gc_produto_id);
+        if (produto.criado) criados.push(produto.gc_produto_id);
+        linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
+      }
     }
 
     // Instalação (Victor 26/06/2026): NÃO é mais linha de serviço — já está embutida no
