@@ -63,6 +63,7 @@ describe('CalculadorasCortina Service', () => {
     expect(calc?.nome).toBe('Cortina Teste Customizada');
     expect(calc?.codigo_gc).toBe('9999');
     expect(calc?.tamanho_barra_default).toBe(0.15);
+    expect(calc?.bainhas_laterais_default).toBe(0);
     expect(calc?.camadas[0].nome).toBe('Camada Unica');
 
     // Restaura o estado em memória para evitar poluir outros testes

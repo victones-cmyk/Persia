@@ -46,6 +46,7 @@ export interface EntradaCortina {
   tamanho_barra?: number; // m, default 0,10
   tipo_barra?: 'simples' | 'dupla'; // default 'dupla' (fator 1 ou 2)
   aberturas?: number; // default 1. 0–1 → ferragem par; ≥2 → múltiplo de 4
+  bainhas_laterais?: number; // m adicionais de tecido por abertura: 1× sem abertura, 2× central
   espacamento_ilhos?: number; // m, default 0,15 (ilhós, sobre a largura franzida)
   espacamento_ferragem?: number; // m, default 0,10 (argola/rodízio, sobre o varão)
   largura_tecido_tras?: number; // largura do rolo do 2º tecido, se diferente
@@ -68,6 +69,7 @@ export interface ResultadoCortina {
   barra_consumo: number; // m gastos na altura (folga de topo + barra)
   consumo_frente: number; // largura × franzido (largura franzida do tecido frente)
   metragem_frente: number; // m lineares de tecido frente
+  bainhas_laterais_acrescimo: number; // m adicionados à metragem de cada tecido
   metragem_tras: number | null; // m lineares do 2º tecido (forro/trás)
   tiras_frente: number | null; // nº de tiras emendadas (só no método emenda)
   barra_postica_base: number | null;
@@ -158,28 +160,33 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   const metodo: MetodoCortina = alturaExcedeTecido ? (e.metodo_altura ?? 'emenda') : 'normal';
 
   // ---- Tecido frente ----
-  // Wave usa fator próprio (2,7, medido pelo Victor); nos demais é largura × franzido.
+  // Wave usa o franzido configurado na calculadora; sem configuração, cai no padrão global.
   const wave = e.modelo === 'wave' ? dadosWave(e.largura) : null;
-  const fatorFrente = wave ? reg.franzido_wave : franzidoFrente;
+  const fatorFrente = wave ? (e.franzido_frente ?? reg.franzido_wave) : franzidoFrente;
   const consumoFrente = roundHalfUp(e.largura * fatorFrente);
   const frente = metragemFace(consumoFrente, e.largura_tecido, e.altura, barraConsumo, metodo, aberturas);
+  const bainhaInformada = Number(e.bainhas_laterais);
+  const bainhasLaterais = Number.isFinite(bainhaInformada) && bainhaInformada > 0 ? bainhaInformada : 0;
+  const bainhasLateraisAcrescimo = roundHalfUp(bainhasLaterais * (aberturas >= 2 ? 2 : 1));
+  const metragemFrente = roundHalfUp(frente.metragem + bainhasLateraisAcrescimo);
 
   // ---- Tecido de trás / forro ----
   let metragemTras: number | null = null;
   if (e.config === 'dois_tecidos_mesmo_varao') {
-    metragemTras = frente.metragem; // costurado junto → acompanha a frente
+    metragemTras = metragemFrente; // costurado junto → acompanha a frente
   } else if (e.config === 'dois_tecidos_varao_duplo') {
     const consumoTras = roundHalfUp(e.largura * franzidoTras);
     const alturaExcedeTecidoTras = e.altura + barraConsumo > larguraTecidoTras;
     const metodoTras: MetodoCortina = alturaExcedeTecidoTras ? (e.metodo_altura ?? 'emenda') : 'normal';
-    metragemTras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras, aberturas).metragem;
+    const tras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras, aberturas).metragem;
+    metragemTras = roundHalfUp(tras + bainhasLateraisAcrescimo);
   }
 
   const varaoDuplo = e.config === 'dois_tecidos_varao_duplo';
   const itens: ItemCortina[] = [];
 
   // ---- Tecidos ----
-  itens.push({ tipo: 'tecido', item: 'Tecido (frente)', quantidade: frente.metragem, unidade: 'm', auto: true });
+  itens.push({ tipo: 'tecido', item: 'Tecido (frente)', quantidade: metragemFrente, unidade: 'm', auto: true });
   if (metragemTras !== null) {
     itens.push({ tipo: 'tecido', item: varaoDuplo ? 'Tecido (trás)' : 'Tecido (forro)', quantidade: metragemTras, unidade: 'm', auto: true });
   }
@@ -240,7 +247,8 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
     altura_excede_tecido: alturaExcedeTecido,
     barra_consumo: barraConsumo,
     consumo_frente: consumoFrente,
-    metragem_frente: frente.metragem,
+    metragem_frente: metragemFrente,
+    bainhas_laterais_acrescimo: bainhasLateraisAcrescimo,
     metragem_tras: metragemTras,
     tiras_frente: frente.tiras,
     barra_postica_base: frente.barraPosticaBase,
@@ -260,7 +268,7 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
 
 export interface CamadaCortina {
   largura_tecido: number; // largura do rolo do tecido desta camada (m)
-  franzido?: number; // default 3 (no wave, ignorado: usa 2,7)
+  franzido?: number; // fator configurável por camada; usa o padrão global quando ausente
   modelo?: ModeloCamadaCortina; // modelo PRÓPRIO da camada. Costurado junto só é válido da camada 2 em diante.
   costurado_quantidade?: QuantidadeCosturadoJunto;
   metodo_altura?: MetodoAlturaCortina;
@@ -275,6 +283,7 @@ export interface EntradaCortinaCompleta {
   tamanho_barra?: number;
   tipo_barra?: 'simples' | 'dupla';
   aberturas?: number;
+  bainhas_laterais?: number;
   espacamento_ilhos?: number;
   espacamento_ferragem?: number;
 }
@@ -288,6 +297,7 @@ export interface CamadaResultado {
   barra_consumo: number;
   barra_postica_base: number | null;
   barra_postica_acrescimo: number | null;
+  bainhas_laterais_acrescimo: number;
   costurado_junto?: boolean;
   costurado_quantidade?: QuantidadeCosturadoJunto;
 }
@@ -338,6 +348,7 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
       tamanho_barra: e.tamanho_barra,
       tipo_barra: e.tipo_barra,
       aberturas: e.aberturas,
+      bainhas_laterais: e.bainhas_laterais,
       espacamento_ilhos: e.espacamento_ilhos,
       espacamento_ferragem: e.espacamento_ferragem,
     });
@@ -354,6 +365,7 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
       barra_consumo: r.barra_consumo,
       barra_postica_base: r.barra_postica_base,
       barra_postica_acrescimo: r.barra_postica_acrescimo,
+      bainhas_laterais_acrescimo: r.bainhas_laterais_acrescimo,
       ...(costuradoJunto ? { costurado_junto: true, costurado_quantidade: costuradoQuantidade } : {}),
     });
 

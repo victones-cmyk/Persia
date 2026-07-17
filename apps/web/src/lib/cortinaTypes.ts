@@ -34,6 +34,7 @@ export interface ResultadoCortina {
   barra_consumo: number;
   consumo_frente: number;
   metragem_frente: number;
+  bainhas_laterais_acrescimo: number;
   metragem_tras: number | null;
   tiras_frente: number | null;
   barra_postica_base: number | null;
@@ -143,6 +144,7 @@ export interface CamadaCalc {
   consumo: number;
   barra_postica_base: number | null;
   barra_postica_acrescimo: number | null;
+  bainhas_laterais_acrescimo: number;
   costurado_junto?: boolean;
   costurado_quantidade?: QuantidadeCosturadoJunto;
 }

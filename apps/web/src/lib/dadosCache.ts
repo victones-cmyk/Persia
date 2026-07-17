@@ -48,3 +48,13 @@ export function getCacheado<T>(key: string, url: string, ttlMs = 10 * 60 * 1000)
   emVoo.set(key, req);
   return req;
 }
+
+export function invalidarCacheado(key: string): void {
+  memoria.delete(key);
+  emVoo.delete(key);
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // Cache é opcional; segue mesmo quando o storage não está disponível.
+  }
+}
