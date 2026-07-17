@@ -127,7 +127,7 @@ export function CalculadorasTrilhoEspecial() {
               <input className="input" value={editando.nome} placeholder="ex: Trilho Wave" onChange={(e) => setEditando({ ...editando, nome: e.target.value })} />
             </div>
             <div className="alert alert-info text-xs-ui">
-              A largura informada no orçamento será usada pelas fórmulas dos produtos. Exemplo: <span className="font-mono">LARGURA</span> ou <span className="font-mono">LARGURA*2</span>.
+              As fórmulas podem usar <span className="font-mono">LARGURA</span> e <span className="font-mono">EMENDAS</span>. Para o produto da emenda, use apenas <span className="font-mono">EMENDAS</span>.
             </div>
           </div>
 
@@ -136,7 +136,7 @@ export function CalculadorasTrilhoEspecial() {
               <h4 className="text-md-ui font-semibold text-neutral-700"><FontAwesomeIcon icon={faCubes} /> Produtos da composição</h4>
               <button type="button" className="btn btn-default btn-xs" onClick={() => setEditando({ ...editando, componentes: [...editando.componentes, componenteVazio()] })}><FontAwesomeIcon icon={faPlus} /> Adicionar produto</button>
             </div>
-            <div className="text-xs-ui text-neutral-500">Cada linha representa um produto do Gestão Click e a fórmula de quantidade calculada pela largura.</div>
+            <div className="text-xs-ui text-neutral-500">Cada linha representa um produto do Gestão Click. A quantidade pode ser calculada pela largura ou pelo número de emendas informado no orçamento.</div>
             <div className="space-y-3">
               {editando.componentes.map((componente, index) => (
                 <div key={index} className="border border-neutral-300 rounded-sm bg-neutral-50 p-3">

@@ -58,6 +58,7 @@ export interface ProdutoExtraSnap {
   ambiente: string;
   largura?: string;
   quantidade: string;
+  emendas?: string;
   observacao: string;
 }
 

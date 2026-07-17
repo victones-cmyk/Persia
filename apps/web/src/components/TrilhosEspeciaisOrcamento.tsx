@@ -14,6 +14,7 @@ interface LinhaState {
   ambiente: string;
   largura: string;
   quantidade: string;
+  emendas: string;
   observacao: string;
 }
 
@@ -32,6 +33,7 @@ interface ResultadoTrilho {
   nome: string;
   largura: number;
   quantidade: number;
+  emendas: number;
   componentes: ComponenteCalculado[];
   valor_unitario: number;
   valor_total: number;
@@ -43,6 +45,7 @@ const vazia = (): LinhaState => ({
   ambiente: '',
   largura: '',
   quantidade: '1',
+  emendas: '0',
   observacao: '',
 });
 
@@ -54,6 +57,7 @@ function normalizarInicial(inicial?: ProdutoExtraSnap[]): LinhaState[] {
     ambiente: item.ambiente ?? '',
     largura: item.largura ?? '',
     quantidade: item.quantidade ?? '1',
+    emendas: item.emendas ?? '0',
     observacao: item.observacao ?? '',
   }));
 }
@@ -62,7 +66,8 @@ function resultadoCorresponde(linha: LinhaState, resultado?: ResultadoTrilho): r
   return !!resultado
     && resultado.calculadora_id === linha.calculadora_id
     && resultado.largura === Number(linha.largura)
-    && resultado.quantidade === Number(linha.quantidade);
+    && resultado.quantidade === Number(linha.quantidade)
+    && resultado.emendas === Number(linha.emendas);
 }
 
 export function TrilhosEspeciaisOrcamento({
@@ -91,10 +96,10 @@ export function TrilhosEspeciaisOrcamento({
       .finally(() => setCarregando(false));
   }, []);
 
-  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, l: l.largura, q: l.quantidade })));
+  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, l: l.largura, q: l.quantidade, e: l.emendas })));
   useEffect(() => {
     const seq = ++sequencia.current;
-    const validas = linhas.filter((l) => l.calculadora_id && Number(l.largura) > 0 && Number(l.quantidade) > 0);
+    const validas = linhas.filter((l) => l.calculadora_id && Number(l.largura) > 0 && Number(l.quantidade) > 0 && Number.isInteger(Number(l.emendas)) && Number(l.emendas) >= 0);
     setResultados({});
     setErros({});
     if (validas.length === 0) {
@@ -111,6 +116,7 @@ export function TrilhosEspeciaisOrcamento({
             calculadora_id: linha.calculadora_id,
             largura: Number(linha.largura),
             quantidade: Number(linha.quantidade),
+            emendas: Number(linha.emendas),
           });
           novosResultados[linha.id] = r.resultado;
         } catch (e) {
@@ -131,10 +137,10 @@ export function TrilhosEspeciaisOrcamento({
     let incompleto = false;
     const itens: ItemExtraPayload[] = [];
     for (const linha of linhas) {
-      const temConteudo = Boolean(linha.calculadora_id || linha.ambiente || linha.largura || linha.observacao || linha.quantidade !== '1');
+      const temConteudo = Boolean(linha.calculadora_id || linha.ambiente || linha.largura || linha.observacao || linha.quantidade !== '1' || linha.emendas !== '0');
       if (!temConteudo) continue;
       const resultado = resultados[linha.id];
-      if (!linha.calculadora_id || !(Number(linha.largura) > 0) || !(Number(linha.quantidade) > 0) || !resultadoCorresponde(linha, resultado) || erros[linha.id]) {
+      if (!linha.calculadora_id || !(Number(linha.largura) > 0) || !(Number(linha.quantidade) > 0) || !Number.isInteger(Number(linha.emendas)) || Number(linha.emendas) < 0 || !resultadoCorresponde(linha, resultado) || erros[linha.id]) {
         incompleto = true;
         continue;
       }
@@ -143,6 +149,7 @@ export function TrilhosEspeciaisOrcamento({
         calculadora_id: linha.calculadora_id,
         largura: Number(linha.largura),
         quantidade: Number(linha.quantidade),
+        emendas: Number(linha.emendas),
         ...(linha.ambiente.trim() ? { ambiente: linha.ambiente.trim() } : {}),
         ...(linha.observacao.trim() ? { observacao: linha.observacao.trim() } : {}),
       });
@@ -157,9 +164,10 @@ export function TrilhosEspeciaisOrcamento({
       ambiente: l.ambiente,
       largura: l.largura,
       quantidade: l.quantidade,
+      emendas: l.emendas,
       observacao: l.observacao,
     })));
-    onDirtyChange?.(linhas.some((l) => l.calculadora_id || l.ambiente || l.largura || l.observacao || l.quantidade !== '1'));
+    onDirtyChange?.(linhas.some((l) => l.calculadora_id || l.ambiente || l.largura || l.observacao || l.quantidade !== '1' || l.emendas !== '0'));
   }, [linhas, onDirtyChange, onSnapshot]);
 
   function alterar(id: string, patch: Partial<LinhaState>) {
@@ -179,7 +187,7 @@ export function TrilhosEspeciaisOrcamento({
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
           <h4 className="text-lg-ui font-medium">Calculadora de trilhos especiais</h4>
-          <p className="text-xs-ui text-neutral-500">Escolha uma composição cadastrada pelo administrador e informe a largura.</p>
+          <p className="text-xs-ui text-neutral-500">Escolha uma composição e informe largura, emendas por trilho e quantidade.</p>
         </div>
         <span className="font-mono tabular-nums text-sm-ui font-semibold">{formatBRL(estado.total)}</span>
       </div>
@@ -195,29 +203,33 @@ export function TrilhosEspeciaisOrcamento({
           return (
             <div key={linha.id} className="rounded-sm border border-neutral-300 p-3 bg-neutral-50">
               <div className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-12 md:col-span-5">
+                <div className="col-span-12 md:col-span-4">
                   <label className="form-label">Modelo de trilho<span className="label-required">*</span></label>
                   <select className="input" value={linha.calculadora_id} onChange={(e) => alterar(linha.id, { calculadora_id: e.target.value })} disabled={carregando || calculadoras.length === 0}>
                     <option value="">{carregando ? 'Carregando calculadoras…' : 'Selecione a calculadora…'}</option>
                     {calculadoras.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </select>
                 </div>
-                <div className="col-span-12 md:col-span-3">
+                <div className="col-span-12 md:col-span-2">
                   <label className="form-label">Ambiente</label>
                   <input className="input" value={linha.ambiente} onChange={(e) => alterar(linha.id, { ambiente: e.target.value })} placeholder="Ex.: Sala" />
                 </div>
-                <div className="col-span-6 md:col-span-2">
+                <div className="col-span-4 md:col-span-2">
                   <label className="form-label">Largura (m)<span className="label-required">*</span></label>
                   <input className="input input-mono" type="number" min={0} step={0.01} value={linha.largura} onChange={(e) => alterar(linha.id, { largura: e.target.value })} />
                 </div>
-                <div className="col-span-6 md:col-span-2">
+                <div className="col-span-4 md:col-span-2">
+                  <label className="form-label">Emendas/trilho<span className="label-required">*</span></label>
+                  <input className="input input-mono" type="number" min={0} step={1} value={linha.emendas} onChange={(e) => alterar(linha.id, { emendas: e.target.value })} />
+                </div>
+                <div className="col-span-4 md:col-span-2">
                   <label className="form-label">Quantidade<span className="label-required">*</span></label>
                   <input className="input input-mono" type="number" min={1} step={1} value={linha.quantidade} onChange={(e) => alterar(linha.id, { quantidade: e.target.value })} />
                 </div>
               </div>
 
               {erros[linha.id] && <div className="helper-error mt-2">{erros[linha.id]}</div>}
-              {calculando && linha.calculadora_id && Number(linha.largura) > 0 && !calculado && !erros[linha.id] && (
+              {calculando && linha.calculadora_id && Number(linha.largura) > 0 && Number.isInteger(Number(linha.emendas)) && Number(linha.emendas) >= 0 && !calculado && !erros[linha.id] && (
                 <div className="text-xs-ui text-neutral-500 mt-2"><FontAwesomeIcon icon={faSpinner} spin /> Calculando composição…</div>
               )}
 

@@ -21,6 +21,7 @@ export interface ItemExtraPayload {
   ambiente?: string;
   largura?: number;
   quantidade: number;
+  emendas?: number;
   observacao?: string;
 }
 

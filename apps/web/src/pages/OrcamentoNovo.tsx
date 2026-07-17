@@ -49,7 +49,7 @@ function cortinaSnapTemConteudo(s?: CortinaSnapshot | null): boolean {
     c.modelo || c.fixacao || c.largura || c.altura || c.tamanhoBarra || (c.camadas?.some((ca) => ca.tecidoId || ca.franzido))) ?? false;
 }
 function extrasSnapTemConteudo(s?: ProdutoExtraSnap[] | null): boolean {
-  return s?.some((it) => it.produto_id || it.calculadora_id || it.ambiente || it.largura || it.observacao || it.quantidade !== '1') ?? false;
+  return s?.some((it) => it.produto_id || it.calculadora_id || it.ambiente || it.largura || it.observacao || it.quantidade !== '1' || (it.emendas ?? '0') !== '0') ?? false;
 }
 
 export function OrcamentoNovo() {
@@ -606,7 +606,7 @@ export function OrcamentoNovo() {
             {algoPreenchido && usuario?.perfil === 'admin' && !lojaId && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione a <strong>Loja / Filial</strong> no topo.</span></div>}
             {temPersiana && persianaIncompleto && <div className="alert alert-warning mb-3 text-xs-ui"><span>Há <strong>persiana</strong> com campos obrigatórios em branco.</span></div>}
             {temCortina && !cortinaCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Escolha o <strong>produto de cada acessório</strong> em todas as cortinas.</span></div>}
-            {incluiTrilho && !trilhoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Selecione a calculadora e complete largura e quantidade dos <strong>trilhos especiais</strong>.</span></div>}
+            {incluiTrilho && !trilhoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Selecione a calculadora e complete largura, emendas e quantidade dos <strong>trilhos especiais</strong>.</span></div>}
             {incluiAvulso && !avulsoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Complete produto e quantidade dos <strong>produtos avulsos</strong>.</span></div>}
             {calculandoOrcamento && <div className="alert alert-info mb-3 text-xs-ui"><span>Aguarde o cálculo terminar para salvar ou enviar.</span></div>}
             {algoPreenchido && conteudoValido && !cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar (ou use <strong>Salvar</strong>).</span></div>}
