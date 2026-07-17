@@ -57,15 +57,17 @@ function normalizarProduto(p: GcProduto): ProdutoCatalogoOrcamento {
 
 export async function listarProdutosParaOrcamento(q = ''): Promise<ProdutoCatalogoOrcamento[]> {
   const termo = q.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  const produtos = await listarProdutos({ ativo: 1 });
+  // Produtos avulsos podem vir de qualquer grupo. O catálogo local é restrito
+  // aos grupos usados nos cálculos, então aqui consultamos todas as páginas do
+  // GestãoClick para não esconder produtos válidos do vendedor.
+  const produtos = await listarProdutosRemoto({ ativo: 1 });
   return produtos
     .map(normalizarProduto)
     .filter((p) => {
       if (!termo) return true;
       const alvo = `${p.nome} ${p.codigo_interno} ${p.nome_grupo}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       return termo.split(/\s+/).every((palavra) => alvo.includes(palavra));
-    })
-    .slice(0, 300);
+    });
 }
 
 async function buscarProdutoParaOrcamento(id: string): Promise<ProdutoCatalogoOrcamento> {

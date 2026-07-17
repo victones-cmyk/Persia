@@ -11,6 +11,7 @@ import { getRegras, salvarRegras, REGRAS_DEFAULT } from '../services/calc/regras
 import { composicaoCalculo } from '../services/calc/composicao';
 import { getCalculadoras, salvarCalculadoras, type CalculadoraPersiana } from '../services/calc/calculadoras';
 import { getCalculadorasCortina, salvarCalculadorasCortina } from '../services/calc/calculadorasCortina';
+import { getCalculadorasTrilhoEspecial, salvarCalculadorasTrilhoEspecial, CALCULADORAS_TRILHO_ESPECIAL_DEFAULT } from '../services/calc/calculadorasTrilhoEspecial';
 import { auditarPrecoPersiana, type ReceitaPendenteError } from '../services/calc/persianaPreco';
 import { mapasDePrecoComponentes, tcPadrao } from '../services/calc/persianaPrecoGc';
 import { indicePrecosComponentes } from '../services/gc/componentesPersiana';
@@ -163,6 +164,28 @@ export async function atualizarCalculadorasCortina(req: Request, res: Response):
   await prisma.logAcao.create({
     data: { usuario_id: sessao.id, acao: 'calculadoras_cortina_atualizadas', detalhe: {} },
   });
+  res.json({ calculadoras: salvas });
+}
+
+// Calculadoras dinâmicas de trilhos especiais (só admin).
+export async function listarCalculadorasTrilhoEspecial(_req: Request, res: Response): Promise<void> {
+  res.json({ calculadoras: getCalculadorasTrilhoEspecial() });
+}
+
+export async function atualizarCalculadorasTrilhoEspecial(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const calculadoras = req.body?.calculadoras;
+  if (calculadoras === null) {
+    const salvas = await salvarCalculadorasTrilhoEspecial(prisma, CALCULADORAS_TRILHO_ESPECIAL_DEFAULT);
+    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'calculadoras_trilho_especial_restauradas_padrao', detalhe: {} } });
+    res.json({ calculadoras: salvas });
+    return;
+  }
+  if (!Array.isArray(calculadoras)) {
+    throw new AppError(400, 'CAMPOS_OBRIGATORIOS', 'A lista de calculadoras de trilhos especiais deve ser fornecida.');
+  }
+  const salvas = await salvarCalculadorasTrilhoEspecial(prisma, calculadoras);
+  await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'calculadoras_trilho_especial_atualizadas', detalhe: {} } });
   res.json({ calculadoras: salvas });
 }
 

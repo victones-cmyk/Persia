@@ -59,6 +59,20 @@ export interface CalculadoraCortina {
   camadas: CamadaCalculadoraCortina[];
 }
 
+export interface ComponenteCalculadoraTrilho {
+  codigo_interno: string;
+  descricao: string;
+  qtd: string;
+}
+
+export interface CalculadoraTrilhoEspecial {
+  id: string;
+  nome: string;
+  db_tipo_produto: 'trilho_especial';
+  ativo?: boolean;
+  componentes: ComponenteCalculadoraTrilho[];
+}
+
 
 export type Cor = 'Branco' | 'Bege' | 'Cinza' | 'Preto';
 export type Acionamento =

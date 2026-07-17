@@ -15,6 +15,8 @@ import {
   previewCalculadoraPersiana,
   listarCalculadorasCortina,
   atualizarCalculadorasCortina,
+  listarCalculadorasTrilhoEspecial,
+  atualizarCalculadorasTrilhoEspecial,
   listarGruposProdutosGc,
   listarProdutosGc,
   getStatusCatalogoGc,
@@ -47,6 +49,8 @@ router.post('/calculadoras/preview-persiana', previewCalculadoraPersiana);
 
 router.get('/calculadoras-cortina', listarCalculadorasCortina);
 router.put('/calculadoras-cortina', atualizarCalculadorasCortina);
+router.get('/calculadoras-trilho-especial', listarCalculadorasTrilhoEspecial);
+router.put('/calculadoras-trilho-especial', atualizarCalculadorasTrilhoEspecial);
 
 router.get('/gc/grupos-produtos', listarGruposProdutosGc);
 router.get('/gc/produtos', listarProdutosGc);
