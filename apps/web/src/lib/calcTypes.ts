@@ -55,6 +55,7 @@ export interface CalculadoraCortina {
   tamanho_barra_default: number;
   tipo_barra_default: 'simples' | 'dupla';
   aberturas_default: number;
+  bainhas_laterais_default: number;
   ativo?: boolean;
   camadas: CamadaCalculadoraCortina[];
 }

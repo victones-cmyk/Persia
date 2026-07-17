@@ -25,6 +25,8 @@ export interface CalculadoraCortina {
   tamanho_barra_default: number; // em metros
   tipo_barra_default: 'simples' | 'dupla';
   aberturas_default: number;
+  /** Tecido adicional por bainhas laterais, em metros. */
+  bainhas_laterais_default: number;
   ativo?: boolean;
   camadas: CamadaCalculadoraCortina[];
 }
@@ -40,6 +42,7 @@ export const CALCULADORAS_CORTINA_DEFAULT: CalculadoraCortina[] = [
     tamanho_barra_default: 0.1,
     tipo_barra_default: 'dupla',
     aberturas_default: 1,
+    bainhas_laterais_default: 0,
     camadas: [
       {
         id: 'camada_frente',
@@ -59,6 +62,7 @@ export const CALCULADORAS_CORTINA_DEFAULT: CalculadoraCortina[] = [
     tamanho_barra_default: 0.1,
     tipo_barra_default: 'dupla',
     aberturas_default: 1,
+    bainhas_laterais_default: 0,
     camadas: [
       {
         id: 'camada_frente',
@@ -84,6 +88,7 @@ export const CALCULADORAS_CORTINA_DEFAULT: CalculadoraCortina[] = [
     tamanho_barra_default: 0.1,
     tipo_barra_default: 'dupla',
     aberturas_default: 1,
+    bainhas_laterais_default: 0,
     camadas: [
       {
         id: 'camada_frente',
@@ -103,6 +108,7 @@ export const CALCULADORAS_CORTINA_DEFAULT: CalculadoraCortina[] = [
     tamanho_barra_default: 0.1,
     tipo_barra_default: 'dupla',
     aberturas_default: 1,
+    bainhas_laterais_default: 0,
     camadas: [
       {
         id: 'camada_frente',
@@ -122,6 +128,7 @@ export const CALCULADORAS_CORTINA_DEFAULT: CalculadoraCortina[] = [
     tamanho_barra_default: 0.1,
     tipo_barra_default: 'dupla',
     aberturas_default: 1,
+    bainhas_laterais_default: 0,
     camadas: [
       {
         id: 'camada_frente',
@@ -136,7 +143,11 @@ export const CALCULADORAS_CORTINA_DEFAULT: CalculadoraCortina[] = [
 let calculadorasCached: CalculadoraCortina[] = [];
 
 function normalizarCalculadorasCortina(calculadoras: CalculadoraCortina[]): CalculadoraCortina[] {
-  return calculadoras.map((c) => ({ ...c, ativo: c.ativo !== false }));
+  return calculadoras.map((c) => ({
+    ...c,
+    ativo: c.ativo !== false,
+    bainhas_laterais_default: Number.isFinite(Number(c.bainhas_laterais_default)) ? Number(c.bainhas_laterais_default) : 0,
+  }));
 }
 
 export function getCalculadorasCortina(): CalculadoraCortina[] {

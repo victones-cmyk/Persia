@@ -40,6 +40,7 @@ export interface CortinaCardSnap {
   tamanhoBarra: string;
   tipoBarra: string;
   aberturas?: string;
+  bainhasLaterais?: string;
   jaPossuiVarao?: boolean;
   camadas: { nome?: string; tecidoId: string; franzido: string; modelo?: string; metodoAltura?: 'emenda' | 'barra_postica'; costuradoQuantidade?: 'mesma_quantidade' | 'proporcao_franzido' }[];
   acessorioSel: Record<string, string>;

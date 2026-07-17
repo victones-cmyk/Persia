@@ -385,6 +385,7 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
       tamanho_barra: b.tamanho_barra !== undefined && b.tamanho_barra !== '' ? Number(b.tamanho_barra) : undefined,
       tipo_barra: b.tipo_barra,
       aberturas: b.aberturas !== undefined && b.aberturas !== '' ? Number(b.aberturas) : undefined,
+      bainhas_laterais: b.bainhas_laterais !== undefined && b.bainhas_laterais !== '' ? Number(b.bainhas_laterais) : undefined,
     });
 
     const camadas = r.camadas.map((cam, i) => {
@@ -399,6 +400,7 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
         barra_consumo: cam.barra_consumo,
         barra_postica_base: cam.barra_postica_base,
         barra_postica_acrescimo: cam.barra_postica_acrescimo,
+        bainhas_laterais_acrescimo: cam.bainhas_laterais_acrescimo,
         consumo: cam.consumo,
       };
     });

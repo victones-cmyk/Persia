@@ -29,6 +29,7 @@ import { ConfirmModal } from '../../components/ConfirmModal';
 import { formatBRL, formatQtd } from '../../lib/formatacao';
 import type { CalculadoraPersiana, ComponenteCalculadora, ReceitaCalculadora, CalculadoraCortina, CamadaCalculadoraCortina } from '../../lib/calcTypes';
 import { CalculadorasTrilhoEspecial } from './CalculadorasTrilhoEspecial';
+import { invalidarCacheado } from '../../lib/dadosCache';
 
 // Mapeamentos de enums fixos no BD/API
 const DB_TIPOS_PRODUTO = [
@@ -246,6 +247,7 @@ export function AdminCalculadoras() {
     try {
       const r = await api.put<{ calculadoras: CalculadoraCortina[] }>('/admin/calculadoras-cortina', { calculadoras: lista });
       setCalculadorasCortina(r.calculadoras);
+      invalidarCacheado('cortina-calculadoras-v2');
       showToast('success', 'Calculadoras de Cortina salvas', 'Os novos modelos de cortina já estão em vigor.');
       setEditandoCortina(null);
       setCriandoNova(false);
@@ -331,6 +333,7 @@ export function AdminCalculadoras() {
       tamanho_barra_default: 0.10,
       tipo_barra_default: 'dupla',
       aberturas_default: 1,
+      bainhas_laterais_default: 0,
       ativo: true,
       camadas: [
         {
@@ -402,6 +405,10 @@ export function AdminCalculadoras() {
     }
     if (editandoCortina.camadas.length === 0) {
       showToast('warning', 'Camadas necessárias', 'Insira ao menos uma camada de tecido para a cortina.');
+      return;
+    }
+    if (!Number.isFinite(editandoCortina.bainhas_laterais_default) || editandoCortina.bainhas_laterais_default < 0) {
+      showToast('warning', 'Bainhas laterais inválidas', 'Informe um valor igual ou maior que zero.');
       return;
     }
 
@@ -561,6 +568,7 @@ export function AdminCalculadoras() {
       } else {
         const r = await api.put<{ calculadoras: CalculadoraCortina[] }>('/admin/calculadoras-cortina', { calculadoras: null });
         setCalculadorasCortina(r.calculadoras);
+        invalidarCacheado('cortina-calculadoras-v2');
         showToast('success', 'Padrões restaurados', 'Modelos de cortina redefinidos para os valores padrões.');
       }
     } catch (e) {
@@ -1329,6 +1337,7 @@ export function AdminCalculadoras() {
                       <p><strong>Modelo Base:</strong> {MODELOS_CORTINA.find((f) => f.value === c.modelo_base)?.label ?? c.modelo_base}</p>
                       <p><strong>Fixação Recomendada:</strong> {FIXACOES_CORTINA.find((f) => f.value === c.fixacao_default)?.label ?? c.fixacao_default}</p>
                       <p><strong>Tamanho Barra:</strong> {c.tamanho_barra_default * 100} cm ({c.tipo_barra_default})</p>
+                      <p><strong>Bainhas laterais:</strong> {(c.bainhas_laterais_default ?? 0) * 100} cm</p>
                       <p><strong>Camadas:</strong> {c.camadas.length} ({c.camadas.map((cam) => `${cam.nome}: ${cam.modelo_default}`).join(', ')})</p>
                     </div>
                   </div>
@@ -1471,6 +1480,19 @@ export function AdminCalculadoras() {
                       value={editandoCortina.aberturas_default}
                       onChange={(e) => setEditandoCortina({ ...editandoCortina, aberturas_default: Number(e.target.value) })}
                     />
+                  </div>
+
+                  <div>
+                    <label className="form-label">Bainhas laterais (cm)</label>
+                    <input
+                      className="input"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={(editandoCortina.bainhas_laterais_default ?? 0) * 100}
+                      onChange={(e) => setEditandoCortina({ ...editandoCortina, bainhas_laterais_default: Number(e.target.value) / 100 })}
+                    />
+                    <div className="helper-text">Tecido adicional por camada: 1× sem abertura e 2× na abertura central.</div>
                   </div>
                 </div>
 

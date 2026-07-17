@@ -34,6 +34,7 @@ export interface CortinaEntrada {
   tamanho_barra?: number | string;
   tipo_barra?: 'simples' | 'dupla';
   aberturas?: number | string;
+  bainhas_laterais?: number | string;
   camadas: CamadaEntrada[];
   acessorios: AcessorioEntrada[];
   ja_possui_varao?: boolean; // cliente já tem o trilho/varão → não inclui
@@ -83,6 +84,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     tamanho_barra: c.tamanho_barra !== undefined && c.tamanho_barra !== '' ? Number(c.tamanho_barra) : undefined,
     tipo_barra: c.tipo_barra,
     aberturas: c.aberturas !== undefined && c.aberturas !== '' ? Number(c.aberturas) : undefined,
+    bainhas_laterais: c.bainhas_laterais !== undefined && c.bainhas_laterais !== '' ? Number(c.bainhas_laterais) : undefined,
   });
 
   const nomeCamada = (i: number) => String(c.camadas[i]?.nome ?? '').trim() || (i === 0 ? 'Frente' : `Camada ${i + 1}`);
@@ -108,6 +110,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
       barra_consumo: cam.barra_consumo,
       barra_postica_base: cam.barra_postica_base,
       barra_postica_acrescimo: cam.barra_postica_acrescimo,
+      bainhas_laterais_acrescimo: cam.bainhas_laterais_acrescimo,
       consumo: cam.consumo,
       costurado_junto: cam.costurado_junto === true,
       costurado_quantidade: cam.costurado_quantidade ?? null
@@ -190,7 +193,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     largura, altura,
     tecido_id: camadasSnap[0].tecido_id,
     tecido_nome: camadasSnap[0].tecido_nome,
-    snapshot: { ambiente: c.ambiente?.trim() || '', modelo_cortina_nome: c.modelo_cortina_nome ?? null, modelo: c.modelo, fixacao: c.fixacao, desconto: c.desconto ?? 'sem_desconto', abertura: c.aberturas ?? null, largura, altura, n_camadas: r.n_camadas, camadas: camadasSnap, acessorios: acessoriosSnap, valor_total: valorTotal, nome_produto: nomeProduto, descricao_produto: descricaoProduto, valor_custo: valorCusto },
+    snapshot: { ambiente: c.ambiente?.trim() || '', modelo_cortina_nome: c.modelo_cortina_nome ?? null, modelo: c.modelo, fixacao: c.fixacao, desconto: c.desconto ?? 'sem_desconto', abertura: c.aberturas ?? null, bainhas_laterais: c.bainhas_laterais ?? null, largura, altura, n_camadas: r.n_camadas, camadas: camadasSnap, acessorios: acessoriosSnap, valor_total: valorTotal, nome_produto: nomeProduto, descricao_produto: descricaoProduto, valor_custo: valorCusto },
   };
 }
 

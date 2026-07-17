@@ -193,7 +193,7 @@ describe('Cortina — método barra postiça', () => {
 
 describe('Cortina Wave (fator de tecido medido pelo Victor + acessórios deduzidos)', () => {
   it('trilho 3 m → tecido/entretela 8,10 m (fator 2,7), 64 botões, cordão 3,15 m', () => {
-    const r = calcularCortina({ ...BASE, modelo: 'wave', fixacao: 'trilho', largura: 3, largura_tecido: 3.0 });
+    const r = calcularCortina({ ...BASE, modelo: 'wave', fixacao: 'trilho', largura: 3, largura_tecido: 3.0, franzido_frente: undefined });
     expect(r.metodo).toBe('normal');
     expect(r.metragem_frente).toBe(8.1); // 3,00 × 2,7 (Victor 16/06)
     expect(qtd(r, 'Entretela (KOS)')).toBe(8.1);
@@ -205,8 +205,37 @@ describe('Cortina Wave (fator de tecido medido pelo Victor + acessórios deduzid
   });
 
   it('no varão suíço usa ponteira (2)', () => {
-    const r = calcularCortina({ ...BASE, modelo: 'wave', fixacao: 'varao_suico', largura: 3, largura_tecido: 3.0 });
+    const r = calcularCortina({ ...BASE, modelo: 'wave', fixacao: 'varao_suico', largura: 3, largura_tecido: 3.0, franzido_frente: undefined });
     expect(qtd(r, 'Ponteira')).toBe(2);
+  });
+
+  it('usa o franzido configurado na camada Wave', () => {
+    const r = calcularCortina({ ...BASE, modelo: 'wave', fixacao: 'trilho', largura: 3, largura_tecido: 3.0, franzido_frente: 2.75 });
+    expect(r.consumo_frente).toBe(8.25);
+    expect(r.metragem_frente).toBe(8.25);
+  });
+});
+
+describe('Cortina — bainhas laterais', () => {
+  it('sem abertura acrescenta o valor uma vez em cada camada', () => {
+    const r = calcularCortinaMultiCamada({
+      modelo: 'franzido', fixacao: 'trilho', largura: 2, altura: 2,
+      aberturas: 1, bainhas_laterais: 0.1,
+      camadas: [{ largura_tecido: 3, franzido: 3 }, { largura_tecido: 3, franzido: 2 }],
+    });
+    expect(r.camadas[0].metragem).toBe(6.1);
+    expect(r.camadas[1].metragem).toBe(4.1);
+    expect(r.camadas[0].bainhas_laterais_acrescimo).toBe(0.1);
+  });
+
+  it('na abertura central acrescenta o valor duas vezes em cada camada', () => {
+    const r = calcularCortinaMultiCamada({
+      modelo: 'franzido', fixacao: 'trilho', largura: 2, altura: 2,
+      aberturas: 2, bainhas_laterais: 0.1,
+      camadas: [{ largura_tecido: 3, franzido: 3 }],
+    });
+    expect(r.camadas[0].metragem).toBe(6.2);
+    expect(r.camadas[0].bainhas_laterais_acrescimo).toBe(0.2);
   });
 });
 

@@ -36,6 +36,7 @@ export interface CortinaResumo {
     tamanho_barra?: number;
     tipo_barra?: 'simples' | 'dupla';
     aberturas?: number;
+    bainhas_laterais?: number;
     camadas: { nome?: string; tecido_id: string; modelo: ModeloCamadaCortina; franzido?: number; metodo_altura?: MetodoAlturaCortina; costurado_quantidade?: QuantidadeCosturadoJunto }[];
     acessorios: { item: string; categoria: CategoriaAcessorio | null; produto_id: string; quantidade: number; preco: number }[];
     nome_produto: string;
@@ -125,6 +126,7 @@ export function CortinaCard({
   const [tamanhoBarra, setTamanhoBarra] = useState(restauro?.tamanhoBarra ?? (inicial?.tamanho_barra != null ? String(inicial.tamanho_barra * 100) : ''));
   const [tipoBarra, setTipoBarra] = useState<'simples' | 'dupla' | ''>((restauro?.tipoBarra as 'simples' | 'dupla' | '') ?? inicial?.tipo_barra ?? '');
   const [aberturas, setAberturas] = useState<string>(restauro?.aberturas ?? (inicial?.aberturas != null ? String(inicial.aberturas) : ''));
+  const [bainhasLaterais, setBainhasLaterais] = useState<string>(restauro?.bainhasLaterais ?? (inicial?.bainhas_laterais != null ? String(inicial.bainhas_laterais * 100) : ''));
   const [jaPossuiVarao, setJaPossuiVarao] = useState<boolean>(restauro?.jaPossuiVarao ?? inicial?.ja_possui_varao ?? false);
   const [camadas, setCamadas] = useState<CamadaState[]>(() => {
     const base = restauro?.camadas?.length ? restauro.camadas : inicial?.camadas;
@@ -146,7 +148,7 @@ export function CortinaCard({
   const [modeloCortinaNome, setModeloCortinaNome] = useState<string>(restauro?.modeloCortinaNome ?? inicial?.modelo_cortina_nome ?? '');
 
   useEffect(() => {
-    getCacheado<{ calculadoras: CalculadoraCortina[] }>('cortina-calculadoras', '/calcular/calculadoras-cortina')
+    getCacheado<{ calculadoras: CalculadoraCortina[] }>('cortina-calculadoras-v2', '/calcular/calculadoras-cortina')
       .then((r) => setCalculadoras(r.calculadoras))
       .catch(() => setCalculadoras([]));
   }, []);
@@ -165,6 +167,7 @@ export function CortinaCard({
     setTamanhoBarra(calc.tamanho_barra_default != null ? String(calc.tamanho_barra_default * 100) : '');
     setTipoBarra(calc.tipo_barra_default || '');
     setAberturas(calc.aberturas_default != null ? String(calc.aberturas_default) : '');
+    setBainhasLaterais(calc.bainhas_laterais_default != null ? String(calc.bainhas_laterais_default * 100) : '');
     
     const novasCamadas = calc.camadas.map((cam, i) => ({
       id: crypto.randomUUID(),
@@ -219,6 +222,7 @@ export function CortinaCard({
     const frente = calc?.camadas[0];
     const consumoFrente = frente?.consumo || 0;
     const metragemFrente = frente?.metragem || 0;
+    const metragemSemBainhas = metragemFrente - (frente?.bainhas_laterais_acrescimo || 0);
     const metodo = frente?.metodo || 'normal';
     
     if (item === 'Trilho' || item === 'Varão' || item === 'Varão suíço' || item.startsWith('Trilho (') || item.startsWith('Varão (')) {
@@ -238,9 +242,9 @@ export function CortinaCard({
         return `Largura franzida (consumo): ${formatNum(consumoFrente, 2)} m`;
       }
       if (metodo === 'barra_postica') {
-        return `Barra postiça, igual à metragem do tecido: ${formatNum(metragemFrente, 2)} m`;
+        return `Barra postiça, antes das bainhas laterais: ${formatNum(metragemSemBainhas, 2)} m`;
       }
-      return `Sem emenda, igual à metragem do tecido: ${formatNum(metragemFrente, 2)} m`;
+      return `Sem emenda, antes das bainhas laterais: ${formatNum(metragemSemBainhas, 2)} m`;
     }
     if (item === 'Ilhoses') {
       return `Largura franzida [${formatNum(consumoFrente, 2)} m] / 0,15, arredondado para cima até o próximo par ou múltiplo de 4`;
@@ -261,8 +265,8 @@ export function CortinaCard({
   };
 
   const assinatura = JSON.stringify({
-    fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas,
-    camadas: camadas.map((c) => ({ t: c.tecidoId, m: c.modelo, f: c.modelo === 'wave' || (c.modelo === 'costurado_junto' && c.costuradoQuantidade === 'mesma_quantidade') ? '' : c.franzido, ma: c.metodoAltura, cq: c.modelo === 'costurado_junto' ? c.costuradoQuantidade : '' })),
+    fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, bainhasLaterais,
+    camadas: camadas.map((c) => ({ t: c.tecidoId, m: c.modelo, f: c.modelo === 'costurado_junto' && c.costuradoQuantidade === 'mesma_quantidade' ? '' : c.franzido, ma: c.metodoAltura, cq: c.modelo === 'costurado_junto' ? c.costuradoQuantidade : '' })),
   });
 
   const podeCalcular = Number(largura) > 0 && Number(altura) > 0 && camadas.length > 0
@@ -295,6 +299,7 @@ export function CortinaCard({
         modelo: camadas[0]?.modelo ? normalizarModeloCortina(camadas[0].modelo) : undefined, fixacao, desconto, largura: Number(largura), altura: Number(altura),
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
+        bainhas_laterais: bainhasLaterais === '' ? undefined : Number(bainhasLaterais) / 100,
         camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: modeloCamadaPayload(c.modelo), franzido: franzidoDe(c), metodo_altura: c.metodoAltura, ...(c.modelo === 'costurado_junto' ? { costurado_quantidade: c.costuradoQuantidade } : {}) })),
       };
       try {
@@ -366,18 +371,19 @@ export function CortinaCard({
         modelo_cortina_nome: modeloCortinaNome || undefined,
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
+        bainhas_laterais: bainhasLaterais === '' ? undefined : Number(bainhasLaterais) / 100,
         camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: modeloCamadaPayload(c.modelo) ?? 'franzido', franzido: franzidoDe(c), metodo_altura: c.metodoAltura, ...(c.modelo === 'costurado_junto' ? { costurado_quantidade: c.costuradoQuantidade } : {}) })),
         acessorios: acessoriosPayload, nome_produto: nomeProdutoPreview, ja_possui_varao: jaPossuiVarao,
         instalacao_id: instalacaoId || null,
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, nomeProdutoPreview, JSON.stringify(camadas.map((c) => ({ nome: c.nome, modelo: c.modelo, metodoAltura: c.metodoAltura, costuradoQuantidade: c.costuradoQuantidade })))]);
+  }, [calc, opcoes, acessorioSel, qtdManual, ambiente, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, bainhasLaterais, jaPossuiVarao, nomeBarra, instalacaoId, instalacoes, nomeProdutoPreview, JSON.stringify(camadas.map((c) => ({ nome: c.nome, modelo: c.modelo, metodoAltura: c.metodoAltura, costuradoQuantidade: c.costuradoQuantidade })))]);
 
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
 
   const preenchido = ambiente !== '' || largura !== '' || altura !== '' || desconto !== 'sem_desconto' ||
-    tamanhoBarra !== '' || tipoBarra !== '' || aberturas !== '' || camadas.some((c) => c.tecidoId || c.franzido || c.modelo) ||
+    tamanhoBarra !== '' || tipoBarra !== '' || aberturas !== '' || bainhasLaterais !== '' || camadas.some((c) => c.tecidoId || c.franzido || c.modelo) ||
     Object.keys(acessorioSel).length > 0 || Object.values(qtdManual).some((v) => v !== '');
   useEffect(() => { onPreenchidoChange?.(preenchido); }, [preenchido, onPreenchidoChange]);
 
@@ -385,12 +391,12 @@ export function CortinaCard({
   onSnapshotRef.current = onSnapshot;
   useEffect(() => {
     onSnapshotRef.current?.({
-      ambiente, modelo: modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao,
+      ambiente, modelo: modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, bainhasLaterais, jaPossuiVarao,
       modeloCortinaNome,
       camadas: camadas.map((c) => ({ nome: c.nome, tecidoId: c.tecidoId, franzido: c.franzido, modelo: c.modelo, metodoAltura: c.metodoAltura, costuradoQuantidade: c.costuradoQuantidade })),
       acessorioSel, qtdManual, instalacaoId,
     });
-  }, [ambiente, modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, jaPossuiVarao, modeloCortinaNome, camadas, acessorioSel, qtdManual, instalacaoId]);
+  }, [ambiente, modeloPrincipal, fixacao, desconto, largura, altura, tamanhoBarra, tipoBarra, aberturas, bainhasLaterais, jaPossuiVarao, modeloCortinaNome, camadas, acessorioSel, qtdManual, instalacaoId]);
 
   const setCamada = (id: string, patch: Partial<CamadaState>) =>
     setCamadas((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -497,6 +503,19 @@ export function CortinaCard({
             <option value="2">Central</option>
             <option value="1">Sem abertura</option>
           </select>
+        </div>
+        <div>
+          <label className="form-label" htmlFor={`bainhas-laterais-cortina-${indice}`}>Bainhas laterais (cm)</label>
+          <input
+            id={`bainhas-laterais-cortina-${indice}`}
+            type="number"
+            className="input"
+            min={0}
+            step={1}
+            value={bainhasLaterais}
+            onChange={(e) => setBainhasLaterais(e.target.value)}
+          />
+          <div className="helper-text">{aberturas === '2' ? 'A abertura central acrescenta duas vezes este valor por camada.' : 'Acrescenta este valor uma vez por camada.'}</div>
         </div>
       </div>
 
@@ -612,6 +631,11 @@ export function CortinaCard({
                   {formatNum(cam.metragem, 2)} m{cam.costurado_junto ? ' (costurado junto)' : cam.metodo === 'emenda' ? ' (emenda)' : cam.metodo === 'barra_postica' ? ' (barra postiça)' : ''}
                 </div>
                 <div className="col-span-3 font-mono tabular-nums text-right text-neutral-800">{formatBRL(cam.valor_tecido)}</div>
+                {cam.bainhas_laterais_acrescimo > 0 && (
+                  <div className="col-span-12 text-neutral-600 text-2xs-ui mt-1 bg-neutral-100 border border-neutral-200 rounded-sm px-2 py-1">
+                    Bainhas laterais: <strong>+{formatNum(cam.bainhas_laterais_acrescimo, 2)} m</strong> de tecido nesta camada.
+                  </div>
+                )}
                 {cam.costurado_junto && (
                   <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-2 border-l-2 border-primary flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
                     <FontAwesomeIcon icon={faCircleInfo} className="text-primary" style={{ fontSize: 10 }} />
