@@ -63,7 +63,21 @@ describe('evalQuantidade', () => {
     expect(evalQuantidade(formula, { largura: 2, altura: 1, tc: 0.75 })).toBe(2.4);
   });
 
+  it('arredonda para o próximo múltiplo de 4 usando CEIL', () => {
+    const formula = 'CEIL((LARGURA / 0.06 + 1) / 4) * 4';
+    expect(evalQuantidade(formula, { largura: 3, altura: 0, tc: 0 })).toBe(52);
+    expect(evalQuantidade(formula, { largura: 3.15, altura: 0, tc: 0 })).toBe(56);
+  });
+
+  it('aceita CEIL aninhado em outras expressões', () => {
+    expect(evalQuantidade('CEIL(LARGURA/0.5)*2', { largura: 1.1, altura: 0, tc: 0 })).toBe(6);
+  });
+
   it('rejeita MAX sem fechamento', () => {
     expect(() => evalQuantidade('MAX(LARGURA,1.5', { largura: 1, altura: 1, tc: 0.75 })).toThrow();
+  });
+
+  it('rejeita CEIL sem fechamento', () => {
+    expect(() => evalQuantidade('CEIL(LARGURA/4', { largura: 1, altura: 0, tc: 0 })).toThrow();
   });
 });

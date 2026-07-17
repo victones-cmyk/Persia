@@ -52,7 +52,8 @@ export function evalFormula(formula: string, vars: VarsFormula): number {
 // para "(LARGURA-0.025)*2", "LARGURA*(ALTURA+0.2)*1.2" etc. Sem eval/Function:
 // parser recursivo (expr → term → factor). Variáveis: LARGURA, ALTURA, TC e,
 // para a persiana romana, CAVALETES e HASTES (quantidades derivadas, calculadas
-// em persianaPreco.ts e injetadas aqui). Função suportada: MAX(a,b,...).
+// em persianaPreco.ts e injetadas aqui). Funções suportadas: MAX(a,b,...) e
+// CEIL(valor), que arredonda para o próximo inteiro.
 // ---------------------------------------------------------------------------
 export interface VarsQtd { largura: number; altura: number; tc: number; cavaletes?: number; hastes?: number; }
 
@@ -67,8 +68,8 @@ export function evalQuantidade(formula: string, vars: VarsQtd): number {
     .replace(/\bTC\b/g, `(${vars.tc})`)
     .replace(/(\d),(\d)/g, '$1.$2')
     .replace(/\s/g, '');
-  // Só dígitos, ponto, operadores, parênteses, vírgula e MAX são permitidos após a substituição.
-  if (!/^[-+*/().,\dMAX]+$/.test(subst)) throw new Error(`Fórmula de quantidade inválida: ${formula}`);
+  // Só dígitos, operadores, parênteses, vírgula e as funções conhecidas são permitidos.
+  if (!/^(?:[-+*/().,\d]|MAX|CEIL)+$/.test(subst)) throw new Error(`Fórmula de quantidade inválida: ${formula}`);
 
   let i = 0;
   const peek = () => subst[i];
@@ -91,6 +92,13 @@ export function evalQuantidade(formula: string, vars: VarsQtd): number {
     return v;
   }
   function parseFactor(): number {
+    if (subst.slice(i, i + 5) === 'CEIL(') {
+      i += 5; // consome "CEIL("
+      const valor = parseExpr();
+      if (peek() !== ')') throw new Error(`CEIL sem fechamento: ${formula}`);
+      i++; // consome ")"
+      return Math.ceil(valor);
+    }
     if (subst.slice(i, i + 4) === 'MAX(') {
       i += 4; // consome "MAX("
       const valores: number[] = [parseExpr()];
