@@ -7,7 +7,7 @@ import type { CalculadoraTrilhoEspecial, ComponenteCalculadoraTrilho, VarianteCa
 import { invalidarCacheado } from '../../lib/dadosCache';
 
 const componenteVazio = (): ComponenteCalculadoraTrilho => ({ codigo_interno: '', descricao: '', qtd: 'LARGURA' });
-const varianteVazia = (id: string = crypto.randomUUID()): VarianteCalculadoraTrilho => ({ id, nome: 'Nova variante', motorizado: false, componentes: [componenteVazio()] });
+const varianteVazia = (id: string = crypto.randomUUID(), nome = 'Nova variante'): VarianteCalculadoraTrilho => ({ id, nome, motorizado: false, componentes: [componenteVazio()] });
 
 export function CalculadorasTrilhoEspecial() {
   const { showToast } = useToast();
@@ -49,7 +49,7 @@ export function CalculadorasTrilhoEspecial() {
   }
 
   function iniciarNova() {
-    setEditando({ id: '', nome: '', db_tipo_produto: 'trilho_especial', ativo: true, componentes: [], variantes: [varianteVazia('padrao')] });
+    setEditando({ id: '', nome: '', db_tipo_produto: 'trilho_especial', ativo: true, componentes: [], variantes: [varianteVazia('padrao', 'Padrão')] });
     setVarianteAtiva('padrao');
     setCriando(true);
   }
@@ -104,6 +104,14 @@ export function CalculadorasTrilhoEspecial() {
     atualizarVariante(variante.id, { componentes: variante.componentes.map((c, i) => i === index ? { ...c, ...patch } : c) });
   }
 
+  function adicionarVariante() {
+    if (!editando) return;
+    const variantes = editando.variantes ?? [];
+    const nova = varianteVazia(crypto.randomUUID(), `Variante ${variantes.length + 1}`);
+    setEditando({ ...editando, variantes: [...variantes, nova] });
+    setVarianteAtiva(nova.id);
+  }
+
   async function restaurar() {
     setSalvando(true);
     try {
@@ -150,7 +158,9 @@ export function CalculadorasTrilhoEspecial() {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex justify-between items-center">
               <h4 className="text-md-ui font-semibold text-neutral-700"><FontAwesomeIcon icon={faCubes} /> Fórmulas e componentes por variante</h4>
-              <button type="button" className="btn btn-default btn-xs" onClick={() => { const nova = varianteVazia(); setEditando({ ...editando, variantes: [...variantes, nova] }); setVarianteAtiva(nova.id); }}><FontAwesomeIcon icon={faPlus} /> Adicionar variante</button>
+              <button type="button" className="btn btn-success btn-sm" onClick={adicionarVariante}>
+                <FontAwesomeIcon icon={faPlus} /> Adicionar variante
+              </button>
             </div>
             <div className="flex flex-wrap gap-2 border-b border-neutral-300 pb-2">
               {variantes.map((v) => <button key={v.id} type="button" className={`btn btn-xs ${v.id === variante?.id ? 'btn-primary' : 'btn-default'}`} onClick={() => setVarianteAtiva(v.id)}><span className="w-2 h-2 rounded-full mr-1 inline-block bg-success" />{v.nome || 'Sem nome'}</button>)}
