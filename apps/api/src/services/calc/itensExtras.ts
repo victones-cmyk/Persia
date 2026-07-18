@@ -1,6 +1,6 @@
 import { listarProdutos, listarProdutosRemoto, type GcProduto } from '../gc/catalogos';
 import { precoByTier } from '../gc/tecidos';
-import { roundHalfUp } from './arredondamento';
+import { ajustarTotalParaQuantidade, roundHalfUp } from './arredondamento';
 import { AppError } from '../../middleware/errorHandler';
 import { encontrarCalculadoraTrilhoEspecial, type CalculadoraTrilhoEspecial } from './calculadorasTrilhoEspecial';
 import { evalQuantidade } from './formula';
@@ -221,7 +221,10 @@ export async function prepararProdutosAvulsos(entradas: ProdutoAvulsoEntrada[] =
     const quantidade = quantidadeValida(entrada.quantidade);
     const ambiente = texto(entrada.ambiente);
     const observacao = texto(entrada.observacao);
-    const valorFinal = roundHalfUp(produto.preco_venda * quantidade);
+    // valor_final/valor_custo precisam ser múltiplos exatos de um preço unitário de
+    // 2 casas decimais: o GC reconstrói o total como quantidade × valor_venda (RN-10),
+    // e o preço do catálogo pode ter mais casas decimais que isso (markup/tier).
+    const valorFinal = ajustarTotalParaQuantidade(produto.preco_venda * quantidade, quantidade);
     out.push({
       tipo: 'produto_avulso',
       produto_id: produto.id,
@@ -235,7 +238,7 @@ export async function prepararProdutosAvulsos(entradas: ProdutoAvulsoEntrada[] =
       quantidade,
       valor_unitario: produto.preco_venda,
       valor_final: valorFinal,
-      valor_custo: roundHalfUp(produto.valor_custo * quantidade),
+      valor_custo: ajustarTotalParaQuantidade(produto.valor_custo * quantidade, quantidade),
       ambiente,
       observacao,
     });

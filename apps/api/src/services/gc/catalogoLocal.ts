@@ -35,11 +35,15 @@ interface ProdutoLocalIndexado {
   grupos: Set<string>;
 }
 
+type ProdutoLocalBruto = Awaited<ReturnType<typeof prisma.gcProdutoLocal.findMany>>[number];
+
 let cacheCatalogoLocal: { itens: ProdutoLocalIndexado[]; expiraEm: number } | null = null;
-let carregamentoCatalogoLocal: Promise<ProdutoLocalIndexado[] | null> | null = null;
-// Incrementada a cada invalidação. Uma leitura iniciada antes de uma sincronização
-// só pode repovoar o cache se nenhuma invalidação tiver ocorrido enquanto ela estava
-// em voo — evita reviver dados obsoletos quando a sync termina no meio de uma leitura.
+// Leitura bruta (sem o mapeamento/índice) em voo, com a geração vigente no momento em
+// que ELA foi criada — não no momento em que cada caller se junta a ela. Assim, mesmo
+// quem se junta depois de uma invalidação sabe que os dados que está prestes a receber
+// já podem estar obsoletos (ver carregarCatalogoLocal).
+let carregamentoCatalogoLocal: { promessa: Promise<ProdutoLocalBruto[]>; geracaoNoInicio: number } | null = null;
+// Incrementada a cada invalidação.
 let geracaoCatalogoLocal = 0;
 
 export interface StatusCatalogoLocal {
@@ -159,28 +163,38 @@ export async function statusCatalogoLocal(): Promise<StatusCatalogoLocal> {
 }
 
 async function carregarCatalogoLocal(): Promise<ProdutoLocalIndexado[] | null> {
-  if (cacheCatalogoLocal && cacheCatalogoLocal.expiraEm > Date.now()) return cacheCatalogoLocal.itens;
-  if (carregamentoCatalogoLocal) return carregamentoCatalogoLocal;
+  // Laço em vez de recursão: uma invalidação pode ocorrer enquanto a leitura
+  // compartilhada estava em voo, e não só para quem a criou — também para quem
+  // se juntou a ela depois da invalidação (o dado buscado já era pré-sync de
+  // qualquer forma). Cada volta reavalia o cache e, se preciso, tenta de novo.
+  for (;;) {
+    if (cacheCatalogoLocal && cacheCatalogoLocal.expiraEm > Date.now()) return cacheCatalogoLocal.itens;
 
-  const geracaoNoInicio = geracaoCatalogoLocal;
-  carregamentoCatalogoLocal = prisma.gcProdutoLocal.findMany({ orderBy: { nome: 'asc' } })
-    .then((produtos) => {
-      if (produtos.length === 0) return null;
-      const itens = produtos.map((p) => ({
-        produto: produtoLocalParaGc(p),
-        grupos: new Set([String(p.grupo_id ?? ''), ...gruposSyncDoRaw(p.raw_json)].filter(Boolean)),
-      }));
-      // Se uma invalidação ocorreu depois que esta leitura começou, os dados já
-      // podem estar desatualizados — não repovoa o cache, deixa o próximo caller buscar de novo.
-      if (geracaoNoInicio === geracaoCatalogoLocal) {
-        cacheCatalogoLocal = { itens, expiraEm: Date.now() + CACHE_CATALOGO_TTL_MS };
-      }
-      return itens;
-    })
-    .finally(() => {
-      carregamentoCatalogoLocal = null;
-    });
-  return carregamentoCatalogoLocal;
+    if (!carregamentoCatalogoLocal) {
+      const geracaoNoInicio = geracaoCatalogoLocal;
+      const promessa = prisma.gcProdutoLocal.findMany({ orderBy: { nome: 'asc' } });
+      const entrada = { promessa, geracaoNoInicio };
+      carregamentoCatalogoLocal = entrada;
+      // .then(liberar, liberar) em vez de .finally: a cadeia derivada de .finally()
+      // propagaria uma rejeição não observada (ninguém aguarda essa cadeia — quem
+      // aguarda é `promessa` diretamente, abaixo). Com dois handlers que não relançam,
+      // a cadeia derivada sempre resolve, sem gerar unhandled rejection.
+      const liberar = () => { if (carregamentoCatalogoLocal === entrada) carregamentoCatalogoLocal = null; };
+      promessa.then(liberar, liberar);
+    }
+    const { promessa, geracaoNoInicio } = carregamentoCatalogoLocal;
+    const produtos = await promessa;
+
+    if (geracaoNoInicio !== geracaoCatalogoLocal) continue; // invalidado durante a leitura: tenta de novo
+    if (produtos.length === 0) return null;
+
+    const itens = produtos.map((p) => ({
+      produto: produtoLocalParaGc(p),
+      grupos: new Set([String(p.grupo_id ?? ''), ...gruposSyncDoRaw(p.raw_json)].filter(Boolean)),
+    }));
+    cacheCatalogoLocal = { itens, expiraEm: Date.now() + CACHE_CATALOGO_TTL_MS };
+    return itens;
+  }
 }
 
 export function invalidarCacheCatalogoLocal(): void {

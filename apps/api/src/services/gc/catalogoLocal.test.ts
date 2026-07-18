@@ -35,12 +35,15 @@ describe('listarProdutosLocais', () => {
     expect(mocks.findMany).toHaveBeenCalledTimes(1);
   });
 
-  it('não repovoa o cache com dados obsoletos quando uma sincronização invalida durante uma leitura em voo', async () => {
+  it('tenta de novo em vez de aceitar dados obsoletos quando uma sincronização invalida durante a própria leitura em voo', async () => {
     let resolverLeituraLenta!: (v: unknown[]) => void;
     const leituraLenta = new Promise<unknown[]>((resolve) => { resolverLeituraLenta = resolve; });
     mocks.findMany.mockReturnValueOnce(leituraLenta);
+    mocks.findMany.mockResolvedValueOnce([
+      { id: '2', nome: 'Novo', codigo_interno: 'N1', ativo: true, grupo_id: '', nome_grupo: '', largura: null, valor_venda: { toString: () => '20' }, valores: [], atributos: [], raw_json: {} },
+    ]);
 
-    const promessaAntiga = listarProdutosLocais({ ativo: 1 });
+    const promessa = listarProdutosLocais({ ativo: 1 });
 
     // Uma sincronização termina e invalida o cache enquanto a leitura acima ainda está em voo.
     invalidarCacheCatalogoLocal();
@@ -48,15 +51,49 @@ describe('listarProdutosLocais', () => {
     resolverLeituraLenta([
       { id: '1', nome: 'Antigo', codigo_interno: 'A1', ativo: true, grupo_id: '', nome_grupo: '', largura: null, valor_venda: { toString: () => '10' }, valores: [], atributos: [], raw_json: {} },
     ]);
-    await promessaAntiga;
 
+    const resultado = await promessa;
+
+    expect(resultado?.map((p) => p.id)).toEqual(['2']);
+    expect(mocks.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('não entrega dados obsoletos para quem se junta à leitura em voo antes de uma invalidação', async () => {
+    let resolverLeituraLenta!: (v: unknown[]) => void;
+    const leituraLenta = new Promise<unknown[]>((resolve) => { resolverLeituraLenta = resolve; });
+    mocks.findMany.mockReturnValueOnce(leituraLenta);
     mocks.findMany.mockResolvedValueOnce([
       { id: '2', nome: 'Novo', codigo_interno: 'N1', ativo: true, grupo_id: '', nome_grupo: '', largura: null, valor_venda: { toString: () => '20' }, valores: [], atributos: [], raw_json: {} },
     ]);
-    const resultadoNovo = await listarProdutosLocais({ ativo: 1 });
 
-    expect(resultadoNovo?.map((p) => p.id)).toEqual(['2']);
+    const promessaA = listarProdutosLocais({ ativo: 1 }); // inicia a leitura lenta
+    const promessaB = listarProdutosLocais({ ativo: 1 }); // se junta à mesma leitura em voo
+
+    // Uma sincronização termina enquanto A e B ainda aguardam a MESMA leitura em voo.
+    invalidarCacheCatalogoLocal();
+
+    resolverLeituraLenta([
+      { id: '1', nome: 'Antigo', codigo_interno: 'A1', ativo: true, grupo_id: '', nome_grupo: '', largura: null, valor_venda: { toString: () => '10' }, valores: [], atributos: [], raw_json: {} },
+    ]);
+
+    const [resultadoA, resultadoB] = await Promise.all([promessaA, promessaB]);
+
+    expect(resultadoA?.map((p) => p.id)).toEqual(['2']);
+    expect(resultadoB?.map((p) => p.id)).toEqual(['2']);
     expect(mocks.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('propaga o erro e libera o estado quando a leitura falha, permitindo tentar de novo depois', async () => {
+    mocks.findMany.mockRejectedValueOnce(new Error('conexão falhou'));
+
+    await expect(listarProdutosLocais({ ativo: 1 })).rejects.toThrow('conexão falhou');
+
+    mocks.findMany.mockResolvedValueOnce([
+      { id: '3', nome: 'Recuperado', codigo_interno: 'R1', ativo: true, grupo_id: '', nome_grupo: '', largura: null, valor_venda: { toString: () => '30' }, valores: [], atributos: [], raw_json: {} },
+    ]);
+    const resultado = await listarProdutosLocais({ ativo: 1 });
+
+    expect(resultado?.map((p) => p.id)).toEqual(['3']);
   });
 });
 

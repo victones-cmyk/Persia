@@ -9,7 +9,7 @@ import { Prisma, type Orcamento } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
-import { roundHalfUp } from '../services/calc/arredondamento';
+import { ajustarTotalParaQuantidade, roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
@@ -101,7 +101,10 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
     }
     for (const p of extrasPrep) {
-      p.valor_final = valorComRt(p.valor_final, rtPct);
+      const comRt = valorComRt(p.valor_final, rtPct);
+      // Produtos avulsos enviam quantidade real ao GC (RN-10): o gross-up de RT
+      // precisa preservar o total como múltiplo exato de um preço unitário.
+      p.valor_final = p.tipo === 'produto_avulso' ? ajustarTotalParaQuantidade(comRt, p.quantidade) : comRt;
     }
   }
   const valorCortinas = roundHalfUp(cortPrep.reduce((s, p) => s + p.valor_total, 0));
@@ -245,7 +248,10 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
   const avulsosPrep = avulsosEntrada.length > 0 ? await prepararProdutosAvulsos(avulsosEntrada) : [];
   const extrasPrep = [...trilhosPrep, ...avulsosPrep];
   if (rtPct > 0) {
-    for (const p of extrasPrep) p.valor_final = valorComRt(p.valor_final, rtPct);
+    for (const p of extrasPrep) {
+      const comRt = valorComRt(p.valor_final, rtPct);
+      p.valor_final = p.tipo === 'produto_avulso' ? ajustarTotalParaQuantidade(comRt, p.quantidade) : comRt;
+    }
   }
 
   const produtos: LinhaProduto[] = recalcular

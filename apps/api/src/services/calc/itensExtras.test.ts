@@ -1,5 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { calcularComposicaoTrilho, type ProdutoCatalogoOrcamento } from './itensExtras';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({ listarProdutos: vi.fn(), listarProdutosRemoto: vi.fn() }));
+
+vi.mock('../gc/catalogos', () => ({
+  listarProdutos: mocks.listarProdutos,
+  listarProdutosRemoto: mocks.listarProdutosRemoto,
+}));
+
+import { calcularComposicaoTrilho, prepararProdutosAvulsos, type ProdutoCatalogoOrcamento } from './itensExtras';
+import { roundHalfUp } from './arredondamento';
 import type { CalculadoraTrilhoEspecial } from './calculadorasTrilhoEspecial';
 
 const calculadora: CalculadoraTrilhoEspecial = {
@@ -61,5 +70,24 @@ describe('calculadora de trilhos especiais', () => {
   it('rejeita um variante_id que não corresponde a nenhuma variante da calculadora', () => {
     expect(() => calcularComposicaoTrilho(calculadora, 'inexistente', 3, 1, 0, produtos))
       .toThrow(/variante válida/i);
+  });
+});
+
+describe('prepararProdutosAvulsos', () => {
+  beforeEach(() => {
+    mocks.listarProdutos.mockReset();
+    mocks.listarProdutosRemoto.mockReset();
+  });
+
+  it('mantem valor_final como multiplo exato de um preco unitario de 2 casas, mesmo com preco "sujo" no catalogo (RN-10)', async () => {
+    mocks.listarProdutos.mockResolvedValue([
+      { id: 'p1', nome: 'Parafuso', codigo_interno: 'PAR-1', ativo: '1', grupo_id: '', nome_grupo: '', largura: '', valor_venda: '10.993333333', valores: [] },
+    ]);
+
+    const [item] = await prepararProdutosAvulsos([{ produto_id: 'p1', quantidade: 3 }]);
+
+    expect(item.quantidade).toBe(3);
+    const precoUnitario = roundHalfUp(item.valor_final / item.quantidade);
+    expect(roundHalfUp(precoUnitario * item.quantidade)).toBe(item.valor_final);
   });
 });
