@@ -1,18 +1,19 @@
 // apps/api/src/services/gc/orcamentos.ts
 // Escrita de orçamentos no GestãoClick (SRD §11, Fase 5).
-// Cada item (janela) é uma linha de produto: quantidade 1 × valor_venda = valor_final
-// do item → soma das linhas = total exato do orçamento (RN-10).
+// Cada item sob medida é uma linha de quantidade 1. Produtos avulsos mantêm
+// sua quantidade real e usam valor_venda/valor_custo unitários (RN-10).
 
 import { gcRequest, type GcEnvelope } from './client';
 
 // Situação "Em aberto" (GET /api/situacoes_orcamentos — verificado 11/06/2026).
 export const SITUACAO_EM_ABERTO = '92112';
 
-/** Uma linha de produto do orçamento (um item/janela). */
+/** Uma linha de produto do orçamento. */
 export interface LinhaProdutoGc {
   gc_produto_id: string;
-  valor_venda: number; // valor final do item (com desconto), RN-10
+  valor_venda: number; // valor unitário (com desconto)
   valor_custo: number;
+  quantidade?: number; // default 1
 }
 
 /** Uma linha de serviço do orçamento (ex.: instalação). Instalação é por peça:
@@ -61,7 +62,7 @@ export function montarPayload(o: NovoOrcamentoGc): Record<string, unknown> {
     data: o.data,
     produtos: o.produtos.map((p) => ({
       produto_id: p.gc_produto_id,
-      quantidade: 1,
+      quantidade: p.quantidade ?? 1,
       valor_venda: p.valor_venda,
       valor_custo: p.valor_custo,
     })),

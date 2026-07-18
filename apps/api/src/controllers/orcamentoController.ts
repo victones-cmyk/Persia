@@ -245,7 +245,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
  * Retorna os gc_produto_id na MESMA ORDEM dos itens.
  */
 export async function executarEnvioGc(args: {
-  itens: { gc_produto_id?: string | null; nome_produto: string; descricao_produto?: string; valor_final: number; valor_custo: number }[];
+  itens: { gc_produto_id?: string | null; nome_produto: string; descricao_produto?: string; quantidade?: number; valor_final: number; valor_custo: number }[];
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
@@ -255,9 +255,14 @@ export async function executarEnvioGc(args: {
   try {
     const linhas: LinhaProdutoGc[] = [];
     for (const it of args.itens) {
+      const quantidade = it.quantidade ?? 1;
+      // valor_final/valor_custo representam o total da linha no app. O GC, por
+      // outro lado, multiplica quantidade pelo valor unitário.
+      const valorVendaUnitario = it.valor_final / quantidade;
+      const valorCustoUnitario = it.valor_custo / quantidade;
       if (it.gc_produto_id) {
         usados.push(it.gc_produto_id);
-        linhas.push({ gc_produto_id: it.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
+        linhas.push({ gc_produto_id: it.gc_produto_id, quantidade, valor_venda: valorVendaUnitario, valor_custo: valorCustoUnitario });
       } else {
         const produto = await criarProduto({
           nome: it.nome_produto,
@@ -267,7 +272,7 @@ export async function executarEnvioGc(args: {
         });
         usados.push(produto.gc_produto_id);
         if (produto.criado) criados.push(produto.gc_produto_id);
-        linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: it.valor_final, valor_custo: it.valor_custo });
+        linhas.push({ gc_produto_id: produto.gc_produto_id, quantidade, valor_venda: valorVendaUnitario, valor_custo: valorCustoUnitario });
       }
     }
 

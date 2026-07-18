@@ -30,7 +30,7 @@ import {
 interface SessaoUsuario { id: string; perfil: 'vendedor' | 'admin'; gc_usuario_id: string | null; loja_id: string | null }
 
 /** Produto (linha) para o envio combinado ao GestãoClick. */
-type LinhaProduto = { gc_produto_id?: string | null; nome_produto: string; descricao_produto?: string; valor_final: number; valor_custo: number };
+type LinhaProduto = { gc_produto_id?: string | null; nome_produto: string; descricao_produto?: string; quantidade?: number; valor_final: number; valor_custo: number };
 
 /** POST /api/orcamentos/misto — cria um orçamento com persianas E cortinas juntas. */
 export async function criarOrcamentoMisto(req: Request, res: Response): Promise<void> {
@@ -120,7 +120,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const produtosEnvio: LinhaProduto[] = [
     ...persPrep.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
     ...cortPrep.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
-    ...extrasPrep.map((p) => ({ gc_produto_id: p.tipo === 'produto_avulso' ? p.produto_id : null, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+    ...extrasPrep.map((p) => ({ gc_produto_id: p.tipo === 'produto_avulso' ? p.produto_id : null, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, quantidade: p.tipo === 'produto_avulso' ? p.quantidade : undefined, valor_final: p.valor_final, valor_custo: p.valor_custo })),
   ];
 
   const entradaJson = { tipo: persPrep[0]?.tipo ?? null, itens: itensEntrada, cortinas: cortinasEntrada, trilhos_especiais: trilhosEntrada, produtos_avulsos: avulsosEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue;
@@ -211,7 +211,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
 }
 
 interface CortinaSnap { nome_produto?: string; descricao_produto?: string; valor_total?: number; valor_custo?: number }
-interface ExtraSnap { produto_id?: string; nome_produto?: string; descricao_produto?: string; valor_final?: number; valor_custo?: number }
+interface ExtraSnap { produto_id?: string; nome_produto?: string; descricao_produto?: string; quantidade?: number; valor_final?: number; valor_custo?: number }
 interface MistoItensJson { persiana?: { tipo: string; itens: ItemSnapshot[] }; cortinas?: CortinaSnap[]; trilhos_especiais?: ExtraSnap[]; produtos_avulsos?: ExtraSnap[]; instalacao?: number }
 
 /** Reenvia um orçamento MISTO ao GestãoClick (replay do snapshot salvo). */
@@ -252,12 +252,13 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
     ? [
         ...(persPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
         ...(cortPrep ?? []).map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_total, valor_custo: p.valor_custo })),
-        ...extrasPrep.map((p) => ({ gc_produto_id: p.tipo === 'produto_avulso' ? p.produto_id : null, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
+        ...extrasPrep.map((p) => ({ gc_produto_id: p.tipo === 'produto_avulso' ? p.produto_id : null, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, quantidade: p.tipo === 'produto_avulso' ? p.quantidade : undefined, valor_final: p.valor_final, valor_custo: p.valor_custo })),
       ]
     : [
         ...persSnaps.map((s) => ({ nome_produto: s.nome_produto, descricao_produto: s.descricao_produto, valor_final: Number(s.valor_final), valor_custo: Number(s.valor_custo) })),
         ...cortSnaps.map((s) => ({ nome_produto: String(s.nome_produto ?? 'Cortina'), descricao_produto: s.descricao_produto ? String(s.descricao_produto) : undefined, valor_final: Number(s.valor_total) || 0, valor_custo: Number(s.valor_custo) || 0 })),
-        ...[...trilhoSnaps, ...avulsoSnaps].map((s) => ({ gc_produto_id: s.produto_id ?? null, nome_produto: String(s.nome_produto ?? 'Produto'), descricao_produto: s.descricao_produto ? String(s.descricao_produto) : undefined, valor_final: Number(s.valor_final) || 0, valor_custo: Number(s.valor_custo) || 0 })),
+        ...trilhoSnaps.map((s) => ({ gc_produto_id: s.produto_id ?? null, nome_produto: String(s.nome_produto ?? 'Produto'), descricao_produto: s.descricao_produto ? String(s.descricao_produto) : undefined, valor_final: Number(s.valor_final) || 0, valor_custo: Number(s.valor_custo) || 0 })),
+        ...avulsoSnaps.map((s) => ({ gc_produto_id: s.produto_id ?? null, nome_produto: String(s.nome_produto ?? 'Produto'), descricao_produto: s.descricao_produto ? String(s.descricao_produto) : undefined, quantidade: Number(s.quantidade) || 1, valor_final: Number(s.valor_final) || 0, valor_custo: Number(s.valor_custo) || 0 })),
       ];
 
   try {
