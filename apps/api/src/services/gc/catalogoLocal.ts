@@ -20,6 +20,17 @@ const GRUPOS_CATALOGO = [
 
 let sincronizacaoEmAndamento: Promise<ResumoSyncCatalogo> | null = null;
 let agendadorIniciado = false;
+// O catálogo só muda na sincronização (que invalida este índice). O TTL cobre
+// alterações feitas por outra instância sem reintroduzir leituras a cada cálculo.
+const CACHE_CATALOGO_TTL_MS = 5 * 60 * 1000;
+
+interface ProdutoLocalIndexado {
+  produto: GcProduto;
+  grupos: Set<string>;
+}
+
+let cacheCatalogoLocal: { itens: ProdutoLocalIndexado[]; expiraEm: number } | null = null;
+let carregamentoCatalogoLocal: Promise<ProdutoLocalIndexado[] | null> | null = null;
 
 export interface StatusCatalogoLocal {
   ultima_sync_em: string | null;
@@ -137,21 +148,38 @@ export async function statusCatalogoLocal(): Promise<StatusCatalogoLocal> {
   }
 }
 
-export async function listarProdutosLocais(filtros: { grupo_id?: string; ativo?: 0 | 1 } = {}): Promise<GcProduto[] | null> {
-  const total = await prisma.gcProdutoLocal.count();
-  if (total === 0) return null;
+async function carregarCatalogoLocal(): Promise<ProdutoLocalIndexado[] | null> {
+  if (cacheCatalogoLocal && cacheCatalogoLocal.expiraEm > Date.now()) return cacheCatalogoLocal.itens;
+  if (carregamentoCatalogoLocal) return carregamentoCatalogoLocal;
 
-  const produtos = await prisma.gcProdutoLocal.findMany({
-    where: {
-      ...(filtros.ativo !== undefined ? { ativo: filtros.ativo === 1 } : {}),
-    },
-    orderBy: { nome: 'asc' },
-  });
+  carregamentoCatalogoLocal = prisma.gcProdutoLocal.findMany({ orderBy: { nome: 'asc' } })
+    .then((produtos) => {
+      if (produtos.length === 0) return null;
+      const itens = produtos.map((p) => ({
+        produto: produtoLocalParaGc(p),
+        grupos: new Set([String(p.grupo_id ?? ''), ...gruposSyncDoRaw(p.raw_json)].filter(Boolean)),
+      }));
+      cacheCatalogoLocal = { itens, expiraEm: Date.now() + CACHE_CATALOGO_TTL_MS };
+      return itens;
+    })
+    .finally(() => {
+      carregamentoCatalogoLocal = null;
+    });
+  return carregamentoCatalogoLocal;
+}
+
+export function invalidarCacheCatalogoLocal(): void {
+  cacheCatalogoLocal = null;
+}
+
+export async function listarProdutosLocais(filtros: { grupo_id?: string; ativo?: 0 | 1 } = {}): Promise<GcProduto[] | null> {
+  const itens = await carregarCatalogoLocal();
+  if (!itens) return null;
   const grupoFiltro = filtros.grupo_id ? String(filtros.grupo_id) : null;
-  const filtrados = grupoFiltro
-    ? produtos.filter((p) => p.grupo_id === grupoFiltro || gruposSyncDoRaw(p.raw_json).includes(grupoFiltro))
-    : produtos;
-  return filtrados.map(produtoLocalParaGc);
+  const ativoFiltro = filtros.ativo === undefined ? null : String(filtros.ativo);
+  return itens
+    .filter(({ produto, grupos }) => (ativoFiltro === null || produto.ativo === ativoFiltro) && (!grupoFiltro || grupos.has(grupoFiltro)))
+    .map(({ produto }) => produto);
 }
 
 function precoVarejoLocal(produto: { valor_venda: Prisma.Decimal; valores: Prisma.JsonValue | null }): { preco: number; custo: number } {
@@ -301,6 +329,7 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
       grupos: grupos.length,
       erro: null,
     });
+    invalidarCacheCatalogoLocal();
     return resumo;
   } catch (err) {
     const resumo: ResumoSyncCatalogo = {
@@ -322,6 +351,8 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
       grupos: grupos.length,
       erro: resumo.erro ?? null,
     });
+    // Uma falha pode ocorrer depois de parte dos lotes ter sido atualizada.
+    invalidarCacheCatalogoLocal();
     return resumo;
   }
 }
@@ -346,48 +377,69 @@ export function sincronizarCatalogoLocal(): Promise<ResumoSyncCatalogo> {
   return sincronizacaoEmAndamento;
 }
 
-function dataLocalSaoPaulo(d = new Date()): { data: string; hora: number } {
+function dataLocalSaoPaulo(d = new Date()): string {
   const partes = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    hour: '2-digit',
-    hour12: false,
   }).formatToParts(d);
   const get = (type: string) => partes.find((p) => p.type === type)?.value ?? '';
-  return { data: `${get('year')}-${get('month')}-${get('day')}`, hora: Number(get('hour')) };
+  return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
-async function sincronizarSeMeiaNoite(): Promise<void> {
-  const local = dataLocalSaoPaulo();
-  if (local.hora !== 0) return;
+/**
+ * A sincronização é pendente enquanto ainda não houve uma execução automática
+ * bem-sucedida no dia local. Não limitamos a verificação à hora 00: se o processo
+ * estiver suspenso ou reiniciar nessa janela, ele recupera a execução ao acordar.
+ */
+export function sincronizacaoDiariaPendente(ultimaData: string | null | undefined, agora = new Date()): boolean {
+  return ultimaData !== dataLocalSaoPaulo(agora);
+}
+
+async function sincronizarSePendenteHoje(): Promise<ResumoSyncCatalogo | null> {
+  const dataLocal = dataLocalSaoPaulo();
   const config = await prisma.configuracao.findUnique({ where: { chave: CHAVE_SYNC_DIARIA } });
-  if (config?.valor === local.data) return;
+  if (!sincronizacaoDiariaPendente(config?.valor)) return null;
   const resumo = await sincronizarCatalogoLocal();
   if (resumo.sucesso) {
     await prisma.configuracao.upsert({
       where: { chave: CHAVE_SYNC_DIARIA },
-      create: { chave: CHAVE_SYNC_DIARIA, valor: local.data, descricao: 'Último dia da sincronização diária do catálogo GC' },
-      update: { valor: local.data },
+      create: { chave: CHAVE_SYNC_DIARIA, valor: dataLocal, descricao: 'Último dia da sincronização diária do catálogo GC' },
+      update: { valor: dataLocal },
     });
+  }
+  return resumo;
+}
+
+async function executarAgendamentoCatalogo(): Promise<void> {
+  try {
+    const resumo = await sincronizarSePendenteHoje();
+    if (!resumo) return;
+    if (resumo.sucesso) {
+      console.log(`[gc-catalogo] sincronização diária concluída: ${resumo.produtos_salvos} produtos em ${resumo.fim}`);
+    } else {
+      console.error(`[gc-catalogo] falha na sincronização diária: ${resumo.erro ?? 'erro desconhecido'}`);
+    }
+  } catch (err) {
+    console.error('[gc-catalogo] falha ao verificar a sincronização diária:', err);
   }
 }
 
 async function sincronizarCatalogoCompletoAoIniciar(): Promise<void> {
   const status = await statusCatalogoLocal();
   if (status.catalogo_completo) {
-    await sincronizarSeMeiaNoite();
+    await executarAgendamentoCatalogo();
     return;
   }
 
   const resumo = await sincronizarCatalogoLocal();
   if (resumo.sucesso) {
-    const local = dataLocalSaoPaulo();
+    const dataLocal = dataLocalSaoPaulo();
     await prisma.configuracao.upsert({
       where: { chave: CHAVE_SYNC_DIARIA },
-      create: { chave: CHAVE_SYNC_DIARIA, valor: local.data, descricao: 'Último dia da sincronização diária do catálogo GC' },
-      update: { valor: local.data },
+      create: { chave: CHAVE_SYNC_DIARIA, valor: dataLocal, descricao: 'Último dia da sincronização diária do catálogo GC' },
+      update: { valor: dataLocal },
     });
   }
 }
@@ -396,7 +448,7 @@ export function iniciarAgendadorCatalogoLocal(): void {
   if (agendadorIniciado) return;
   agendadorIniciado = true;
   setInterval(() => {
-    void sincronizarSeMeiaNoite();
+    void executarAgendamentoCatalogo();
   }, 15 * 60 * 1000).unref();
   // Versões antigas armazenavam apenas os grupos técnicos. Após o deploy desta
   // versão, a primeira inicialização completa o catálogo automaticamente.
