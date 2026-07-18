@@ -26,6 +26,17 @@ interface CortinaSnap {
   valor_total: number; nome_produto?: string;
 }
 
+// Snapshot de um trilho especial ou produto avulso salvo em itens_json (ItemExtraPreparado no servidor).
+interface ItemExtraSnap {
+  tipo?: 'produto_avulso' | 'trilho_especial';
+  nome_produto: string;
+  quantidade: number;
+  largura?: number;
+  valor_final: number;
+  ambiente?: string;
+  observacao?: string;
+}
+
 const modeloLabel = (v: string) => modeloCortinaLabel(v);
 const fixacaoLabel = (v: string) => FIXACOES_CORTINA.find((f) => f.value === v)?.label ?? v;
 
@@ -81,6 +92,26 @@ function CortinaItem({ c, indice }: { c: CortinaSnap; indice: number }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Detalhe de UM trilho especial ou produto avulso (itens extras do orçamento). */
+function ItemExtraLinha({ it, indice }: { it: ItemExtraSnap; indice: number }) {
+  return (
+    <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
+      <div className="flex justify-between items-start gap-2 mb-1">
+        <span className="text-sm-ui font-semibold text-neutral-800">
+          {indice + 1}. {it.ambiente?.trim() || it.nome_produto}
+        </span>
+        <span className="font-mono font-semibold tabular-nums whitespace-nowrap">{formatBRL(Number(it.valor_final))}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs-ui text-neutral-600">
+        {it.ambiente?.trim() && <span>{it.nome_produto}</span>}
+        {typeof it.largura === 'number' && <span>Largura: {formatNum(it.largura)} m</span>}
+        <span>Quantidade: {formatNum(Number(it.quantidade), Number.isInteger(Number(it.quantidade)) ? 0 : 2)}</span>
+        {it.observacao?.trim() && <span>Obs.: {it.observacao}</span>}
+      </div>
     </div>
   );
 }
@@ -193,13 +224,16 @@ export function OrcamentoDetalhe() {
   // misto = { persiana:{itens}, cortinas, instalacao }. Unificamos os 3 casos.
   const ehCortina = orc.tipo_produto === 'cortina';
   const ehMisto = orc.tipo_produto === 'misto';
-  const mistoJson = ehMisto ? (orc.itens_json as unknown as { persiana?: { itens?: ItemSnapshot[] }; cortinas?: CortinaSnap[]; instalacao?: number } | null) : null;
+  const mistoJson = ehMisto ? (orc.itens_json as unknown as { persiana?: { itens?: ItemSnapshot[] }; cortinas?: CortinaSnap[]; trilhos_especiais?: ItemExtraSnap[]; produtos_avulsos?: ItemExtraSnap[]; instalacao?: number } | null) : null;
   const cortinaJson = ehCortina ? (orc.itens_json as unknown as { cortinas?: CortinaSnap[]; instalacao?: number } | null) : null;
 
   const persianaItens: ItemSnapshot[] = ehMisto
     ? (mistoJson?.persiana?.itens ?? [])
     : (!ehCortina && Array.isArray(orc.itens_json) ? orc.itens_json : []);
   const cortinaSnaps: CortinaSnap[] = ehMisto ? (mistoJson?.cortinas ?? []) : (cortinaJson?.cortinas ?? []);
+  // Trilhos especiais e produtos avulsos só existem no orçamento MISTO.
+  const trilhoSnaps: ItemExtraSnap[] = ehMisto ? (mistoJson?.trilhos_especiais ?? []) : [];
+  const avulsoSnaps: ItemExtraSnap[] = ehMisto ? (mistoJson?.produtos_avulsos ?? []) : [];
 
   // Instalação POR PEÇA (Victor v.3.1): valor unitário guardado; total = unit × nº de peças.
   const instalacaoPorPeca = ehMisto
@@ -241,8 +275,8 @@ export function OrcamentoDetalhe() {
         <Linha label="Produto" valor={tipoLabel(orc.tipo_produto)} />
         <Linha label="Loja" valor={orc.loja?.nome ?? '—'} />
 
-        {/* Itens do orçamento — persianas e/ou cortinas (cobre misto) */}
-        {(persianaItens.length > 0 || cortinaSnaps.length > 0) ? (
+        {/* Itens do orçamento — persianas, cortinas, trilhos especiais e produtos avulsos (cobre misto) */}
+        {(persianaItens.length > 0 || cortinaSnaps.length > 0 || trilhoSnaps.length > 0 || avulsoSnaps.length > 0) ? (
           <div className="mt-3 mb-1 space-y-2">
             {persianaItens.length > 0 && (
               <>
@@ -275,6 +309,22 @@ export function OrcamentoDetalhe() {
                   {cortinaSnaps.length} {cortinaSnaps.length === 1 ? 'cortina' : 'cortinas'}
                 </div>
                 {cortinaSnaps.map((c, i) => <CortinaItem key={`c${i}`} c={c} indice={i} />)}
+              </>
+            )}
+            {trilhoSnaps.length > 0 && (
+              <>
+                <div className="text-xs-ui font-bold text-neutral-600 mb-1 mt-1">
+                  {trilhoSnaps.length} {trilhoSnaps.length === 1 ? 'trilho especial' : 'trilhos especiais'}
+                </div>
+                {trilhoSnaps.map((it, i) => <ItemExtraLinha key={`t${i}`} it={it} indice={i} />)}
+              </>
+            )}
+            {avulsoSnaps.length > 0 && (
+              <>
+                <div className="text-xs-ui font-bold text-neutral-600 mb-1 mt-1">
+                  {avulsoSnaps.length} {avulsoSnaps.length === 1 ? 'produto avulso' : 'produtos avulsos'}
+                </div>
+                {avulsoSnaps.map((it, i) => <ItemExtraLinha key={`a${i}`} it={it} indice={i} />)}
               </>
             )}
             {instalacaoTotal > 0 && (
