@@ -52,4 +52,14 @@ describe('calculadora de trilhos especiais', () => {
     expect(() => calcularComposicaoTrilho(calculadora, 'motorizada', 3, 1, 0, produtos.slice(0, 1)))
       .toThrow(/AC-002.*não foi encontrado/i);
   });
+
+  it('usa a primeira variante quando nenhum variante_id é informado (orçamentos salvos antes da feature)', () => {
+    const r = calcularComposicaoTrilho(calculadora, undefined, 3, 2, 0, produtos);
+    expect(r.variante_id).toBe('motorizada');
+  });
+
+  it('rejeita um variante_id que não corresponde a nenhuma variante da calculadora', () => {
+    expect(() => calcularComposicaoTrilho(calculadora, 'inexistente', 3, 1, 0, produtos))
+      .toThrow(/variante válida/i);
+  });
 });

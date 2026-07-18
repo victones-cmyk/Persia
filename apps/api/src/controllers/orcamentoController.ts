@@ -257,9 +257,11 @@ export async function executarEnvioGc(args: {
     for (const it of args.itens) {
       const quantidade = it.quantidade ?? 1;
       // valor_final/valor_custo representam o total da linha no app. O GC, por
-      // outro lado, multiplica quantidade pelo valor unitário.
-      const valorVendaUnitario = it.valor_final / quantidade;
-      const valorCustoUnitario = it.valor_custo / quantidade;
+      // outro lado, multiplica quantidade pelo valor unitário — arredondamos aqui
+      // (único ponto de arredondamento, RN obrigatória) para que essa multiplicação
+      // reconstrua o total exato.
+      const valorVendaUnitario = roundHalfUp(it.valor_final / quantidade);
+      const valorCustoUnitario = roundHalfUp(it.valor_custo / quantidade);
       if (it.gc_produto_id) {
         usados.push(it.gc_produto_id);
         linhas.push({ gc_produto_id: it.gc_produto_id, quantidade, valor_venda: valorVendaUnitario, valor_custo: valorCustoUnitario });

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   componentesSnapshot: vi.fn(),
   indiceInstalacoes: vi.fn(),
   encontrarCalculadora: vi.fn(),
+  criarOrcamentoGc: vi.fn(),
 }));
 
 vi.mock('../lib/prisma', () => ({ prisma: mocks.prisma }));
@@ -40,9 +41,9 @@ vi.mock('../services/calc/calculadoras', () => ({
   exigeLarguraTecido: vi.fn(() => true),
 }));
 vi.mock('../services/gc/produtos', () => ({ criarProduto: vi.fn(), deletarProduto: vi.fn() }));
-vi.mock('../services/gc/orcamentos', () => ({ criarOrcamento: vi.fn() }));
+vi.mock('../services/gc/orcamentos', () => ({ criarOrcamento: mocks.criarOrcamentoGc }));
 
-import { criarOrcamento, duplicarOrcamento } from './orcamentoController';
+import { criarOrcamento, duplicarOrcamento, executarEnvioGc } from './orcamentoController';
 
 function makeReq(perfil: 'admin' | 'vendedor', lojaSessao: string | null, lojaBody: string | undefined): Request {
   return {
@@ -231,5 +232,40 @@ describe('duplicarOrcamento', () => {
       }),
     }));
     expect(res.status).toHaveBeenCalledWith(201);
+  });
+});
+
+describe('executarEnvioGc', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.criarOrcamentoGc.mockResolvedValue({ gc_orcamento_id: 'gc-orc-1', gc_codigo: '1', payload: {}, resposta: {} });
+  });
+
+  it('arredonda o valor unitario de um produto avulso com quantidade > 1 (RN-10)', async () => {
+    await executarEnvioGc({
+      itens: [{ gc_produto_id: 'AVULSO-1', nome_produto: 'Parafuso', quantidade: 3, valor_final: 32.98, valor_custo: 15 }],
+      gc_cliente_id: 'cliente-1',
+      gcVendedorId: null,
+      gcLojaId: null,
+    });
+
+    expect(mocks.criarOrcamentoGc).toHaveBeenCalledWith(expect.objectContaining({
+      produtos: [{ gc_produto_id: 'AVULSO-1', quantidade: 3, valor_venda: 10.99, valor_custo: 5 }],
+    }));
+  });
+
+  it('mantem quantidade 1 e valor cheio quando o item nao informa quantidade', () => {
+    // não-avulsos (persiana/cortina/trilho) nunca enviam `quantidade`: valor_final já é o
+    // total da linha e deve ser preservado tal como está, sem divisão.
+    return executarEnvioGc({
+      itens: [{ gc_produto_id: 'PERSIANA-1', nome_produto: 'Persiana', valor_final: 250.5, valor_custo: 120 }],
+      gc_cliente_id: 'cliente-1',
+      gcVendedorId: null,
+      gcLojaId: null,
+    }).then(() => {
+      expect(mocks.criarOrcamentoGc).toHaveBeenCalledWith(expect.objectContaining({
+        produtos: [{ gc_produto_id: 'PERSIANA-1', quantidade: 1, valor_venda: 250.5, valor_custo: 120 }],
+      }));
+    });
   });
 });

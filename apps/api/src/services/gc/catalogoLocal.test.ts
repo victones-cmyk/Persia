@@ -34,6 +34,30 @@ describe('listarProdutosLocais', () => {
     expect(peloFilho?.map((p) => p.id)).toEqual(['1']);
     expect(mocks.findMany).toHaveBeenCalledTimes(1);
   });
+
+  it('não repovoa o cache com dados obsoletos quando uma sincronização invalida durante uma leitura em voo', async () => {
+    let resolverLeituraLenta!: (v: unknown[]) => void;
+    const leituraLenta = new Promise<unknown[]>((resolve) => { resolverLeituraLenta = resolve; });
+    mocks.findMany.mockReturnValueOnce(leituraLenta);
+
+    const promessaAntiga = listarProdutosLocais({ ativo: 1 });
+
+    // Uma sincronização termina e invalida o cache enquanto a leitura acima ainda está em voo.
+    invalidarCacheCatalogoLocal();
+
+    resolverLeituraLenta([
+      { id: '1', nome: 'Antigo', codigo_interno: 'A1', ativo: true, grupo_id: '', nome_grupo: '', largura: null, valor_venda: { toString: () => '10' }, valores: [], atributos: [], raw_json: {} },
+    ]);
+    await promessaAntiga;
+
+    mocks.findMany.mockResolvedValueOnce([
+      { id: '2', nome: 'Novo', codigo_interno: 'N1', ativo: true, grupo_id: '', nome_grupo: '', largura: null, valor_venda: { toString: () => '20' }, valores: [], atributos: [], raw_json: {} },
+    ]);
+    const resultadoNovo = await listarProdutosLocais({ ativo: 1 });
+
+    expect(resultadoNovo?.map((p) => p.id)).toEqual(['2']);
+    expect(mocks.findMany).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('sincronizacaoDiariaPendente', () => {

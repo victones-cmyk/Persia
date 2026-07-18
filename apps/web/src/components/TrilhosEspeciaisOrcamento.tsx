@@ -103,7 +103,17 @@ export function TrilhosEspeciaisOrcamento({
 
   useEffect(() => {
     getCacheado<{ calculadoras: CalculadoraTrilhoEspecial[] }>('calculadoras-trilho-especial-v1', '/calcular/calculadoras-trilho-especial')
-      .then((r) => setCalculadoras(r.calculadoras))
+      .then((r) => {
+        setCalculadoras(r.calculadoras);
+        // Rascunhos/orçamentos salvos antes do suporte a variantes têm calculadora_id
+        // mas nenhum variante_id — preenche com a primeira variante do modelo já
+        // escolhido, como o seletor faz ao trocar de calculadora manualmente.
+        setLinhas((atuais) => atuais.map((l) => {
+          if (!l.calculadora_id || l.variante_id) return l;
+          const primeiraVariante = r.calculadoras.find((c) => c.id === l.calculadora_id)?.variantes?.[0]?.id;
+          return primeiraVariante ? { ...l, variante_id: primeiraVariante } : l;
+        }));
+      })
       .catch(() => setCalculadoras([]))
       .finally(() => setCarregando(false));
   }, []);

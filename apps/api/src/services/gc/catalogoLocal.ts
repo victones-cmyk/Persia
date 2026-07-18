@@ -20,6 +20,12 @@ const GRUPOS_CATALOGO = [
 
 let sincronizacaoEmAndamento: Promise<ResumoSyncCatalogo> | null = null;
 let agendadorIniciado = false;
+// Backoff exponencial para a sincronização diária: falhas consecutivas espaçam as
+// próximas tentativas (até um teto), em vez de martelar a API do GC a cada 15min.
+let falhasConsecutivasSyncDiaria = 0;
+let proximaTentativaSyncDiariaEm = 0;
+const BACKOFF_SYNC_DIARIA_BASE_MS = 15 * 60 * 1000;
+const BACKOFF_SYNC_DIARIA_MAX_MS = 4 * 60 * 60 * 1000;
 // O catálogo só muda na sincronização (que invalida este índice). O TTL cobre
 // alterações feitas por outra instância sem reintroduzir leituras a cada cálculo.
 const CACHE_CATALOGO_TTL_MS = 5 * 60 * 1000;
@@ -31,6 +37,10 @@ interface ProdutoLocalIndexado {
 
 let cacheCatalogoLocal: { itens: ProdutoLocalIndexado[]; expiraEm: number } | null = null;
 let carregamentoCatalogoLocal: Promise<ProdutoLocalIndexado[] | null> | null = null;
+// Incrementada a cada invalidação. Uma leitura iniciada antes de uma sincronização
+// só pode repovoar o cache se nenhuma invalidação tiver ocorrido enquanto ela estava
+// em voo — evita reviver dados obsoletos quando a sync termina no meio de uma leitura.
+let geracaoCatalogoLocal = 0;
 
 export interface StatusCatalogoLocal {
   ultima_sync_em: string | null;
@@ -152,6 +162,7 @@ async function carregarCatalogoLocal(): Promise<ProdutoLocalIndexado[] | null> {
   if (cacheCatalogoLocal && cacheCatalogoLocal.expiraEm > Date.now()) return cacheCatalogoLocal.itens;
   if (carregamentoCatalogoLocal) return carregamentoCatalogoLocal;
 
+  const geracaoNoInicio = geracaoCatalogoLocal;
   carregamentoCatalogoLocal = prisma.gcProdutoLocal.findMany({ orderBy: { nome: 'asc' } })
     .then((produtos) => {
       if (produtos.length === 0) return null;
@@ -159,7 +170,11 @@ async function carregarCatalogoLocal(): Promise<ProdutoLocalIndexado[] | null> {
         produto: produtoLocalParaGc(p),
         grupos: new Set([String(p.grupo_id ?? ''), ...gruposSyncDoRaw(p.raw_json)].filter(Boolean)),
       }));
-      cacheCatalogoLocal = { itens, expiraEm: Date.now() + CACHE_CATALOGO_TTL_MS };
+      // Se uma invalidação ocorreu depois que esta leitura começou, os dados já
+      // podem estar desatualizados — não repovoa o cache, deixa o próximo caller buscar de novo.
+      if (geracaoNoInicio === geracaoCatalogoLocal) {
+        cacheCatalogoLocal = { itens, expiraEm: Date.now() + CACHE_CATALOGO_TTL_MS };
+      }
       return itens;
     })
     .finally(() => {
@@ -170,6 +185,7 @@ async function carregarCatalogoLocal(): Promise<ProdutoLocalIndexado[] | null> {
 
 export function invalidarCacheCatalogoLocal(): void {
   cacheCatalogoLocal = null;
+  geracaoCatalogoLocal++;
 }
 
 export async function listarProdutosLocais(filtros: { grupo_id?: string; ativo?: 0 | 1 } = {}): Promise<GcProduto[] | null> {
@@ -412,16 +428,27 @@ async function sincronizarSePendenteHoje(): Promise<ResumoSyncCatalogo | null> {
   return resumo;
 }
 
+function registrarFalhaSyncDiaria(): void {
+  falhasConsecutivasSyncDiaria++;
+  const espera = Math.min(BACKOFF_SYNC_DIARIA_BASE_MS * 2 ** (falhasConsecutivasSyncDiaria - 1), BACKOFF_SYNC_DIARIA_MAX_MS);
+  proximaTentativaSyncDiariaEm = Date.now() + espera;
+}
+
 async function executarAgendamentoCatalogo(): Promise<void> {
+  if (Date.now() < proximaTentativaSyncDiariaEm) return;
   try {
     const resumo = await sincronizarSePendenteHoje();
     if (!resumo) return;
     if (resumo.sucesso) {
+      falhasConsecutivasSyncDiaria = 0;
+      proximaTentativaSyncDiariaEm = 0;
       console.log(`[gc-catalogo] sincronização diária concluída: ${resumo.produtos_salvos} produtos em ${resumo.fim}`);
     } else {
+      registrarFalhaSyncDiaria();
       console.error(`[gc-catalogo] falha na sincronização diária: ${resumo.erro ?? 'erro desconhecido'}`);
     }
   } catch (err) {
+    registrarFalhaSyncDiaria();
     console.error('[gc-catalogo] falha ao verificar a sincronização diária:', err);
   }
 }

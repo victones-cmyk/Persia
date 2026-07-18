@@ -122,7 +122,11 @@ export function calcularComposicaoTrilho(
   produtos: ProdutoCatalogoOrcamento[],
 ): CalculoTrilhoEspecial {
   const variantes = calculadora.variantes ?? [];
-  const variante = variantes.find((v) => v.id === varianteId) ?? variantes[0];
+  // Sem variante_id (orçamentos salvos antes desta feature): assume a primeira
+  // variante. Com variante_id preenchido que não corresponde a nenhuma variante
+  // atual (removida/renomeada, ou id adulterado), falha em vez de recalcular
+  // silenciosamente com uma composição/preço diferentes do que foi selecionado.
+  const variante = varianteId ? variantes.find((v) => v.id === varianteId) : variantes[0];
   if (!variante) throw new AppError(400, 'VARIANTE_TRILHO_INVALIDA', 'Selecione uma variante válida do trilho especial.');
   const porCodigo = new Map(produtos.map((p) => [p.codigo_interno.trim().toLowerCase(), p]));
   const componentes = variante.componentes.map((componente) => {
