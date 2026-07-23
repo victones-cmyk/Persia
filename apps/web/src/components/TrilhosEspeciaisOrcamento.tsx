@@ -4,7 +4,7 @@ import { faCopy, faPlus, faSpinner, faTrash } from '@fortawesome/free-solid-svg-
 import { api, ApiError } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
 import { formatBRL, formatNum } from '../lib/formatacao';
-import type { CalculadoraTrilhoEspecial } from '../lib/calcTypes';
+import type { CalculadoraTrilhoEspecial, VarianteCalculadoraTrilho } from '../lib/calcTypes';
 import type { ProdutoExtraSnap } from '../lib/rascunhoLocal';
 import type { ItemExtraPayload, ItensExtrasEstado } from './ItensExtrasOrcamento';
 
@@ -16,6 +16,7 @@ interface LinhaState {
   largura: string;
   quantidade: string;
   emendas: string;
+  tc: string;
   lado_motor: 'direito' | 'esquerdo';
   tipo_abertura: 'direita' | 'esquerda';
   observacao: string;
@@ -39,6 +40,7 @@ interface ResultadoTrilho {
   largura: number;
   quantidade: number;
   emendas: number;
+  tc: number;
   componentes: ComponenteCalculado[];
   valor_unitario: number;
   valor_total: number;
@@ -52,6 +54,7 @@ const vazia = (): LinhaState => ({
   largura: '',
   quantidade: '1',
   emendas: '0',
+  tc: '',
   lado_motor: 'direito',
   tipo_abertura: 'direita',
   observacao: '',
@@ -67,6 +70,7 @@ function normalizarInicial(inicial?: ProdutoExtraSnap[]): LinhaState[] {
     largura: item.largura ?? '',
     quantidade: item.quantidade ?? '1',
     emendas: item.emendas ?? '0',
+    tc: item.tc ?? '',
     lado_motor: item.lado_motor === 'esquerdo' ? 'esquerdo' : 'direito',
     tipo_abertura: item.tipo_abertura === 'esquerda' ? 'esquerda' : 'direita',
     observacao: item.observacao ?? '',
@@ -79,7 +83,28 @@ function resultadoCorresponde(linha: LinhaState, resultado?: ResultadoTrilho): r
     && resultado.variante_id === linha.variante_id
     && resultado.largura === Number(linha.largura)
     && resultado.quantidade === Number(linha.quantidade)
-    && resultado.emendas === Number(linha.emendas);
+    && resultado.emendas === Number(linha.emendas)
+    && resultado.tc === (Number(linha.tc) || 0);
+}
+
+// Uma variante só exige os campos que sua fórmula realmente usa (ex.: nem toda
+// composição usa emendas ou TC) — evita pedir dado irrelevante ao vendedor.
+function variantePara(calculadoras: CalculadoraTrilhoEspecial[], linha: Pick<LinhaState, 'calculadora_id' | 'variante_id'>): VarianteCalculadoraTrilho | undefined {
+  return calculadoras.find((c) => c.id === linha.calculadora_id)?.variantes?.find((v) => v.id === linha.variante_id);
+}
+
+function usaVariavel(variante: VarianteCalculadoraTrilho | undefined, nome: string): boolean {
+  const re = new RegExp(`\\b${nome}\\b`, 'i');
+  return (variante?.componentes ?? []).some((c) => re.test(c.qtd));
+}
+
+function linhaValida(linha: LinhaState, calculadoras: CalculadoraTrilhoEspecial[]): boolean {
+  if (!linha.calculadora_id || !linha.variante_id) return false;
+  if (!(Number(linha.largura) > 0) || !(Number(linha.quantidade) > 0)) return false;
+  const variante = variantePara(calculadoras, linha);
+  if (usaVariavel(variante, 'EMENDAS') && !(Number.isInteger(Number(linha.emendas)) && Number(linha.emendas) >= 0)) return false;
+  if (usaVariavel(variante, 'TC') && !(Number(linha.tc) > 0)) return false;
+  return true;
 }
 
 export function TrilhosEspeciaisOrcamento({
@@ -120,10 +145,10 @@ export function TrilhosEspeciaisOrcamento({
       .finally(() => setCarregando(false));
   }, []);
 
-  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, v: l.variante_id, l: l.largura, q: l.quantidade, e: l.emendas })));
+  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, v: l.variante_id, l: l.largura, q: l.quantidade, e: l.emendas, t: l.tc })));
   useEffect(() => {
     const seq = ++sequencia.current;
-    const validas = linhas.filter((l) => l.calculadora_id && l.variante_id && Number(l.largura) > 0 && Number(l.quantidade) > 0 && Number.isInteger(Number(l.emendas)) && Number(l.emendas) >= 0);
+    const validas = linhas.filter((l) => linhaValida(l, calculadoras));
     setResultados({});
     setErros({});
     if (validas.length === 0) {
@@ -142,6 +167,7 @@ export function TrilhosEspeciaisOrcamento({
             largura: Number(linha.largura),
             quantidade: Number(linha.quantidade),
             emendas: Number(linha.emendas),
+            tc: Number(linha.tc) || 0,
           });
           novosResultados[linha.id] = r.resultado;
         } catch (e) {
@@ -162,10 +188,10 @@ export function TrilhosEspeciaisOrcamento({
     let incompleto = false;
     const itens: ItemExtraPayload[] = [];
     for (const linha of linhas) {
-      const temConteudo = Boolean(linha.calculadora_id || linha.ambiente || linha.largura || linha.observacao || linha.quantidade !== '1' || linha.emendas !== '0');
+      const temConteudo = Boolean(linha.calculadora_id || linha.ambiente || linha.largura || linha.observacao || linha.quantidade !== '1' || linha.emendas !== '0' || linha.tc);
       if (!temConteudo) continue;
       const resultado = resultados[linha.id];
-      if (!linha.calculadora_id || !linha.variante_id || !(Number(linha.largura) > 0) || !(Number(linha.quantidade) > 0) || !Number.isInteger(Number(linha.emendas)) || Number(linha.emendas) < 0 || !resultadoCorresponde(linha, resultado) || erros[linha.id]) {
+      if (!linhaValida(linha, calculadoras) || !resultadoCorresponde(linha, resultado) || erros[linha.id]) {
         incompleto = true;
         continue;
       }
@@ -176,6 +202,7 @@ export function TrilhosEspeciaisOrcamento({
         largura: Number(linha.largura),
         quantidade: Number(linha.quantidade),
         emendas: Number(linha.emendas),
+        tc: Number(linha.tc) || 0,
         lado_motor: linha.lado_motor,
         tipo_abertura: linha.tipo_abertura,
         ...(linha.ambiente.trim() ? { ambiente: linha.ambiente.trim() } : {}),
@@ -183,7 +210,7 @@ export function TrilhosEspeciaisOrcamento({
       });
     }
     return { total: Math.round(total * 100) / 100, count: itens.length, completos: !incompleto && !calculando, itens, calculando };
-  }, [calculando, erros, linhas, resultados]);
+  }, [calculadoras, calculando, erros, linhas, resultados]);
 
   useEffect(() => { onEstado(estado); }, [estado, onEstado]);
   useEffect(() => {
@@ -194,11 +221,12 @@ export function TrilhosEspeciaisOrcamento({
       largura: l.largura,
       quantidade: l.quantidade,
       emendas: l.emendas,
+      tc: l.tc,
       lado_motor: l.lado_motor,
       tipo_abertura: l.tipo_abertura,
       observacao: l.observacao,
     })));
-    onDirtyChange?.(linhas.some((l) => l.calculadora_id || l.ambiente || l.largura || l.observacao || l.quantidade !== '1' || l.emendas !== '0'));
+    onDirtyChange?.(linhas.some((l) => l.calculadora_id || l.ambiente || l.largura || l.observacao || l.quantidade !== '1' || l.emendas !== '0' || l.tc));
   }, [linhas, onDirtyChange, onSnapshot]);
 
   function alterar(id: string, patch: Partial<LinhaState>) {
@@ -218,7 +246,7 @@ export function TrilhosEspeciaisOrcamento({
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
           <h4 className="text-lg-ui font-medium">Calculadora de trilhos especiais</h4>
-          <p className="text-xs-ui text-neutral-500">Escolha uma composição e informe largura, emendas por trilho e quantidade.</p>
+          <p className="text-xs-ui text-neutral-500">Escolha uma composição e informe largura, quantidade e os demais campos exigidos pela fórmula.</p>
         </div>
         <span className="font-mono tabular-nums text-sm-ui font-semibold">{formatBRL(estado.total)}</span>
       </div>
@@ -231,6 +259,9 @@ export function TrilhosEspeciaisOrcamento({
         {linhas.map((linha, index) => {
           const resultado = resultados[linha.id];
           const calculado = resultadoCorresponde(linha, resultado);
+          const variante = variantePara(calculadoras, linha);
+          const mostrarEmendas = usaVariavel(variante, 'EMENDAS');
+          const mostrarTc = usaVariavel(variante, 'TC');
           return (
             <div key={linha.id} className="rounded-sm border border-neutral-300 p-3 bg-neutral-50">
               <div className="grid grid-cols-12 gap-2 items-end">
@@ -259,10 +290,18 @@ export function TrilhosEspeciaisOrcamento({
                   <label className="form-label">Largura (m)<span className="label-required">*</span></label>
                   <input className="input input-mono" type="number" min={0} step={0.01} value={linha.largura} onChange={(e) => alterar(linha.id, { largura: e.target.value })} />
                 </div>
-                <div className="col-span-4 md:col-span-2">
-                  <label className="form-label">Emendas/trilho<span className="label-required">*</span></label>
-                  <input className="input input-mono" type="number" min={0} step={1} value={linha.emendas} onChange={(e) => alterar(linha.id, { emendas: e.target.value })} />
-                </div>
+                {mostrarEmendas && (
+                  <div className="col-span-4 md:col-span-2">
+                    <label className="form-label">Emendas/trilho<span className="label-required">*</span></label>
+                    <input className="input input-mono" type="number" min={0} step={1} value={linha.emendas} onChange={(e) => alterar(linha.id, { emendas: e.target.value })} />
+                  </div>
+                )}
+                {mostrarTc && (
+                  <div className="col-span-4 md:col-span-2">
+                    <label className="form-label">TC (m)<span className="label-required">*</span></label>
+                    <input className="input input-mono" type="number" min={0} step={0.01} value={linha.tc} onChange={(e) => alterar(linha.id, { tc: e.target.value })} />
+                  </div>
+                )}
                 <div className="col-span-4 md:col-span-2">
                   <label className="form-label">Quantidade<span className="label-required">*</span></label>
                   <input className="input input-mono" type="number" min={1} step={1} value={linha.quantidade} onChange={(e) => alterar(linha.id, { quantidade: e.target.value })} />
@@ -284,7 +323,7 @@ export function TrilhosEspeciaisOrcamento({
               </div>
 
               {erros[linha.id] && <div className="helper-error mt-2">{erros[linha.id]}</div>}
-              {calculando && linha.calculadora_id && linha.variante_id && Number(linha.largura) > 0 && Number.isInteger(Number(linha.emendas)) && Number(linha.emendas) >= 0 && !calculado && !erros[linha.id] && (
+              {calculando && linhaValida(linha, calculadoras) && !calculado && !erros[linha.id] && (
                 <div className="text-xs-ui text-neutral-500 mt-2"><FontAwesomeIcon icon={faSpinner} spin /> Calculando composição…</div>
               )}
 

@@ -29,6 +29,7 @@ export interface TrilhoEspecialEntrada {
   largura: number;
   quantidade: number;
   emendas?: number;
+  tc?: number;
   lado_motor?: 'direito' | 'esquerdo';
   tipo_abertura?: 'direita' | 'esquerda';
   ambiente?: string;
@@ -69,11 +70,21 @@ export interface CalculoTrilhoEspecial {
   largura: number;
   quantidade: number;
   emendas: number;
+  tc: number;
   motorizado: boolean;
   componentes: ComponenteTrilhoCalculado[];
   valor_unitario: number;
   valor_total: number;
   custo_total: number;
+}
+
+/** Entrada já validada/tipada para calcularComposicaoTrilho (ver calcularTrilhoEspecial). */
+export interface EntradaCalculoTrilho {
+  varianteId?: string;
+  largura: number;
+  quantidade: number;
+  emendas: number;
+  tc: number;
 }
 
 function normalizarProduto(p: GcProduto): ProdutoCatalogoOrcamento {
@@ -115,12 +126,10 @@ async function buscarProdutoParaOrcamento(id: string): Promise<ProdutoCatalogoOr
 
 export function calcularComposicaoTrilho(
   calculadora: CalculadoraTrilhoEspecial,
-  varianteId: string | undefined,
-  largura: number,
-  quantidade: number,
-  emendas: number,
+  entrada: EntradaCalculoTrilho,
   produtos: ProdutoCatalogoOrcamento[],
 ): CalculoTrilhoEspecial {
+  const { varianteId, largura, quantidade, emendas, tc } = entrada;
   const variantes = calculadora.variantes ?? [];
   // Sem variante_id (orçamentos salvos antes desta feature): assume a primeira
   // variante. Com variante_id preenchido que não corresponde a nenhuma variante
@@ -137,7 +146,7 @@ export function calcularComposicaoTrilho(
     }
     let quantidadeFormula: number;
     try {
-      quantidadeFormula = roundHalfUp(evalQuantidade(componente.qtd, { largura, altura: 0, tc: 0, emendas }), 4);
+      quantidadeFormula = roundHalfUp(evalQuantidade(componente.qtd, { largura, altura: 0, tc, emendas }), 4);
     } catch (e) {
       throw new AppError(400, 'FORMULA_TRILHO_INVALIDA', e instanceof Error ? e.message : `Fórmula inválida em "${componente.descricao}".`);
     }
@@ -166,6 +175,7 @@ export function calcularComposicaoTrilho(
     largura,
     quantidade,
     emendas,
+    tc,
     motorizado: variante.motorizado === true,
     componentes,
     valor_unitario: roundHalfUp(valorTotal / quantidade),
@@ -174,14 +184,22 @@ export function calcularComposicaoTrilho(
   };
 }
 
-export async function calcularTrilhoEspecial(calculadoraId: string, varianteId: string | undefined, larguraEntrada: unknown, quantidadeEntrada: unknown, emendasEntrada: unknown = 0): Promise<CalculoTrilhoEspecial> {
-  const calculadora = encontrarCalculadoraTrilhoEspecial(String(calculadoraId ?? '').trim());
+export async function calcularTrilhoEspecial(entrada: {
+  calculadoraId: unknown;
+  varianteId?: string;
+  largura: unknown;
+  quantidade: unknown;
+  emendas?: unknown;
+  tc?: unknown;
+}): Promise<CalculoTrilhoEspecial> {
+  const calculadora = encontrarCalculadoraTrilhoEspecial(String(entrada.calculadoraId ?? '').trim());
   if (!calculadora) throw new AppError(400, 'CALCULADORA_TRILHO_INVALIDA', 'Selecione uma calculadora de trilho especial válida.');
-  const largura = medidaValida(larguraEntrada);
-  const quantidade = quantidadeValida(quantidadeEntrada);
-  const emendas = emendasValida(emendasEntrada);
+  const largura = medidaValida(entrada.largura);
+  const quantidade = quantidadeValida(entrada.quantidade);
+  const emendas = emendasValida(entrada.emendas ?? 0);
+  const tc = tcValido(entrada.tc ?? 0);
   const produtos = (await listarProdutos({ ativo: 1 })).map(normalizarProduto);
-  return calcularComposicaoTrilho(calculadora, varianteId, largura, quantidade, emendas, produtos);
+  return calcularComposicaoTrilho(calculadora, { varianteId: entrada.varianteId, largura, quantidade, emendas, tc }, produtos);
 }
 
 function texto(v: unknown): string {
@@ -204,6 +222,15 @@ function emendasValida(v: unknown): number {
   const n = Number(v);
   if (!Number.isInteger(n) || n < 0) throw new AppError(400, 'EMENDAS_INVALIDAS', 'Informe uma quantidade de emendas igual ou maior que zero.');
   return n;
+}
+
+// TC é opcional a nível de backend (nem toda fórmula usa a variável TC) — quem
+// exige o preenchimento é o formulário do vendedor, condicionalmente à fórmula.
+function tcValido(v: unknown): number {
+  if (v === undefined || v === null || v === '') return 0;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) throw new AppError(400, 'TC_INVALIDO', 'Informe um TC válido.');
+  return roundHalfUp(n);
 }
 
 function ladoMotor(v: unknown): 'direito' | 'esquerdo' {
@@ -250,7 +277,14 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
   const out: ItemExtraPreparado[] = [];
   for (const entrada of entradas) {
     if (entrada.calculadora_id) {
-      const calculo = await calcularTrilhoEspecial(entrada.calculadora_id, entrada.variante_id, entrada.largura, entrada.quantidade, entrada.emendas ?? 0);
+      const calculo = await calcularTrilhoEspecial({
+        calculadoraId: entrada.calculadora_id,
+        varianteId: entrada.variante_id,
+        largura: entrada.largura,
+        quantidade: entrada.quantidade,
+        emendas: entrada.emendas ?? 0,
+        tc: entrada.tc,
+      });
       const ambiente = texto(entrada.ambiente);
       const observacao = texto(entrada.observacao);
       const lado = ladoMotor(entrada.lado_motor);
@@ -265,6 +299,7 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
           ambiente ? `Ambiente: ${ambiente}` : null,
           `Modelo: ${calculo.nome} | Variante: ${calculo.variante_nome}`,
           `Largura: ${calculo.largura} m | Quantidade: ${calculo.quantidade} | Emendas por trilho: ${calculo.emendas}`,
+          calculo.tc > 0 ? `TC: ${calculo.tc} m` : null,
           `Lado do motor: ${lado} | Tipo de abertura: ${abertura}`,
           ...calculo.componentes.map((c) => `${c.nome} (${c.codigo_interno}): ${c.quantidade} x ${c.preco_venda}`),
           observacao ? `Obs.: ${observacao}` : null,

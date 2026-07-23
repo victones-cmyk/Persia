@@ -34,7 +34,7 @@ const produtos: ProdutoCatalogoOrcamento[] = [
 
 describe('calculadora de trilhos especiais', () => {
   it('calcula todos os produtos da composição pela largura e quantidade de trilhos', () => {
-    const r = calcularComposicaoTrilho(calculadora, 'motorizada', 3, 2, 0, produtos);
+    const r = calcularComposicaoTrilho(calculadora, { varianteId: 'motorizada', largura: 3, quantidade: 2, emendas: 0, tc: 0 }, produtos);
 
     expect(r.componentes[0].quantidade).toBe(6);
     expect(r.componentes[0].subtotal).toBe(60);
@@ -49,7 +49,7 @@ describe('calculadora de trilhos especiais', () => {
   });
 
   it('multiplica as emendas informadas pela quantidade de trilhos', () => {
-    const r = calcularComposicaoTrilho(calculadora, 'motorizada', 3, 2, 2, produtos);
+    const r = calcularComposicaoTrilho(calculadora, { varianteId: 'motorizada', largura: 3, quantidade: 2, emendas: 2, tc: 0 }, produtos);
 
     expect(r.emendas).toBe(2);
     expect(r.componentes[2].quantidade).toBe(4);
@@ -58,18 +58,32 @@ describe('calculadora de trilhos especiais', () => {
   });
 
   it('informa quando um produto configurado não existe no catálogo local', () => {
-    expect(() => calcularComposicaoTrilho(calculadora, 'motorizada', 3, 1, 0, produtos.slice(0, 1)))
+    expect(() => calcularComposicaoTrilho(calculadora, { varianteId: 'motorizada', largura: 3, quantidade: 1, emendas: 0, tc: 0 }, produtos.slice(0, 1)))
       .toThrow(/AC-002.*não foi encontrado/i);
   });
 
   it('usa a primeira variante quando nenhum variante_id é informado (orçamentos salvos antes da feature)', () => {
-    const r = calcularComposicaoTrilho(calculadora, undefined, 3, 2, 0, produtos);
+    const r = calcularComposicaoTrilho(calculadora, { varianteId: undefined, largura: 3, quantidade: 2, emendas: 0, tc: 0 }, produtos);
     expect(r.variante_id).toBe('motorizada');
   });
 
   it('rejeita um variante_id que não corresponde a nenhuma variante da calculadora', () => {
-    expect(() => calcularComposicaoTrilho(calculadora, 'inexistente', 3, 1, 0, produtos))
+    expect(() => calcularComposicaoTrilho(calculadora, { varianteId: 'inexistente', largura: 3, quantidade: 1, emendas: 0, tc: 0 }, produtos))
       .toThrow(/variante válida/i);
+  });
+
+  it('resolve a variavel TC nas formulas', () => {
+    const calculadoraComTc: CalculadoraTrilhoEspecial = {
+      ...calculadora,
+      variantes: [{
+        id: 'com_tc', nome: 'Com TC', motorizado: false, componentes: [
+          { codigo_interno: 'TR-001', descricao: 'Perfil', qtd: 'TC' },
+        ],
+      }],
+    };
+    const r = calcularComposicaoTrilho(calculadoraComTc, { varianteId: 'com_tc', largura: 3, quantidade: 1, emendas: 0, tc: 2.5 }, produtos);
+    expect(r.tc).toBe(2.5);
+    expect(r.componentes[0].quantidade).toBe(2.5);
   });
 });
 
