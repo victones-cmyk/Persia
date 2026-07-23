@@ -32,9 +32,15 @@ export function CalculadorasTrilhoEspecial() {
 
   useEffect(() => { void carregar(); }, []);
 
-  async function salvar(lista: CalculadoraTrilhoEspecial[]) {
+  // Recebe uma função em vez de uma lista pronta: busca o estado mais recente do
+  // servidor logo antes de aplicar a mudança, para não sobrescrever com dados
+  // desatualizados de uma aba esquecida em segundo plano (duas abas abertas, uma
+  // com a lista antiga em memória, causavam perda silenciosa de edições).
+  async function salvar(calcularLista: (atual: CalculadoraTrilhoEspecial[]) => CalculadoraTrilhoEspecial[]) {
     setSalvando(true);
     try {
+      const atual = await api.get<{ calculadoras: CalculadoraTrilhoEspecial[] }>('/admin/calculadoras-trilho-especial');
+      const lista = calcularLista(atual.calculadoras);
       const r = await api.put<{ calculadoras: CalculadoraTrilhoEspecial[] }>('/admin/calculadoras-trilho-especial', { calculadoras: lista });
       setCalculadoras(r.calculadoras);
       invalidarCacheado('calculadoras-trilho-especial-v1');
@@ -86,10 +92,10 @@ export function CalculadorasTrilhoEspecial() {
       showToast('error', 'ID duplicado', 'Já existe uma calculadora com este identificador.');
       return;
     }
-    const lista = criando
-      ? [...calculadoras, { ...editando, componentes: variantes[0].componentes }]
-      : calculadoras.map((c) => c.id === editando.id ? { ...editando, componentes: variantes[0].componentes } : c);
-    void salvar(lista);
+    const editandoComComponentes = { ...editando, componentes: variantes[0].componentes };
+    void salvar((atual) => criando
+      ? [...atual, editandoComComponentes]
+      : atual.map((c) => c.id === editando.id ? editandoComComponentes : c));
   }
 
   function atualizarVariante(id: string, patch: Partial<VarianteCalculadoraTrilho>) {
@@ -108,6 +114,14 @@ export function CalculadorasTrilhoEspecial() {
     if (!editando) return;
     const variantes = editando.variantes ?? [];
     const nova = varianteVazia(crypto.randomUUID(), `Variante ${variantes.length + 1}`);
+    setEditando({ ...editando, variantes: [...variantes, nova] });
+    setVarianteAtiva(nova.id);
+  }
+
+  function duplicarVariante(origem: VarianteCalculadoraTrilho) {
+    if (!editando) return;
+    const variantes = editando.variantes ?? [];
+    const nova: VarianteCalculadoraTrilho = { ...JSON.parse(JSON.stringify(origem)), id: crypto.randomUUID(), nome: `${origem.nome} (cópia)` };
     setEditando({ ...editando, variantes: [...variantes, nova] });
     setVarianteAtiva(nova.id);
   }
@@ -158,9 +172,16 @@ export function CalculadorasTrilhoEspecial() {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex justify-between items-center">
               <h4 className="text-md-ui font-semibold text-neutral-700"><FontAwesomeIcon icon={faCubes} /> Fórmulas e componentes por variante</h4>
-              <button type="button" className="btn btn-success btn-sm" onClick={adicionarVariante}>
-                <FontAwesomeIcon icon={faPlus} /> Adicionar variante
-              </button>
+              <div className="flex gap-2">
+                {variante && (
+                  <button type="button" className="btn btn-default btn-sm" title="Duplica a variante selecionada, incluindo todos os produtos e fórmulas" onClick={() => duplicarVariante(variante)}>
+                    <FontAwesomeIcon icon={faCopy} /> Duplicar variante
+                  </button>
+                )}
+                <button type="button" className="btn btn-success btn-sm" onClick={adicionarVariante}>
+                  <FontAwesomeIcon icon={faPlus} /> Adicionar variante
+                </button>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 border-b border-neutral-300 pb-2">
               {variantes.map((v) => <button key={v.id} type="button" className={`btn btn-xs ${v.id === variante?.id ? 'btn-primary' : 'btn-default'}`} onClick={() => setVarianteAtiva(v.id)}><span className="w-2 h-2 rounded-full mr-1 inline-block bg-success" />{v.nome || 'Sem nome'}</button>)}
@@ -216,7 +237,7 @@ export function CalculadorasTrilhoEspecial() {
           const ativa = calc.ativo !== false;
           return <div key={calc.id} className="card p-4 flex flex-col justify-between" style={{ opacity: ativa ? 1 : 0.62 }}>
             <div><div className="flex justify-between items-start mb-2"><div className="font-bold text-md-ui text-neutral-800">{calc.nome}{!ativa && <span className="badge badge-secondary ml-2">Inativa</span>}</div><span className="text-2xs-ui bg-neutral-200 px-2 py-0.5 rounded-sm font-mono text-neutral-600">ID: {calc.id}</span></div><p className="text-xs-ui text-neutral-500 mb-4">{calc.variantes?.length ?? 1} variante(s) · cálculo por largura</p></div>
-            <div className="flex flex-wrap gap-2 border-t border-neutral-200 pt-3"><button className="btn btn-default btn-xs flex-1" onClick={() => iniciarEdicao(calc)}><FontAwesomeIcon icon={faPen} /> Editar</button><button className="btn btn-default btn-xs text-primary flex-1" onClick={() => duplicar(calc)}><FontAwesomeIcon icon={faCopy} /> Duplicar</button><button className={`btn btn-default btn-xs flex-1 ${ativa ? 'text-warning' : 'text-success'}`} onClick={() => void salvar(calculadoras.map((c) => c.id === calc.id ? { ...c, ativo: !ativa } : c))}><FontAwesomeIcon icon={ativa ? faBan : faCircleCheck} /> {ativa ? 'Inativar' : 'Reativar'}</button><button className="btn btn-default btn-xs text-error flex-1" onClick={() => { if (window.confirm('Deseja realmente excluir esta calculadora?')) void salvar(calculadoras.filter((c) => c.id !== calc.id)); }}><FontAwesomeIcon icon={faTrash} /> Excluir</button></div>
+            <div className="flex flex-wrap gap-2 border-t border-neutral-200 pt-3"><button className="btn btn-default btn-xs flex-1" onClick={() => iniciarEdicao(calc)}><FontAwesomeIcon icon={faPen} /> Editar</button><button className="btn btn-default btn-xs text-primary flex-1" onClick={() => duplicar(calc)}><FontAwesomeIcon icon={faCopy} /> Duplicar</button><button className={`btn btn-default btn-xs flex-1 ${ativa ? 'text-warning' : 'text-success'}`} onClick={() => void salvar((atual) => atual.map((c) => c.id === calc.id ? { ...c, ativo: c.ativo === false } : c))}><FontAwesomeIcon icon={ativa ? faBan : faCircleCheck} /> {ativa ? 'Inativar' : 'Reativar'}</button><button className="btn btn-default btn-xs text-error flex-1" onClick={() => { if (window.confirm('Deseja realmente excluir esta calculadora?')) void salvar((atual) => atual.filter((c) => c.id !== calc.id)); }}><FontAwesomeIcon icon={faTrash} /> Excluir</button></div>
           </div>;
         })}
         {calculadoras.length === 0 && <div className="col-span-full card p-6 text-center text-neutral-500">Nenhuma calculadora de trilho especial cadastrada. Crie a primeira composição.</div>}
