@@ -49,6 +49,14 @@ git fetch origin "$BRANCH"
 git checkout "$BRANCH"
 git pull --ff-only origin "$BRANCH"
 
+log "Limpando node_modules"
+# "npm ci" promete remover node_modules sozinho, mas na pratica deixou residuo
+# nas subpastas dos workspaces (apps/api/node_modules, apps/web/node_modules)
+# apos uma instalacao anterior corrompida — o proximo "npm ci" reaproveitava
+# esse residuo em vez de reinstalar do zero, omitindo devDependencies e
+# quebrando o build. Removendo explicitamente garante estado limpo sempre.
+rm -rf node_modules apps/api/node_modules apps/web/node_modules
+
 log "Instalando dependencias"
 npm ci
 
