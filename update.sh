@@ -37,6 +37,12 @@ set -a
 # shellcheck disable=SC1091
 source .env
 set +a
+# NODE_ENV=production (vindo do .env) faz "npm ci"/"npm install" pularem as
+# devDependencies (typescript, @types/node etc.), quebrando o build de
+# tsc/vite logo abaixo. Este script nunca roda o app (isso e feito pelo
+# systemd via EnvironmentFile, isolado deste shell), entao nao precisamos
+# de NODE_ENV aqui — so instalar e compilar com o toolchain completo.
+unset NODE_ENV
 
 log "Atualizando codigo do GitHub ($BRANCH)"
 git fetch origin "$BRANCH"
