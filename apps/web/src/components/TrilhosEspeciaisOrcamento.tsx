@@ -102,7 +102,9 @@ export function TrilhosEspeciaisOrcamento({
   const sequencia = useRef(0);
 
   useEffect(() => {
-    getCacheado<{ calculadoras: CalculadoraTrilhoEspecial[] }>('calculadoras-trilho-especial-v1', '/calcular/calculadoras-trilho-especial')
+    // TTL curto: essa lista é editada pelo admin e precisa refletir exclusões/alterações
+    // rapidamente em outras abas — não vale a pena guardar por muito tempo (10min padrão).
+    getCacheado<{ calculadoras: CalculadoraTrilhoEspecial[] }>('calculadoras-trilho-especial-v1', '/calcular/calculadoras-trilho-especial', 60 * 1000)
       .then((r) => {
         setCalculadoras(r.calculadoras);
         // Rascunhos/orçamentos salvos antes do suporte a variantes têm calculadora_id

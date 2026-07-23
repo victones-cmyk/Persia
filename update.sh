@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-APP_DIR="${APP_DIR:-/opt/persia}"
+APP_DIR="${APP_DIR:-/home/ubuntu/Persia}"
 BRANCH="${BRANCH:-main}"
 SERVICE_NAME="${PERSIA_SERVICE:-persia}"
 RUN_SEED="${RUN_SEED:-0}"
@@ -28,6 +28,16 @@ if ! grep -q '^DATABASE_URL=' .env; then
   die "DATABASE_URL nao esta configurado no .env"
 fi
 
+# O Prisma CLI (generate/migrate deploy) procura o .env a partir da pasta do
+# schema.prisma, nao da raiz do repo onde o .env realmente fica — e "npm run
+# ... --workspace apps/api" muda o cwd para dentro do workspace, entao o
+# Prisma nunca acha o arquivo sozinho. Exportamos as variaveis aqui para que
+# todo comando abaixo (generate, migrate deploy) enxergue DATABASE_URL etc.
+set -a
+# shellcheck disable=SC1091
+source .env
+set +a
+
 log "Atualizando codigo do GitHub ($BRANCH)"
 git fetch origin "$BRANCH"
 git checkout "$BRANCH"
@@ -52,8 +62,8 @@ fi
 
 log "Reiniciando servico"
 if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" >/dev/null 2>&1; then
-  systemctl restart "$SERVICE_NAME"
-  systemctl --no-pager --full status "$SERVICE_NAME" || true
+  sudo systemctl restart "$SERVICE_NAME"
+  sudo systemctl --no-pager --full status "$SERVICE_NAME" || true
 else
   printf 'Servico systemd "%s" nao encontrado.\n' "$SERVICE_NAME"
   printf 'Se voce ainda roda manualmente, reinicie com: npm run start\n'
