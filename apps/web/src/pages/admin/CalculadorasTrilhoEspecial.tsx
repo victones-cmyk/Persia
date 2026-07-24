@@ -6,7 +6,7 @@ import { useToast } from '../../hooks/useToast';
 import type { CalculadoraTrilhoEspecial, ComponenteCalculadoraTrilho, VarianteCalculadoraTrilho } from '../../lib/calcTypes';
 import { invalidarCacheado } from '../../lib/dadosCache';
 
-const componenteVazio = (): ComponenteCalculadoraTrilho => ({ codigo_interno: '', descricao: '', qtd: 'LARGURA' });
+const componenteVazio = (): ComponenteCalculadoraTrilho => ({ id: crypto.randomUUID(), codigo_interno: '', descricao: '', qtd: 'LARGURA' });
 const varianteVazia = (id: string = crypto.randomUUID(), nome = 'Nova variante'): VarianteCalculadoraTrilho => ({ id, nome, motorizado: false, componentes: [componenteVazio()] });
 
 export function CalculadorasTrilhoEspecial() {
@@ -84,8 +84,8 @@ export function CalculadorasTrilhoEspecial() {
       showToast('warning', 'Variantes necessárias', 'Adicione ao menos uma variante ao modelo.');
       return;
     }
-    if (variantes.some((v) => !v.nome.trim() || v.componentes.length === 0 || v.componentes.some((c) => !c.codigo_interno.trim() || !c.descricao.trim() || !c.qtd.trim()))) {
-      showToast('warning', 'Composição incompleta', 'Preencha código, descrição e fórmula de todos os produtos.');
+    if (variantes.some((v) => !v.nome.trim() || v.componentes.length === 0 || v.componentes.some((c) => (!c.grupo_id?.trim() && !c.codigo_interno.trim()) || !c.descricao.trim() || !c.qtd.trim()))) {
+      showToast('warning', 'Composição incompleta', 'Preencha código (ou grupo), descrição e fórmula de todos os produtos.');
       return;
     }
     if (criando && calculadoras.some((c) => c.id === editando.id)) {
@@ -193,14 +193,36 @@ export function CalculadorasTrilhoEspecial() {
               </div>
               <div className="flex justify-between items-center"><div className="text-xs-ui text-neutral-500">Cada linha representa um produto do Gestão Click. Variantes motorizadas são exportadas somente com o nome.</div><button type="button" className="btn btn-default btn-xs" onClick={() => atualizarVariante(variante.id, { componentes: [...variante.componentes, componenteVazio()] })}><FontAwesomeIcon icon={faPlus} /> Adicionar produto</button></div>
             <div className="space-y-3">
-              {variante.componentes.map((componente, index) => (
-                <div key={index} className="border border-neutral-300 rounded-sm bg-neutral-50 p-3">
+              {variante.componentes.map((componente, index) => {
+                const modoGrupo = componente.grupo_id !== undefined;
+                return (
+                <div key={componente.id} className="border border-neutral-300 rounded-sm bg-neutral-50 p-3">
                   <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-end">
-                    <div className="xl:col-span-3">
-                      <label className="form-label">Código interno GC<span className="label-required">*</span></label>
-                      <input className="input font-mono" value={componente.codigo_interno} placeholder="ex: TRILHO-001" onChange={(e) => atualizarComponente(index, { codigo_interno: e.target.value })} />
+                    <div className="xl:col-span-2">
+                      <label className="form-label">Modo</label>
+                      <select
+                        className="input"
+                        value={modoGrupo ? 'grupo' : 'fixo'}
+                        onChange={(e) => atualizarComponente(index, e.target.value === 'grupo' ? { grupo_id: '', codigo_interno: '' } : { grupo_id: undefined })}
+                      >
+                        <option value="fixo">Produto fixo</option>
+                        <option value="grupo">Grupo (vendedor escolhe)</option>
+                      </select>
                     </div>
-                    <div className="xl:col-span-5">
+                    <div className="xl:col-span-2">
+                      {modoGrupo ? (
+                        <>
+                          <label className="form-label">Grupo GestãoClick (ID)<span className="label-required">*</span></label>
+                          <input className="input font-mono" value={componente.grupo_id ?? ''} placeholder="ex: 5923373" onChange={(e) => atualizarComponente(index, { grupo_id: e.target.value })} />
+                        </>
+                      ) : (
+                        <>
+                          <label className="form-label">Código interno GC<span className="label-required">*</span></label>
+                          <input className="input font-mono" value={componente.codigo_interno} placeholder="ex: TRILHO-001" onChange={(e) => atualizarComponente(index, { codigo_interno: e.target.value })} />
+                        </>
+                      )}
+                    </div>
+                    <div className="xl:col-span-4">
                       <label className="form-label">Produto / descrição<span className="label-required">*</span></label>
                       <input className="input" value={componente.descricao} placeholder="ex: Trilho superior" onChange={(e) => atualizarComponente(index, { descricao: e.target.value })} />
                     </div>
@@ -210,8 +232,10 @@ export function CalculadorasTrilhoEspecial() {
                     </div>
                     <button type="button" className="text-error hover:opacity-80 xl:col-span-1 pb-2" title="Remover produto" onClick={() => atualizarVariante(variante.id, { componentes: variante.componentes.filter((_, i) => i !== index) })}><FontAwesomeIcon icon={faTrash} /></button>
                   </div>
+                  {modoGrupo && <div className="helper-text mt-2">No orçamento, o vendedor escolherá o produto entre os itens ativos deste grupo (ex.: cores diferentes).</div>}
                 </div>
-              ))}
+                );
+              })}
             </div>
             {variantes.length > 1 && <button type="button" className="text-error hover:opacity-80 text-xs-ui self-start" onClick={() => { const restantes = variantes.filter((v) => v.id !== variante.id); setEditando({ ...editando, variantes: restantes }); setVarianteAtiva(restantes[0]?.id ?? ''); }}><FontAwesomeIcon icon={faTrash} /> Remover esta variante</button>}
             </>}

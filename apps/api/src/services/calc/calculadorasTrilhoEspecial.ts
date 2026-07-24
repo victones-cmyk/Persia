@@ -7,9 +7,14 @@ import type { PrismaClient } from '@prisma/client';
 export const CHAVE_CALCULADORAS_TRILHO_ESPECIAL = 'calculadoras_trilho_especial';
 
 export interface ComponenteCalculadoraTrilho {
+  id: string;
   codigo_interno: string;
   descricao: string;
   qtd: string;
+  /** Quando preenchido, o produto NÃO é fixo: o vendedor escolhe entre os
+   * produtos ativos desse grupo do GestãoClick no orçamento (ex.: cores
+   * diferentes de um mesmo item). `codigo_interno` é ignorado nesse modo. */
+  grupo_id?: string;
 }
 
 export interface VarianteCalculadoraTrilho {
@@ -35,6 +40,20 @@ export const CALCULADORAS_TRILHO_ESPECIAL_DEFAULT: CalculadoraTrilhoEspecial[] =
 
 let calculadorasCached: CalculadoraTrilhoEspecial[] = [];
 
+function normalizarComponentes(componentes: unknown): ComponenteCalculadoraTrilho[] {
+  return (Array.isArray(componentes) ? componentes : []).map((comp, index) => {
+    const c = comp as Partial<ComponenteCalculadoraTrilho>;
+    const grupoId = String(c.grupo_id ?? '').trim();
+    return {
+      id: String(c.id || `componente_${index + 1}`),
+      codigo_interno: String(c.codigo_interno ?? ''),
+      descricao: String(c.descricao ?? ''),
+      qtd: String(c.qtd ?? ''),
+      ...(grupoId ? { grupo_id: grupoId } : {}),
+    };
+  });
+}
+
 function normalizar(calculadoras: CalculadoraTrilhoEspecial[]): CalculadoraTrilhoEspecial[] {
   return calculadoras.map((c) => ({
     ...c,
@@ -50,10 +69,10 @@ function normalizar(calculadoras: CalculadoraTrilhoEspecial[]): CalculadoraTrilh
       id: String(v.id || `variante_${index + 1}`),
       nome: String(v.nome || `Variante ${index + 1}`),
       motorizado: v.motorizado === true,
-      componentes: Array.isArray(v.componentes) ? v.componentes : [],
+      componentes: normalizarComponentes(v.componentes),
     })),
     // Compatibilidade com registros e integrações antigas.
-    componentes: Array.isArray(c.componentes) ? c.componentes : [],
+    componentes: normalizarComponentes(c.componentes),
   }));
 }
 

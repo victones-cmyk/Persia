@@ -17,9 +17,18 @@ interface LinhaState {
   quantidade: string;
   emendas: string;
   tc: string;
+  /** Componente (id) -> produto do GestãoClick escolhido, para componentes de grupo. */
+  selecoes_componentes: Record<string, string>;
   lado_motor: 'direito' | 'esquerdo';
   tipo_abertura: 'direita' | 'esquerda';
   observacao: string;
+}
+
+interface ComponenteOpcaoGrupo {
+  id: string;
+  nome: string;
+  codigo_interno: string;
+  preco_venda: number;
 }
 
 interface ComponenteCalculado {
@@ -55,6 +64,7 @@ const vazia = (): LinhaState => ({
   quantidade: '1',
   emendas: '0',
   tc: '',
+  selecoes_componentes: {},
   lado_motor: 'direito',
   tipo_abertura: 'direita',
   observacao: '',
@@ -71,6 +81,7 @@ function normalizarInicial(inicial?: ProdutoExtraSnap[]): LinhaState[] {
     quantidade: item.quantidade ?? '1',
     emendas: item.emendas ?? '0',
     tc: item.tc ?? '',
+    selecoes_componentes: item.selecoes_componentes ?? {},
     lado_motor: item.lado_motor === 'esquerdo' ? 'esquerdo' : 'direito',
     tipo_abertura: item.tipo_abertura === 'esquerda' ? 'esquerda' : 'direita',
     observacao: item.observacao ?? '',
@@ -98,12 +109,17 @@ function usaVariavel(variante: VarianteCalculadoraTrilho | undefined, nome: stri
   return (variante?.componentes ?? []).some((c) => re.test(c.qtd));
 }
 
+function componentesGrupo(variante: VarianteCalculadoraTrilho | undefined) {
+  return (variante?.componentes ?? []).filter((c) => c.grupo_id);
+}
+
 function linhaValida(linha: LinhaState, calculadoras: CalculadoraTrilhoEspecial[]): boolean {
   if (!linha.calculadora_id || !linha.variante_id) return false;
   if (!(Number(linha.largura) > 0) || !(Number(linha.quantidade) > 0)) return false;
   const variante = variantePara(calculadoras, linha);
   if (usaVariavel(variante, 'EMENDAS') && !(Number.isInteger(Number(linha.emendas)) && Number(linha.emendas) >= 0)) return false;
   if (usaVariavel(variante, 'TC') && !(Number(linha.tc) > 0)) return false;
+  if (componentesGrupo(variante).some((c) => !linha.selecoes_componentes[c.id])) return false;
   return true;
 }
 
@@ -124,7 +140,9 @@ export function TrilhosEspeciaisOrcamento({
   const [erros, setErros] = useState<Record<string, string>>({});
   const [carregando, setCarregando] = useState(true);
   const [calculando, setCalculando] = useState(false);
+  const [produtosPorGrupo, setProdutosPorGrupo] = useState<Record<string, ComponenteOpcaoGrupo[]>>({});
   const sequencia = useRef(0);
+  const gruposCarregados = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     // TTL curto: essa lista é editada pelo admin e precisa refletir exclusões/alterações
@@ -140,12 +158,22 @@ export function TrilhosEspeciaisOrcamento({
           const primeiraVariante = r.calculadoras.find((c) => c.id === l.calculadora_id)?.variantes?.[0]?.id;
           return primeiraVariante ? { ...l, variante_id: primeiraVariante } : l;
         }));
+        // Carrega, de uma vez, os produtos de cada grupo GC referenciado por algum
+        // componente de "modo grupo" — a lista de calculadoras é pequena e fixa.
+        for (const c of r.calculadoras) for (const v of c.variantes ?? []) for (const comp of v.componentes) {
+          const grupoId = comp.grupo_id;
+          if (!grupoId || gruposCarregados.current.has(grupoId)) continue;
+          gruposCarregados.current.add(grupoId);
+          getCacheado<{ componentes: ComponenteOpcaoGrupo[] }>(`componentes:${grupoId}`, `/calcular/componentes?grupo_id=${grupoId}`)
+            .then((rc) => setProdutosPorGrupo((p) => ({ ...p, [grupoId]: rc.componentes })))
+            .catch(() => setProdutosPorGrupo((p) => ({ ...p, [grupoId]: [] })));
+        }
       })
       .catch(() => setCalculadoras([]))
       .finally(() => setCarregando(false));
   }, []);
 
-  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, v: l.variante_id, l: l.largura, q: l.quantidade, e: l.emendas, t: l.tc })));
+  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, v: l.variante_id, l: l.largura, q: l.quantidade, e: l.emendas, t: l.tc, s: l.selecoes_componentes })));
   useEffect(() => {
     const seq = ++sequencia.current;
     const validas = linhas.filter((l) => linhaValida(l, calculadoras));
@@ -168,6 +196,7 @@ export function TrilhosEspeciaisOrcamento({
             quantidade: Number(linha.quantidade),
             emendas: Number(linha.emendas),
             tc: Number(linha.tc) || 0,
+            selecoes_componentes: linha.selecoes_componentes,
           });
           novosResultados[linha.id] = r.resultado;
         } catch (e) {
@@ -203,6 +232,7 @@ export function TrilhosEspeciaisOrcamento({
         quantidade: Number(linha.quantidade),
         emendas: Number(linha.emendas),
         tc: Number(linha.tc) || 0,
+        selecoes_componentes: linha.selecoes_componentes,
         lado_motor: linha.lado_motor,
         tipo_abertura: linha.tipo_abertura,
         ...(linha.ambiente.trim() ? { ambiente: linha.ambiente.trim() } : {}),
@@ -222,6 +252,7 @@ export function TrilhosEspeciaisOrcamento({
       quantidade: l.quantidade,
       emendas: l.emendas,
       tc: l.tc,
+      selecoes_componentes: l.selecoes_componentes,
       lado_motor: l.lado_motor,
       tipo_abertura: l.tipo_abertura,
       observacao: l.observacao,
@@ -269,7 +300,7 @@ export function TrilhosEspeciaisOrcamento({
                   <label className="form-label">Modelo de trilho<span className="label-required">*</span></label>
                   <select className="input" value={linha.calculadora_id} onChange={(e) => {
                     const calculadora = calculadoras.find((c) => c.id === e.target.value);
-                    alterar(linha.id, { calculadora_id: e.target.value, variante_id: calculadora?.variantes?.[0]?.id ?? '' });
+                    alterar(linha.id, { calculadora_id: e.target.value, variante_id: calculadora?.variantes?.[0]?.id ?? '', selecoes_componentes: {} });
                   }} disabled={carregando || calculadoras.length === 0}>
                     <option value="">{carregando ? 'Carregando calculadoras…' : 'Selecione a calculadora…'}</option>
                     {calculadoras.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -277,7 +308,7 @@ export function TrilhosEspeciaisOrcamento({
                 </div>
                 <div className="col-span-12 md:col-span-3">
                   <label className="form-label">Variante<span className="label-required">*</span></label>
-                  <select className="input" value={linha.variante_id} onChange={(e) => alterar(linha.id, { variante_id: e.target.value })} disabled={!linha.calculadora_id}>
+                  <select className="input" value={linha.variante_id} onChange={(e) => alterar(linha.id, { variante_id: e.target.value, selecoes_componentes: {} })} disabled={!linha.calculadora_id}>
                     <option value="">Selecione a variante…</option>
                     {(calculadoras.find((c) => c.id === linha.calculadora_id)?.variantes ?? []).map((v) => <option key={v.id} value={v.id}>{v.nome}</option>)}
                   </select>
@@ -321,6 +352,24 @@ export function TrilhosEspeciaisOrcamento({
                   </select>
                 </div>
               </div>
+
+              {componentesGrupo(variante).length > 0 && (
+                <div className="grid grid-cols-12 gap-2 mt-2">
+                  {componentesGrupo(variante).map((comp) => (
+                    <div key={comp.id} className="col-span-6 md:col-span-3">
+                      <label className="form-label">{comp.descricao}<span className="label-required">*</span></label>
+                      <select
+                        className="input"
+                        value={linha.selecoes_componentes[comp.id] ?? ''}
+                        onChange={(e) => alterar(linha.id, { selecoes_componentes: { ...linha.selecoes_componentes, [comp.id]: e.target.value } })}
+                      >
+                        <option value="">Selecione…</option>
+                        {(produtosPorGrupo[comp.grupo_id!] ?? []).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {erros[linha.id] && <div className="helper-error mt-2">{erros[linha.id]}</div>}
               {calculando && linhaValida(linha, calculadoras) && !calculado && !erros[linha.id] && (

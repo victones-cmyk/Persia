@@ -24,6 +24,7 @@ export interface ItemExtraPayload {
   quantidade: number;
   emendas?: number;
   tc?: number;
+  selecoes_componentes?: Record<string, string>;
   lado_motor?: 'direito' | 'esquerdo';
   tipo_abertura?: 'direita' | 'esquerda';
   observacao?: string;

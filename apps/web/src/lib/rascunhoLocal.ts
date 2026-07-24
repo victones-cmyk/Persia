@@ -61,6 +61,7 @@ export interface ProdutoExtraSnap {
   quantidade: string;
   emendas?: string;
   tc?: string;
+  selecoes_componentes?: Record<string, string>;
   lado_motor?: 'direito' | 'esquerdo';
   tipo_abertura?: 'direita' | 'esquerda';
   observacao: string;

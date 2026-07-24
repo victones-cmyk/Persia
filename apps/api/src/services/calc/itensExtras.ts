@@ -30,6 +30,9 @@ export interface TrilhoEspecialEntrada {
   quantidade: number;
   emendas?: number;
   tc?: number;
+  /** Componente (por id) -> produto do GestãoClick escolhido pelo vendedor,
+   * para componentes de "modo grupo" (ver ComponenteCalculadoraTrilho.grupo_id). */
+  selecoes_componentes?: Record<string, string>;
   lado_motor?: 'direito' | 'esquerdo';
   tipo_abertura?: 'direita' | 'esquerda';
   ambiente?: string;
@@ -85,6 +88,7 @@ export interface EntradaCalculoTrilho {
   quantidade: number;
   emendas: number;
   tc: number;
+  selecoesComponentes?: Record<string, string>;
 }
 
 function normalizarProduto(p: GcProduto): ProdutoCatalogoOrcamento {
@@ -129,7 +133,7 @@ export function calcularComposicaoTrilho(
   entrada: EntradaCalculoTrilho,
   produtos: ProdutoCatalogoOrcamento[],
 ): CalculoTrilhoEspecial {
-  const { varianteId, largura, quantidade, emendas, tc } = entrada;
+  const { varianteId, largura, quantidade, emendas, tc, selecoesComponentes } = entrada;
   const variantes = calculadora.variantes ?? [];
   // Sem variante_id (orçamentos salvos antes desta feature): assume a primeira
   // variante. Com variante_id preenchido que não corresponde a nenhuma variante
@@ -138,11 +142,25 @@ export function calcularComposicaoTrilho(
   const variante = varianteId ? variantes.find((v) => v.id === varianteId) : variantes[0];
   if (!variante) throw new AppError(400, 'VARIANTE_TRILHO_INVALIDA', 'Selecione uma variante válida do trilho especial.');
   const porCodigo = new Map(produtos.map((p) => [p.codigo_interno.trim().toLowerCase(), p]));
+  const porId = new Map(produtos.map((p) => [p.id, p]));
   const componentes = variante.componentes.map((componente) => {
-    const codigo = componente.codigo_interno.trim();
-    const produto = porCodigo.get(codigo.toLowerCase());
-    if (!produto) {
-      throw new AppError(400, 'COMPONENTE_NAO_ENCONTRADO', `O produto de código "${codigo}" da calculadora "${calculadora.nome}" não foi encontrado no catálogo local.`);
+    const grupoId = componente.grupo_id?.trim();
+    let produto: ProdutoCatalogoOrcamento | undefined;
+    if (grupoId) {
+      const produtoId = String(selecoesComponentes?.[componente.id] ?? '').trim();
+      if (!produtoId) {
+        throw new AppError(400, 'COMPONENTE_SEM_SELECAO', `Selecione o produto de "${componente.descricao}".`);
+      }
+      produto = porId.get(produtoId);
+      if (!produto || produto.grupo_id !== grupoId) {
+        throw new AppError(400, 'COMPONENTE_INVALIDO', `O produto selecionado para "${componente.descricao}" não pertence ao grupo esperado.`);
+      }
+    } else {
+      const codigo = componente.codigo_interno.trim();
+      produto = porCodigo.get(codigo.toLowerCase());
+      if (!produto) {
+        throw new AppError(400, 'COMPONENTE_NAO_ENCONTRADO', `O produto de código "${codigo}" da calculadora "${calculadora.nome}" não foi encontrado no catálogo local.`);
+      }
     }
     let quantidadeFormula: number;
     try {
@@ -191,6 +209,7 @@ export async function calcularTrilhoEspecial(entrada: {
   quantidade: unknown;
   emendas?: unknown;
   tc?: unknown;
+  selecoesComponentes?: Record<string, string>;
 }): Promise<CalculoTrilhoEspecial> {
   const calculadora = encontrarCalculadoraTrilhoEspecial(String(entrada.calculadoraId ?? '').trim());
   if (!calculadora) throw new AppError(400, 'CALCULADORA_TRILHO_INVALIDA', 'Selecione uma calculadora de trilho especial válida.');
@@ -199,7 +218,7 @@ export async function calcularTrilhoEspecial(entrada: {
   const emendas = emendasValida(entrada.emendas ?? 0);
   const tc = tcValido(entrada.tc ?? 0);
   const produtos = (await listarProdutos({ ativo: 1 })).map(normalizarProduto);
-  return calcularComposicaoTrilho(calculadora, { varianteId: entrada.varianteId, largura, quantidade, emendas, tc }, produtos);
+  return calcularComposicaoTrilho(calculadora, { varianteId: entrada.varianteId, largura, quantidade, emendas, tc, selecoesComponentes: entrada.selecoesComponentes }, produtos);
 }
 
 function texto(v: unknown): string {
@@ -284,6 +303,7 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
         quantidade: entrada.quantidade,
         emendas: entrada.emendas ?? 0,
         tc: entrada.tc,
+        selecoesComponentes: entrada.selecoes_componentes,
       });
       const ambiente = texto(entrada.ambiente);
       const observacao = texto(entrada.observacao);

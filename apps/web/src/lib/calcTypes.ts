@@ -61,9 +61,13 @@ export interface CalculadoraCortina {
 }
 
 export interface ComponenteCalculadoraTrilho {
+  id: string;
   codigo_interno: string;
   descricao: string;
   qtd: string;
+  /** Quando preenchido, o vendedor escolhe o produto entre os itens ativos
+   * desse grupo do GestãoClick no orçamento, em vez de um código fixo. */
+  grupo_id?: string;
 }
 
 export interface VarianteCalculadoraTrilho {

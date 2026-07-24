@@ -91,6 +91,7 @@ export async function calcularTrilhoEspecialController(req: Request, res: Respon
       quantidade: b.quantidade,
       emendas: b.emendas ?? 0,
       tc: b.tc,
+      selecoesComponentes: b.selecoes_componentes && typeof b.selecoes_componentes === 'object' ? b.selecoes_componentes : undefined,
     }),
   });
 }
