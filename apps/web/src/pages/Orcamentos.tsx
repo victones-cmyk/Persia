@@ -17,6 +17,8 @@ import { parseBR } from '../lib/dataBR';
 import { erroGcLegivel } from '../lib/erroGc';
 import { PeriodoRange } from '../components/PeriodoRange';
 import { ProducaoModal } from '../components/ProducaoModal';
+import { useAuth } from '../hooks/useAuth';
+import { useAprovacoesPendentes } from '../hooks/useAprovacoesPendentes';
 
 const FILTROS: { valor: '' | StatusOrcamento; label: string }[] = [
   { valor: '', label: 'Todos' },
@@ -100,6 +102,9 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
   const somenteVendas = modo === 'vendas';
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { usuario } = useAuth();
+  const isAdmin = usuario?.perfil === 'admin';
+  const aprovacoesPendentes = useAprovacoesPendentes(somenteVendas && isAdmin);
   // Filtros persistidos na SESSÃO (sessionStorage): mantêm-se ao atualizar a página,
   // mas zeram no login/logout (limpos por limparFiltrosOrcamento em useAuth).
   const salvos = lerFiltrosOrcamento();
@@ -259,6 +264,30 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
           </Link>
         )}
       </div>
+
+      {somenteVendas && isAdmin && aprovacoesPendentes.length > 0 && (
+        <div className="alert alert-warning mb-4">
+          <div style={{ width: '100%' }}>
+            <div className="td-strong mb-2">
+              {aprovacoesPendentes.length} solicitação(ões) de absorção de diferença de medição aguardando sua decisão
+            </div>
+            <div className="flex flex-col gap-2">
+              {aprovacoesPendentes.map((a) => (
+                <div key={a.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm-ui">
+                    {a.nome_cliente} · orçamento <span className="font-mono">{a.gc_codigo ?? a.gc_orcamento_id ?? '-'}</span> · diferença{' '}
+                    <strong className={a.medicao_absorcao_diferenca > 0 ? 'text-danger' : 'text-success'}>{formatBRL(a.medicao_absorcao_diferenca)}</strong>
+                    {' · '}vendedor {a.usuario?.nome ?? '-'}
+                  </span>
+                  <button type="button" className="btn btn-default btn-xs" onClick={() => setProducaoOrc(a)}>
+                    Abrir
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filtros + busca */}
       <div className="card p-4 mb-4">

@@ -1015,6 +1015,13 @@ function filtroTipoDocumento(req: Request): TipoDocumentoProducao | null {
   throw new AppError(400, 'TIPO_INVALIDO', 'Informe tipo=persiana ou tipo=cortina.');
 }
 
+// Por padrão as ações em lote (imprimir etiquetas) só devem repetir o que ainda
+// não foi impresso — sem isso, reabrir o modal e clicar de novo reimprime tudo
+// que já saiu na Zebra, sempre que o vendedor gera uma nova OS avulsa.
+function apenasPendentes(req: Request): boolean {
+  return req.query.apenas_pendentes === '1' || req.query.apenas_pendentes === 'true';
+}
+
 function ordensFiltradasPorTipo(
   ordens: OrdemProducao[],
   tipo: TipoDocumentoProducao | null,
@@ -1140,9 +1147,12 @@ export async function baixarPdfOrdensOrcamento(req: Request, res: Response): Pro
 export async function imprimirEtiquetasOrcamento(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   const tipo = filtroTipoDocumento(req);
-  const ordens = ordensFiltradasPorTipo(orc.ordens_producao, tipo);
+  const somentePendentes = apenasPendentes(req);
+  let ordens = ordensFiltradasPorTipo(orc.ordens_producao, tipo);
+  if (somentePendentes) ordens = ordens.filter((ordem) => ordem.status !== 'impressa');
   if (ordens.length === 0) {
-    throw new AppError(404, 'SEM_ORDENS', `Nenhuma etiqueta ${tipo ? `de ${tipo}` : ''} encontrada para este orçamento.`);
+    const escopo = somentePendentes ? 'pendente' : '';
+    throw new AppError(404, 'SEM_ORDENS', `Nenhuma etiqueta ${tipo ? `de ${tipo} ` : ''}${escopo} encontrada para este orçamento.`);
   }
 
   const docs: OrdemDocumento[] = [];
@@ -1176,6 +1186,46 @@ export async function imprimirEtiquetasOrcamento(req: Request, res: Response): P
     },
   });
   res.json({ quantidade: ordens.length, tipo });
+}
+
+/**
+ * GET /orcamentos/producao/aprovacoes-pendentes — solicitações de absorção de
+ * diferença de medição aguardando decisão do admin. Sem isso, a única forma de
+ * um admin descobrir uma solicitação era reabrir manualmente o orçamento exato.
+ */
+export async function listarAprovacoesPendentesMedicao(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario;
+  if (!sessao || sessao.perfil !== 'admin') {
+    throw new AppError(403, 'APENAS_ADMIN', 'Apenas administradores podem ver aprovações pendentes.');
+  }
+  const orcamentos = await prisma.orcamento.findMany({
+    where: {
+      resposta_gc: { path: ['medicao_absorcao', 'status'], equals: 'solicitada' },
+    },
+    include: { usuario: { select: { nome: true } }, loja: { select: { nome: true } } },
+    orderBy: { criado_em: 'desc' },
+    take: 100,
+  });
+  const itens = orcamentos.map((orc) => {
+    const absorcao = medicaoAbsorcao(orc);
+    return {
+      id: orc.id,
+      tipo_produto: orc.tipo_produto,
+      status: orc.status,
+      nome_cliente: orc.nome_cliente,
+      gc_orcamento_id: orc.gc_orcamento_id,
+      gc_codigo: orc.gc_codigo,
+      gc_pedido_codigo: orc.gc_pedido_codigo,
+      valor_final: orc.valor_final,
+      valor_bruto: orc.valor_bruto,
+      criado_em: orc.criado_em,
+      usuario: orc.usuario,
+      loja: orc.loja,
+      medicao_absorcao_diferenca: absorcao?.previa.diferenca ?? 0,
+      medicao_absorcao_solicitado_em: absorcao?.solicitado_em ?? orc.criado_em.toISOString(),
+    };
+  });
+  res.json({ total: itens.length, orcamentos: itens });
 }
 
 export async function listarOrdensProducao(req: Request, res: Response): Promise<void> {

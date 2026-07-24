@@ -18,6 +18,7 @@ import {
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { useAuth } from '../hooks/useAuth';
 import { useNavGuard } from '../hooks/useNavGuard';
+import { useAprovacoesPendentes } from '../hooks/useAprovacoesPendentes';
 import { ConfirmModal } from './ConfirmModal';
 
 interface Item {
@@ -25,6 +26,7 @@ interface Item {
   label: string;
   icon: IconDefinition;
   end?: boolean;
+  badge?: number;
 }
 
 const ITENS_GERAIS: Item[] = [
@@ -65,6 +67,27 @@ function Link({ item, onAvisoNaoSalvo }: { item: Item; onAvisoNaoSalvo: () => vo
     >
       <FontAwesomeIcon icon={item.icon} fixedWidth />
       <span>{item.label}</span>
+      {Boolean(item.badge) && (
+        <span
+          style={{
+            marginLeft: 'auto',
+            borderRadius: 999,
+            minWidth: 18,
+            height: 18,
+            padding: '0 5px',
+            fontSize: 11,
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--color-error)',
+            color: '#fff',
+          }}
+          title={`${item.badge} aprovação(ões) de diferença de medição pendente(s)`}
+        >
+          {item.badge}
+        </span>
+      )}
     </NavLink>
   );
 }
@@ -73,6 +96,12 @@ export function Sidebar() {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin';
   const [avisoAberto, setAvisoAberto] = useState(false);
+  const aprovacoesPendentes = useAprovacoesPendentes(isAdmin);
+
+  const itensGerais = ITENS_GERAIS.map((item) =>
+    item.to === '/vendas' && aprovacoesPendentes.length > 0
+      ? { ...item, badge: aprovacoesPendentes.length }
+      : item);
 
   return (
     <nav
@@ -80,7 +109,7 @@ export function Sidebar() {
       aria-label="Navegação principal"
     >
       <div className="flex lg:flex-col min-w-max lg:min-w-0">
-        {ITENS_GERAIS.map((item) => (
+        {itensGerais.map((item) => (
           <Link key={item.to} item={item} onAvisoNaoSalvo={() => setAvisoAberto(true)} />
         ))}
       </div>

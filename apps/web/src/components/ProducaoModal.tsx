@@ -319,6 +319,18 @@ export function ProducaoModal({
     return totais;
   }, [dados?.itens]);
 
+  // Etiquetas já impressas não devem entrar de novo no lote por padrão — só o
+  // que ainda falta imprimir. Reimprimir tudo continua possível, mas como ação
+  // explícita separada (ver botão "reimprimir todas").
+  const pendentesOrdens = useMemo(() => {
+    const pendentes = { persiana: 0, cortina: 0 };
+    dados?.itens.forEach(({ ordem }) => {
+      if (!ordem || ordem.status === 'impressa') return;
+      pendentes[tipoOrdem(ordem)] += 1;
+    });
+    return pendentes;
+  }, [dados?.itens]);
+
   function ordemParaPrevia(ordem: OrdemProducao): EtiquetaPreviewOrdem {
     return {
       id: ordem.id,
@@ -589,13 +601,14 @@ export function ProducaoModal({
     }
   }
 
-  async function imprimirEtiquetasLote(tipo: 'persiana' | 'cortina') {
+  async function imprimirEtiquetasLote(tipo: 'persiana' | 'cortina', somentePendentes: boolean) {
     if (!orcamento) return;
     setImprimindoLote(tipo);
     setErro(null);
     setSucesso(null);
     try {
-      const r = await api.post<{ quantidade: number }>(`/orcamentos/${orcamento.id}/ordens-producao/imprimir-etiquetas?tipo=${tipo}`);
+      const sufixo = somentePendentes ? '&apenas_pendentes=1' : '';
+      const r = await api.post<{ quantidade: number }>(`/orcamentos/${orcamento.id}/ordens-producao/imprimir-etiquetas?tipo=${tipo}${sufixo}`);
       setSucesso(`${r.quantidade} etiqueta(s) de ${tipo} enviada(s) para impressão.`);
       await carregar();
     } catch (e) {
@@ -711,24 +724,50 @@ export function ProducaoModal({
             >
               <FontAwesomeIcon icon={faFilePdf} /> OS A4 cortinas ({totaisOrdens.cortina})
             </button>
-            <button
-              type="button"
-              className="btn btn-default btn-sm"
-              disabled={totaisOrdens.persiana === 0 || imprimindoLote !== null}
-              onClick={() => void imprimirEtiquetasLote('persiana')}
-              title="Imprimir todas as etiquetas de persianas na Zebra"
-            >
-              <FontAwesomeIcon icon={faTag} /> {imprimindoLote === 'persiana' ? 'Imprimindo...' : `Etiquetas persianas (${totaisOrdens.persiana})`}
-            </button>
-            <button
-              type="button"
-              className="btn btn-default btn-sm"
-              disabled={totaisOrdens.cortina === 0 || imprimindoLote !== null}
-              onClick={() => void imprimirEtiquetasLote('cortina')}
-              title="Imprimir todas as etiquetas de cortinas na Zebra"
-            >
-              <FontAwesomeIcon icon={faTag} /> {imprimindoLote === 'cortina' ? 'Imprimindo...' : `Etiquetas cortinas (${totaisOrdens.cortina})`}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-default btn-sm"
+                disabled={pendentesOrdens.persiana === 0 || imprimindoLote !== null}
+                onClick={() => void imprimirEtiquetasLote('persiana', true)}
+                title="Imprimir na Zebra apenas as etiquetas de persianas ainda não impressas"
+              >
+                <FontAwesomeIcon icon={faTag} /> {imprimindoLote === 'persiana' ? 'Imprimindo...' : `Etiquetas persianas pendentes (${pendentesOrdens.persiana})`}
+              </button>
+              {totaisOrdens.persiana > pendentesOrdens.persiana && (
+                <button
+                  type="button"
+                  className="text-xs-ui text-neutral-500 hover:text-neutral-800"
+                  disabled={imprimindoLote !== null}
+                  onClick={() => void imprimirEtiquetasLote('persiana', false)}
+                  title="Reimprime também as etiquetas de persianas já impressas"
+                >
+                  reimprimir todas ({totaisOrdens.persiana})
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-default btn-sm"
+                disabled={pendentesOrdens.cortina === 0 || imprimindoLote !== null}
+                onClick={() => void imprimirEtiquetasLote('cortina', true)}
+                title="Imprimir na Zebra apenas as etiquetas de cortinas ainda não impressas"
+              >
+                <FontAwesomeIcon icon={faTag} /> {imprimindoLote === 'cortina' ? 'Imprimindo...' : `Etiquetas cortinas pendentes (${pendentesOrdens.cortina})`}
+              </button>
+              {totaisOrdens.cortina > pendentesOrdens.cortina && (
+                <button
+                  type="button"
+                  className="text-xs-ui text-neutral-500 hover:text-neutral-800"
+                  disabled={imprimindoLote !== null}
+                  onClick={() => void imprimirEtiquetasLote('cortina', false)}
+                  title="Reimprime também as etiquetas de cortinas já impressas"
+                >
+                  reimprimir todas ({totaisOrdens.cortina})
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
