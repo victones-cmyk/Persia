@@ -111,6 +111,7 @@
   --shadow-modal:    0 4px 6px -1px rgba(0,0,0,0.10), 0 2px 4px -2px rgba(0,0,0,0.10);
   --shadow-toast:    0 10px 15px -3px rgba(0,0,0,0.10), 0 4px 6px -4px rgba(0,0,0,0.10);
   --shadow-card:     none;
+  --shadow-card-hover: 0 4px 6px rgba(0,0,0,0.05);
   --focus-ring:      0 0 0 .2rem rgba(0,123,255,.25);
 
   /* TRANSIÇÕES */
@@ -209,6 +210,13 @@ input[type='number'] {
     border: 1px solid var(--neutral-300);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-card);
+  }
+  /* Opt-in: cards clicáveis em grades de listagem (DS "Sombra Hover de Card"). */
+  .card-hover {
+    transition: box-shadow var(--transition-fast);
+  }
+  .card-hover:hover {
+    box-shadow: var(--shadow-card-hover);
   }
 
   /* ---- Botões ---- */

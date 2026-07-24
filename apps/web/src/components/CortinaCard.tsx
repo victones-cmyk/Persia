@@ -656,12 +656,12 @@ export function CortinaCard({
       {/* Acessórios */}
       {calc && (
         <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3">
-          <div className="text-xs-ui font-bold text-neutral-600 mb-2">Acessórios<span className="label-required">*</span> <span className="font-normal text-neutral-400">(escolha o produto dos itens com seletor)</span></div>
+          <div className="text-xs-ui font-bold text-neutral-600 mb-2">Acessórios<span className="label-required">*</span> <span className="font-normal text-neutral-500">(escolha o produto dos itens com seletor)</span></div>
           <div className="space-y-2">
             {calc.acessorios.map((a) => {
               if (jaPossuiVarao && ehBarra(a.item)) {
                 return (
-                  <div key={a.item} className="grid grid-cols-12 gap-2 items-center text-xs-ui text-neutral-400 py-1 border-b border-neutral-100 last:border-0">
+                  <div key={a.item} className="grid grid-cols-12 gap-2 items-center text-xs-ui text-neutral-500 py-1 border-b border-neutral-100 last:border-0">
                     <div className="col-span-5">{a.item}</div>
                     <div className="col-span-7 text-right italic">Cliente já possui — não incluído</div>
                   </div>
@@ -684,7 +684,7 @@ export function CortinaCard({
                       <div className="col-span-2 text-xs-ui font-mono tabular-nums text-right text-neutral-800">{formatBRL(precoW * qtd)}</div>
                     </div>
                     {formulaText && (
-                      <div className="text-neutral-400 text-3xs-ui pl-4 mt-0.5 border-l border-neutral-200">
+                      <div className="text-neutral-500 text-3xs-ui pl-4 mt-0.5 border-l border-neutral-200">
                         Cálculo: {formulaText}
                       </div>
                     )}
@@ -725,7 +725,7 @@ export function CortinaCard({
                     </div>
                   </div>
                   {formulaText && (
-                    <div className="text-neutral-400 text-3xs-ui pl-4 mt-0.5 border-l border-neutral-200">
+                    <div className="text-neutral-500 text-3xs-ui pl-4 mt-0.5 border-l border-neutral-200">
                       Cálculo: {formulaText}
                     </div>
                   )}

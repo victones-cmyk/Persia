@@ -295,7 +295,7 @@ function GrupoComp({ cor, titulo, itens, vazio }: { cor: string; titulo: string;
         <span className="text-xs-ui font-semibold text-neutral-700">{titulo}</span>
       </div>
       {itens.length === 0 ? (
-        <div className="text-xs-ui text-neutral-400 pl-4">{vazio}</div>
+        <div className="text-xs-ui text-neutral-500 pl-4">{vazio}</div>
       ) : (
         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {itens.map((it, i) => (
@@ -305,7 +305,7 @@ function GrupoComp({ cor, titulo, itens, vazio }: { cor: string; titulo: string;
                 {it.codigo_gc && <span className="font-mono" style={{ fontSize: 10, color: '#6c757d', background: '#f1f3f5', borderRadius: 3, padding: '0 4px' }}>#{it.codigo_gc}</span>}
               </div>
               {it.grupo_gc && <div className="text-neutral-500" style={{ fontSize: 10 }}>Grupo GC: {it.grupo_gc}</div>}
-              {it.obs && <div className="text-neutral-400" style={{ fontSize: 10 }}>{it.obs}</div>}
+              {it.obs && <div className="text-neutral-500" style={{ fontSize: 10 }}>{it.obs}</div>}
             </li>
           ))}
         </ul>

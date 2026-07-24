@@ -756,7 +756,7 @@ export function AdminCalculadoras() {
               {calculadorasPersiana.map((c) => {
                 const ativa = c.ativo !== false;
                 return (
-                <div key={c.id} className="card p-4 flex flex-col justify-between hover:shadow-md transition-shadow" style={{ opacity: ativa ? 1 : 0.62 }}>
+                <div key={c.id} className="card card-hover p-4 flex flex-col justify-between" style={{ opacity: ativa ? 1 : 0.62 }}>
                   <div>
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex flex-col gap-1">
@@ -1193,7 +1193,7 @@ export function AdminCalculadoras() {
                               ))}
                               {rec.componentes.length === 0 && (
                                 <tr>
-                                  <td colSpan={4} className="py-4 text-center text-neutral-400">
+                                  <td colSpan={4} className="py-4 text-center text-neutral-500">
                                     Nenhum componente cadastrado para esta variante.
                                   </td>
                                 </tr>
@@ -1324,7 +1324,7 @@ export function AdminCalculadoras() {
               {calculadorasCortina.map((c) => {
                 const ativa = c.ativo !== false;
                 return (
-                <div key={c.id} className="card p-4 flex flex-col justify-between hover:shadow-md transition-shadow" style={{ opacity: ativa ? 1 : 0.62 }}>
+                <div key={c.id} className="card card-hover p-4 flex flex-col justify-between" style={{ opacity: ativa ? 1 : 0.62 }}>
                   <div>
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex flex-col gap-1">
@@ -1359,7 +1359,7 @@ export function AdminCalculadoras() {
                 </div>
               );})}
               {calculadorasCortina.length === 0 && (
-                <div className="col-span-full card p-6 text-center text-neutral-400">
+                <div className="col-span-full card p-6 text-center text-neutral-500">
                   Nenhum modelo de cortina cadastrado. Clique em "Novo Modelo Cortina" para criar um.
                 </div>
               )}

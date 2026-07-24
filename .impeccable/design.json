@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-04T09:59:00Z",
+  "title": "Design System: Pérsia",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Preto Marca", "canonical": "#000000", "tonalRamp": ["#000000", "#212529", "#343a40", "#495057", "#6c757d", "#ced4da", "#dee2e6", "#f9f9f9"] },
+      "success": { "role": "success", "displayName": "Verde Ação", "canonical": "#00a65a", "tonalRamp": ["#004d26", "#007339", "#008d4c", "#00a65a", "#33b87b", "#66cc9c", "#99e0bd", "#d4edda"] },
+      "info": { "role": "info", "displayName": "Azul Info", "canonical": "#00c0ef", "tonalRamp": ["#005b73", "#0087a8", "#00acd6", "#00c0ef", "#33cdfd", "#66dafe", "#99e7ff", "#d1ecf1"] },
+      "warning": { "role": "warning", "displayName": "Laranja Ação", "canonical": "#f39c12", "tonalRamp": ["#6e4300", "#a66500", "#e08e0b", "#f39c12", "#f5b041", "#f8c471", "#fad7a0", "#fff3cd"] },
+      "danger": { "role": "danger", "displayName": "Vermelho Ação", "canonical": "#f56954", "tonalRamp": ["#862013", "#c63825", "#f4543c", "#f56954", "#f78776", "#faa598", "#fdc3bb", "#f8d7da"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display Title", "purpose": "Título de seções principais de dados." },
+      "body": { "displayName": "Corpo de Texto", "purpose": "Parágrafos e labels padrão do formulário." }
+    },
+    "shadows": [
+      { "name": "shadow-dropdown", "value": "0 3px 6px 0 rgba(0,0,0,0.1)", "purpose": "Submenus e dropdowns suspensos." },
+      { "name": "shadow-modal", "value": "0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)", "purpose": "Modal de confirmação central." }
+    ],
+    "motion": [
+      { "name": "transition-fast", "value": "100ms ease", "purpose": "Hover de botões e links de navegação." }
+    ],
+    "breakpoints": [
+      { "name": "lg", "value": "992px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botão Primário",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Botão padrão de confirmações principais e de marca.",
+      "html": "<button class=\"ds-btn-primary\">Salvar Orçamento</button>",
+      "css": ".ds-btn-primary { background: #000000; color: #ffffff; padding: 5px 12px; font-family: 'Source Sans Pro', sans-serif; font-size: 16px; font-weight: 500; border: 1px solid #000000; border-radius: 3px; cursor: pointer; transition: filter 100ms ease; } .ds-btn-primary:hover { filter: brightness(0.92); }"
+    },
+    {
+      "name": "Botão de Sucesso",
+      "kind": "button",
+      "refersTo": "button-success",
+      "description": "Botão de adição de itens ou envio de propostas.",
+      "html": "<button class=\"ds-btn-success\">+ Adicionar Item</button>",
+      "css": ".ds-btn-success { background: #00a65a; color: #ffffff; padding: 5px 12px; font-family: 'Source Sans Pro', sans-serif; font-size: 16px; font-weight: 500; border: 1px solid #008d4c; border-radius: 3px; cursor: pointer; transition: filter 100ms ease; } .ds-btn-success:hover { filter: brightness(0.92); }"
+    },
+    {
+      "name": "Input de Texto",
+      "kind": "input",
+      "description": "Entrada de dados comum em formulários.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Ex: Sala de Estar\" />",
+      "css": ".ds-input { width: 100%; height: 38px; padding: 6px 12px; font-family: 'Source Sans Pro', sans-serif; font-size: 16px; color: #495057; background: #ffffff; border: 1px solid #ced4da; border-radius: 4px; transition: border-color 150ms ease; } .ds-input:hover { border-color: #adb5bd; } .ds-input:focus { outline: none; border-color: #80bdff; box-shadow: 0 0 0 .2rem rgba(0,123,255,.25); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "A Oficina de Precisão",
+    "overview": "O design do Pérsia reflete a seriedade, exatidão e clareza exigidas pelo ambiente fabril e comercial de cortinas e persianas sob medida. Ele é diretamente inspirado em utilitários e painéis de controle industriais clássicos (com referências visuais de AdminLTE 3 e Bootstrap 4.5.3). O layout prioriza a diagramação limpa, focada em legibilidade e rapidez de preenchimento, ideal para tablets e laptops operados sob luz intensa. O sistema rejeita excessos decorativos, degradês suaves de fundo e sombras volumosas sem propósito, optando em vez disso por linhas divisórias explícitas, layouts tabulares claros e uma forte transparência matemática onde cada cálculo exibe inline a sua fórmula analítica.",
+    "keyCharacteristics": [
+      "Estrutura plana e sólida com divisórias visíveis.",
+      "Cores de ações bem definidas e demarcadas por botões padronizados.",
+      "Tipografia densa e limpa focada em dados numéricos e tabelas.",
+      "Posicionamento de botões utilitários sempre no fluxo de navegação natural do usuário."
+    ],
+    "rules": [
+      { "name": "The Contrast Rule", "body": "Todo texto ou placeholder deve ser legível mesmo sob luminosidade externa extrema. Tons de cinza claro para textos de leitura são terminantemente proibidos.", "section": "colors" },
+      { "name": "The Flat-By-Default Rule", "body": "Superfícies de visualização estática não recebem sombras. O volume no layout deve ser transmitido pelo contraste de planos de fundo e bordas de 1px.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do manter a consistência de botões utilitários (como Duplicar) posicionados no rodapé dos blocos, após os totais e componentes calculados.",
+      "Do exibir sempre a nota inline de cálculo em fonte monoespaçada abaixo de quantidades computadas.",
+      "Do garantir contraste de texto de no mínimo 4.5:1 em todos os placeholders de busca de acessórios."
+    ],
+    "donts": [
+      "Don't utilizar bordas de destaque laterais coloridas maiores que 1px em cards de dados normais (reservado apenas para link ativo na sidebar).",
+      "Don't aplicar gradientes coloridos ou de marca em fundos de botões ou textos.",
+      "Don't utilizar cantos extremamente arredondados (maiores que 4px) em cartões ou inputs estruturais de cálculo."
+    ]
+  }
+}

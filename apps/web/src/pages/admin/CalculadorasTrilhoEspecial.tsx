@@ -187,28 +187,28 @@ export function CalculadorasTrilhoEspecial() {
               {variantes.map((v) => <button key={v.id} type="button" className={`btn btn-xs ${v.id === variante?.id ? 'btn-primary' : 'btn-default'}`} onClick={() => setVarianteAtiva(v.id)}><span className="w-2 h-2 rounded-full mr-1 inline-block bg-success" />{v.nome || 'Sem nome'}</button>)}
             </div>
             {variante && <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-neutral-50 border border-neutral-300 rounded-sm p-3">
-                <div className="md:col-span-2"><label className="form-label">Nome da variante<span className="label-required">*</span></label><input className="input" value={variante.nome} placeholder="ex: Motorizado central" onChange={(e) => atualizarVariante(variante.id, { nome: e.target.value })} /></div>
-                <label className="flex items-center gap-2 mt-6 cursor-pointer text-sm-ui text-neutral-700"><input type="checkbox" checked={variante.motorizado === true} onChange={(e) => atualizarVariante(variante.id, { motorizado: e.target.checked })} /><span>Trilho motorizado</span></label>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 bg-neutral-50 border border-neutral-300 rounded-sm p-3">
+                <div className="lg:col-span-2"><label className="form-label">Nome da variante<span className="label-required">*</span></label><input className="input" value={variante.nome} placeholder="ex: Motorizado central" onChange={(e) => atualizarVariante(variante.id, { nome: e.target.value })} /></div>
+                <label className="flex items-center gap-2 lg:mt-6 cursor-pointer text-sm-ui text-neutral-700"><input type="checkbox" checked={variante.motorizado === true} onChange={(e) => atualizarVariante(variante.id, { motorizado: e.target.checked })} /><span>Trilho motorizado</span></label>
               </div>
               <div className="flex justify-between items-center"><div className="text-xs-ui text-neutral-500">Cada linha representa um produto do Gestão Click. Variantes motorizadas são exportadas somente com o nome.</div><button type="button" className="btn btn-default btn-xs" onClick={() => atualizarVariante(variante.id, { componentes: [...variante.componentes, componenteVazio()] })}><FontAwesomeIcon icon={faPlus} /> Adicionar produto</button></div>
             <div className="space-y-3">
               {variante.componentes.map((componente, index) => (
                 <div key={index} className="border border-neutral-300 rounded-sm bg-neutral-50 p-3">
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                    <div className="md:col-span-3">
+                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-end">
+                    <div className="xl:col-span-3">
                       <label className="form-label">Código interno GC<span className="label-required">*</span></label>
                       <input className="input font-mono" value={componente.codigo_interno} placeholder="ex: TRILHO-001" onChange={(e) => atualizarComponente(index, { codigo_interno: e.target.value })} />
                     </div>
-                    <div className="md:col-span-5">
+                    <div className="xl:col-span-5">
                       <label className="form-label">Produto / descrição<span className="label-required">*</span></label>
                       <input className="input" value={componente.descricao} placeholder="ex: Trilho superior" onChange={(e) => atualizarComponente(index, { descricao: e.target.value })} />
                     </div>
-                    <div className="md:col-span-3">
+                    <div className="xl:col-span-3">
                       <label className="form-label">Fórmula da quantidade<span className="label-required">*</span></label>
                       <input className="input font-mono" value={componente.qtd} placeholder="LARGURA" onChange={(e) => atualizarComponente(index, { qtd: e.target.value })} />
                     </div>
-                    <button type="button" className="text-error hover:opacity-80 md:col-span-1 pb-2" title="Remover produto" onClick={() => atualizarVariante(variante.id, { componentes: variante.componentes.filter((_, i) => i !== index) })}><FontAwesomeIcon icon={faTrash} /></button>
+                    <button type="button" className="text-error hover:opacity-80 xl:col-span-1 pb-2" title="Remover produto" onClick={() => atualizarVariante(variante.id, { componentes: variante.componentes.filter((_, i) => i !== index) })}><FontAwesomeIcon icon={faTrash} /></button>
                   </div>
                 </div>
               ))}
@@ -235,7 +235,7 @@ export function CalculadorasTrilhoEspecial() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {calculadoras.map((calc) => {
           const ativa = calc.ativo !== false;
-          return <div key={calc.id} className="card p-4 flex flex-col justify-between" style={{ opacity: ativa ? 1 : 0.62 }}>
+          return <div key={calc.id} className="card card-hover p-4 flex flex-col justify-between" style={{ opacity: ativa ? 1 : 0.62 }}>
             <div><div className="flex justify-between items-start mb-2"><div className="font-bold text-md-ui text-neutral-800">{calc.nome}{!ativa && <span className="badge badge-secondary ml-2">Inativa</span>}</div><span className="text-2xs-ui bg-neutral-200 px-2 py-0.5 rounded-sm font-mono text-neutral-600">ID: {calc.id}</span></div><p className="text-xs-ui text-neutral-500 mb-4">{calc.variantes?.length ?? 1} variante(s) · cálculo por largura</p></div>
             <div className="flex flex-wrap gap-2 border-t border-neutral-200 pt-3"><button className="btn btn-default btn-xs flex-1" onClick={() => iniciarEdicao(calc)}><FontAwesomeIcon icon={faPen} /> Editar</button><button className="btn btn-default btn-xs text-primary flex-1" onClick={() => duplicar(calc)}><FontAwesomeIcon icon={faCopy} /> Duplicar</button><button className={`btn btn-default btn-xs flex-1 ${ativa ? 'text-warning' : 'text-success'}`} onClick={() => void salvar((atual) => atual.map((c) => c.id === calc.id ? { ...c, ativo: c.ativo === false } : c))}><FontAwesomeIcon icon={ativa ? faBan : faCircleCheck} /> {ativa ? 'Inativar' : 'Reativar'}</button><button className="btn btn-default btn-xs text-error flex-1" onClick={() => { if (window.confirm('Deseja realmente excluir esta calculadora?')) void salvar((atual) => atual.filter((c) => c.id !== calc.id)); }}><FontAwesomeIcon icon={faTrash} /> Excluir</button></div>
           </div>;
