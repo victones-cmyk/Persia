@@ -7,7 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { env } from '../config/env';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
-import { criarProduto, deletarProduto } from '../services/gc/produtos';
+import { criarProduto, deletarProduto, inativarProduto } from '../services/gc/produtos';
 import { criarVendaComPayload } from '../services/gc/vendas';
 import { resolverLoja } from '../lib/resolverLoja';
 import {
@@ -861,6 +861,11 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
         detalhe: { orcamento_id: orc.id, pedido, diferenca: previa.diferenca, gc_pedido_id: venda.gc_pedido_id, gc_pedido_codigo: venda.gc_pedido_codigo },
       },
     });
+    // O produto "Diferença de valores..." é de uso único: some da busca do PDV
+    // assim que a venda complementar existe (best-effort).
+    if (produtoId) {
+      try { await inativarProduto(produtoId); } catch { /* sem impacto na venda */ }
+    }
     res.json({ venda, previa });
   } catch (err) {
     if (produtoId) {

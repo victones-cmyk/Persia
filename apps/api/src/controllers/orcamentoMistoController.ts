@@ -11,6 +11,7 @@ import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { ajustarTotalParaQuantidade, roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
+import { respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
 import {
@@ -193,7 +194,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       gc_codigo: envio.gc_codigo,
       itens_json: itensJson(persProdIds),
       payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
-      resposta_gc: envio.resposta as Prisma.InputJsonValue,
+      resposta_gc: respostaComProdutosCriados(envio.resposta, envio.gc_produto_ids_criados) as Prisma.InputJsonValue,
     });
     await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_enviado_gc', detalhe: { orcamento_id: orcamento.id, tipo: 'misto', gc_orcamento_id: envio.gc_orcamento_id, persianas: persPrep.length, cortinas: cortPrep.length, trilhos_especiais: trilhosPrep.length, produtos_avulsos: avulsosPrep.length, valor_final: valorTotal } } });
     res.status(201).json({ orcamento });
@@ -290,7 +291,7 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
         gc_orcamento_id: envio.gc_orcamento_id,
         gc_codigo: envio.gc_codigo,
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
-        resposta_gc: envio.resposta as Prisma.InputJsonValue,
+        resposta_gc: respostaComProdutosCriados(envio.resposta, envio.gc_produto_ids_criados) as Prisma.InputJsonValue,
         erro_gc: null,
         ...(novoItensJson ? { itens_json: novoItensJson } : {}),
         ...(novoTotal !== null ? { valor_bruto: novoTotal, valor_final: novoTotal } : {}),

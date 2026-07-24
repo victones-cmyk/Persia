@@ -25,6 +25,7 @@ import {
 import { descricaoProdutoPersiana, nomeProdutoPersiana } from '../services/calc/persianaProduto';
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
+import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
 import { criarVendaDePayload } from '../services/gc/vendas';
 import { roundHalfUp } from '../services/calc/arredondamento';
@@ -249,7 +250,7 @@ export async function executarEnvioGc(args: {
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
-}): Promise<{ gc_orcamento_id: string; gc_codigo: string | null; gc_produto_ids: string[]; payload: object; resposta: unknown }> {
+}): Promise<{ gc_orcamento_id: string; gc_codigo: string | null; gc_produto_ids: string[]; gc_produto_ids_criados: string[]; payload: object; resposta: unknown }> {
   const usados: string[] = [];
   const criados: string[] = [];
   try {
@@ -295,6 +296,7 @@ export async function executarEnvioGc(args: {
       gc_orcamento_id: orc.gc_orcamento_id,
       gc_codigo: orc.gc_codigo,
       gc_produto_ids: usados,
+      gc_produto_ids_criados: criados,
       payload: orc.payload,
       resposta: orc.resposta,
     };
@@ -468,7 +470,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       gc_codigo: envio.gc_codigo,
       itens_json: snapshots as unknown as Prisma.InputJsonValue,
       payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
-      resposta_gc: envio.resposta as Prisma.InputJsonValue,
+      resposta_gc: respostaComProdutosCriados(envio.resposta, envio.gc_produto_ids_criados) as Prisma.InputJsonValue,
     });
 
     await prisma.logAcao.create({
@@ -590,7 +592,7 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
         gc_codigo: envio.gc_codigo,
         itens_json: novosSnaps as unknown as Prisma.InputJsonValue,
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
-        resposta_gc: envio.resposta as Prisma.InputJsonValue,
+        resposta_gc: respostaComProdutosCriados(envio.resposta, envio.gc_produto_ids_criados) as Prisma.InputJsonValue,
         erro_gc: null,
         ...(novoTotal !== null ? { valor_bruto: novoTotal, valor_final: novoTotal } : {}),
       },
@@ -688,6 +690,9 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
         },
       },
     });
+    // Venda existe: os produtos sintéticos deste orçamento cumpriram o papel —
+    // inativa no GC para não poluírem a busca do PDV (best-effort).
+    await inativarProdutosSinteticosDoOrcamento(prisma, orc, sessao.id, 'venda_vinculada');
     res.json({
       orcamento: atualizado,
       venda: { gc_pedido_id: null, gc_pedido_codigo: pedidoExistente },
@@ -731,6 +736,9 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
         },
       },
     });
+    // Venda gerada: os produtos sintéticos deste orçamento cumpriram o papel —
+    // inativa no GC para não poluírem a busca do PDV (best-effort).
+    await inativarProdutosSinteticosDoOrcamento(prisma, orc, sessao.id, 'venda_gerada');
     res.json({ orcamento: atualizado, venda, ja_existia: false });
   } catch (err) {
     const gc = err instanceof GcError ? err : null;
@@ -807,6 +815,12 @@ export async function cancelarOrcamento(req: Request, res: Response): Promise<vo
     where: { id: orc.id },
     data: { status: 'cancelado' },
   });
+  // Orçamento cancelado sem venda: os produtos sintéticos criados no envio não
+  // serão mais usados — inativa no GC (best-effort). Com venda já gerada, a
+  // inativação aconteceu na geração/vinculação.
+  if (orc.status === 'enviado' && !orc.gc_pedido_id && !orc.gc_pedido_codigo) {
+    await inativarProdutosSinteticosDoOrcamento(prisma, orc, sessao.id, 'orcamento_cancelado');
+  }
   res.json({ orcamento: atualizado });
 }
 

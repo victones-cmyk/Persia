@@ -106,3 +106,12 @@ export async function criarProduto(p: NovoProdutoGc): Promise<ResultadoProduto> 
 export async function deletarProduto(id: string): Promise<void> {
   await gcRequest({ method: 'DELETE', url: `/api/produtos/${encodeURIComponent(id)}` });
 }
+
+/**
+ * Inativa um produto sintético que já cumpriu seu papel (venda gerada ou
+ * orçamento cancelado): some das buscas do PDV sem perder o histórico de
+ * vendas/orçamentos que o referenciam — ao contrário do DELETE.
+ */
+export async function inativarProduto(id: string): Promise<void> {
+  await gcRequest({ method: 'PUT', url: `/api/produtos/${encodeURIComponent(id)}`, data: { ativo: '0' } });
+}

@@ -14,6 +14,7 @@ import { buscarAcessorioGc, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo
 import { indiceInstalacoes } from '../services/gc/instalacao';
 import { valorComRt } from '../services/calc/rtCalc';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
+import { respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
@@ -303,7 +304,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       gc_orcamento_id: orc.gc_orcamento_id,
       gc_codigo: orc.gc_codigo,
       payload_gc_enviado: orc.payload as Prisma.InputJsonValue,
-      resposta_gc: orc.resposta as Prisma.InputJsonValue,
+      resposta_gc: respostaComProdutosCriados(orc.resposta, criados) as Prisma.InputJsonValue,
     });
     await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_enviado_gc', detalhe: { orcamento_id: orcamento.id, tipo: 'cortina', gc_orcamento_id: orc.gc_orcamento_id, cortinas: preparadas.length, valor_final: valorTotal } } });
     res.status(201).json({ orcamento });
@@ -387,7 +388,7 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
         gc_orcamento_id: gcOrc.gc_orcamento_id,
         gc_codigo: gcOrc.gc_codigo,
         payload_gc_enviado: gcOrc.payload as Prisma.InputJsonValue,
-        resposta_gc: gcOrc.resposta as Prisma.InputJsonValue,
+        resposta_gc: respostaComProdutosCriados(gcOrc.resposta, criados) as Prisma.InputJsonValue,
         erro_gc: null,
         ...(preparadas ? { itens_json: { cortinas: preparadas.map((p) => p.snapshot) } as unknown as Prisma.InputJsonValue } : {}),
         ...(novoTotal !== null ? { valor_bruto: novoTotal, valor_final: novoTotal } : {}),
