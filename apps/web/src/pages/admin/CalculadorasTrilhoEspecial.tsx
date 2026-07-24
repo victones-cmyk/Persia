@@ -165,7 +165,9 @@ export function CalculadorasTrilhoEspecial() {
               <input className="input" value={editando.nome} placeholder="ex: Trilho Wave" onChange={(e) => setEditando({ ...editando, nome: e.target.value })} />
             </div>
             <div className="alert alert-info text-xs-ui">
-              As fórmulas podem usar <span className="font-mono">LARGURA</span>, <span className="font-mono">EMENDAS</span> e <span className="font-mono">TC</span>. Para o produto da emenda, use apenas <span className="font-mono">EMENDAS</span>. Os campos "Emendas/trilho" e "TC" só aparecem no orçamento do vendedor quando alguma fórmula da variante os utiliza.
+              <span>
+                As fórmulas podem usar <span className="font-mono">LARGURA</span>, <span className="font-mono">EMENDAS</span> e <span className="font-mono">TC</span>. Para o produto da emenda, use apenas <span className="font-mono">EMENDAS</span>. Os campos "Emendas/trilho" e "TC" só aparecem no orçamento do vendedor quando alguma fórmula da variante os utiliza.
+              </span>
             </div>
           </div>
 
