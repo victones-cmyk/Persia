@@ -25,6 +25,24 @@ export class NotImplementedError extends Error {
 
 export type ModeloCortina = 'ilhos' | 'prega' | 'franzido' | 'wave';
 export type ModeloCamadaCortina = ModeloCortina | 'costurado_junto';
+/**
+ * Variantes de prega: o cálculo é idêntico (ver cabeçalho — Americana = Macho =
+ * Fêmea), elas só mudam o nome que aparece na ficha do produto. Por isso vivem
+ * fora de ModeloCortina e viram 'prega' antes de chegar ao motor.
+ */
+export type ModeloPregaVariante = 'prega_americana' | 'prega_macho' | 'prega_femea';
+/** O que a tela pode enviar por camada: modelo de cálculo ou variante de prega. */
+export type ModeloCamadaEntrada = ModeloCamadaCortina | ModeloPregaVariante;
+
+export function ehVariantePrega(modelo: string | null | undefined): modelo is ModeloPregaVariante {
+  return typeof modelo === 'string' && modelo.startsWith('prega_');
+}
+
+/** Converte o modelo vindo da tela no modelo que o motor entende. */
+export function modeloDeCalculoCamada(modelo: ModeloCamadaEntrada | string | null | undefined): ModeloCamadaCortina | undefined {
+  if (!modelo) return undefined;
+  return ehVariantePrega(modelo) ? 'prega' : (modelo as ModeloCamadaCortina);
+}
 export type QuantidadeCosturadoJunto = 'mesma_quantidade' | 'proporcao_franzido';
 export type FixacaoCortina = 'varao' | 'trilho' | 'varao_suico';
 export type MetodoCortina = 'normal' | 'emenda' | 'barra_postica';

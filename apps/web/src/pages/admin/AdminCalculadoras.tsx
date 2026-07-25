@@ -58,9 +58,13 @@ const VARIANTES = [
   { key: 'motor_sem_bando', label: 'Motorizado sem Bandô' },
 ] as const;
 
+// As variantes de prega têm o mesmo cálculo e mudam só o nome na ficha do
+// produto enviada ao GestãoClick (ver cortina.ts).
 const MODELOS_CORTINA = [
   { value: 'wave', label: 'Wave' },
-  { value: 'prega', label: 'Prega Americana' },
+  { value: 'prega_americana', label: 'Prega Americana' },
+  { value: 'prega_macho', label: 'Prega Macho' },
+  { value: 'prega_femea', label: 'Prega Fêmea' },
   { value: 'franzido', label: 'Franzido' },
   { value: 'ilhos', label: 'Ilhós' },
 ];

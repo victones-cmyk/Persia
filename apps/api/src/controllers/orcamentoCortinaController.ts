@@ -8,7 +8,7 @@ import type { Request, Response } from 'express';
 import { Prisma, type Orcamento } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
-import { calcularCortinaMultiCamada, type CamadaCortina } from '../services/calc/cortina';
+import { calcularCortinaMultiCamada, modeloDeCalculoCamada, type CamadaCortina, type ModeloCamadaEntrada } from '../services/calc/cortina';
 import { buscarTecidoCortinaGc } from '../services/gc/tecidos';
 import { buscarAcessorioGc, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo, type CategoriaAcessorio } from '../services/gc/acessorios';
 import { indiceInstalacoes } from '../services/gc/instalacao';
@@ -22,7 +22,9 @@ import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
 import { descricaoProdutoCortina, nomeProdutoCortina } from '../services/calc/cortinaProduto';
 
-interface CamadaEntrada { nome?: string; tecido_id: string; franzido?: number | string; modelo?: 'ilhos' | 'prega' | 'franzido' | 'wave' | 'costurado_junto'; metodo_altura?: 'emenda' | 'barra_postica'; costurado_quantidade?: 'mesma_quantidade' | 'proporcao_franzido' }
+// `modelo` aceita também as variantes de prega (prega_macho etc.): elas só mudam
+// o nome exibido, então seguem até a ficha do produto e viram 'prega' no motor.
+interface CamadaEntrada { nome?: string; tecido_id: string; franzido?: number | string; modelo?: ModeloCamadaEntrada; metodo_altura?: 'emenda' | 'barra_postica'; costurado_quantidade?: 'mesma_quantidade' | 'proporcao_franzido' }
 interface AcessorioEntrada { item: string; produto_id?: string; quantidade?: number }
 export interface CortinaEntrada {
   ambiente?: string;
@@ -75,7 +77,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
   const camadasCalc: CamadaCortina[] = c.camadas.map((cam, i) => ({
     largura_tecido: tecidos[i]!.dimensao_m,
     franzido: cam.franzido !== undefined && cam.franzido !== '' ? Number(cam.franzido) : undefined,
-    modelo: cam.modelo, // modelo PRÓPRIO da camada (Victor v.4.1: frente wave + fundo franzido)
+    modelo: modeloDeCalculoCamada(cam.modelo), // modelo PRÓPRIO da camada (Victor v.4.1: frente wave + fundo franzido)
     metodo_altura: cam.metodo_altura,
     costurado_quantidade: cam.costurado_quantidade,
   }));

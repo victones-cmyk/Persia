@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calcularCortina,
   calcularCortinaMultiCamada,
+  modeloDeCalculoCamada,
   NotImplementedError,
   type EntradaCortina,
   type ResultadoCortina,
@@ -352,5 +353,32 @@ describe('Cortina multi-camada (modelo "+" do Victor)', () => {
 describe('Cortina — modelos não implementados', () => {
   it('modelo desconhecido lança NotImplementedError', () => {
     expect(() => calcularCortina({ ...BASE, modelo: 'persiana' as unknown as EntradaCortina['modelo'] })).toThrow(NotImplementedError);
+  });
+});
+
+describe('variantes de prega (Americana/Macho/Fêmea)', () => {
+  it('normaliza para prega antes do motor — o cálculo não distingue as variantes', () => {
+    expect(modeloDeCalculoCamada('prega_macho')).toBe('prega');
+    expect(modeloDeCalculoCamada('prega_femea')).toBe('prega');
+    expect(modeloDeCalculoCamada('prega_americana')).toBe('prega');
+  });
+
+  it('não mexe nos demais modelos', () => {
+    expect(modeloDeCalculoCamada('wave')).toBe('wave');
+    expect(modeloDeCalculoCamada('costurado_junto')).toBe('costurado_junto');
+    expect(modeloDeCalculoCamada(undefined)).toBeUndefined();
+  });
+
+  it('uma camada com variante calcula igual à prega genérica', () => {
+    const entrada = (modelo: Parameters<typeof modeloDeCalculoCamada>[0]) => ({
+      modelo: 'prega' as const,
+      fixacao: 'trilho' as const,
+      largura: 3.7,
+      altura: 2.72,
+      camadas: [{ largura_tecido: 3, franzido: 3, modelo: modeloDeCalculoCamada(modelo) }],
+    });
+    const comVariante = calcularCortinaMultiCamada(entrada('prega_macho'));
+    const generica = calcularCortinaMultiCamada(entrada('prega'));
+    expect(comVariante.camadas[0].metragem).toBe(generica.camadas[0].metragem);
   });
 });

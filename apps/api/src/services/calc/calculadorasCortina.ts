@@ -4,14 +4,16 @@
 // Se não existirem registros no banco de dados, popula com os padrões.
 
 import type { PrismaClient } from '@prisma/client';
-import type { ModeloCortina, FixacaoCortina } from './cortina';
+import type { ModeloCortina, ModeloCamadaEntrada, FixacaoCortina } from './cortina';
 
 export const CHAVE_CALCULADORAS_CORTINA = 'calculadoras_cortina';
 
 export interface CamadaCalculadoraCortina {
   id: string;
   nome: string;
-  modelo_default: ModeloCortina;
+  /** Aceita as variantes de prega (Americana/Macho/Fêmea): mesmo cálculo, nome
+   *  próprio na ficha do produto enviada ao GestãoClick. */
+  modelo_default: ModeloCamadaEntrada;
   franzido_default?: number;
 }
 

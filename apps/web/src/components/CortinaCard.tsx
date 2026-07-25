@@ -18,7 +18,7 @@ import type { CortinaCardSnap } from '../lib/rascunhoLocal';
 import {
   MODELOS_CORTINA, MODELOS_CAMADA_SECUNDARIA, FIXACOES_CORTINA, FIXACOES_POR_MODELO, DESCONTOS_CORTINA,
   modeloCortinaParaOpcao, normalizarModeloCortina,
-  type ModeloCortina, type ModeloCamadaCortina, type ModeloCortinaOpcao, type QuantidadeCosturadoJunto, type FixacaoCortina, type DescontoCortina, type AcessoriosCortinaResp,
+  type ModeloCortina, type ModeloCortinaOpcao, type QuantidadeCosturadoJunto, type FixacaoCortina, type DescontoCortina, type AcessoriosCortinaResp,
   type CalcCortinaCompletaResp, type CategoriaAcessorio, type MetodoAlturaCortina,
 } from '../lib/cortinaTypes';
 
@@ -37,7 +37,7 @@ export interface CortinaResumo {
     tipo_barra?: 'simples' | 'dupla';
     aberturas?: number;
     bainhas_laterais?: number;
-    camadas: { nome?: string; tecido_id: string; modelo: ModeloCamadaCortina; franzido?: number; metodo_altura?: MetodoAlturaCortina; costurado_quantidade?: QuantidadeCosturadoJunto }[];
+    camadas: { nome?: string; tecido_id: string; modelo: ModeloCortinaOpcao; franzido?: number; metodo_altura?: MetodoAlturaCortina; costurado_quantidade?: QuantidadeCosturadoJunto }[];
     acessorios: { item: string; categoria: CategoriaAcessorio | null; produto_id: string; quantidade: number; preco: number }[];
     nome_produto: string;
     ja_possui_varao?: boolean;
@@ -86,10 +86,13 @@ function fixacoesComuns(modelos: ModeloCortinaOpcao[]): FixacaoCortina[] {
   return FIXACOES_CORTINA.map((f) => f.value).filter((f) => modelosComFixacao.every((m) => FIXACOES_POR_MODELO[normalizarModeloCortina(m)].includes(f)));
 }
 
-function modeloCamadaPayload(modelo: ModeloCortinaOpcao | ''): ModeloCamadaCortina | undefined {
-  if (!modelo) return undefined;
-  if (modelo === 'costurado_junto') return 'costurado_junto';
-  return normalizarModeloCortina(modelo);
+/**
+ * Envia o modelo da camada como o vendedor escolheu, inclusive a variante de
+ * prega (Americana/Macho/Fêmea): o cálculo é o mesmo, mas o nome precisa chegar
+ * à ficha do produto no GestãoClick. O servidor normaliza para o motor.
+ */
+function modeloCamadaPayload(modelo: ModeloCortinaOpcao | ''): ModeloCortinaOpcao | undefined {
+  return modelo || undefined;
 }
 
 export function CortinaCard({

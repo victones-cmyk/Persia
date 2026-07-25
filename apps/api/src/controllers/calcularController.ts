@@ -12,6 +12,7 @@ import {
 import {
   calcularCortina,
   calcularCortinaMultiCamada,
+  modeloDeCalculoCamada,
   NotImplementedError,
   type EntradaCortina,
   type CamadaCortina,
@@ -391,7 +392,7 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
   const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string; modelo?: string; metodo_altura?: string; costurado_quantidade?: string }, i: number) => ({
     largura_tecido: tecidos[i]!.dimensao_m,
     franzido: c.franzido !== undefined && c.franzido !== '' ? Number(c.franzido) : undefined,
-    modelo: c.modelo ? (c.modelo as CamadaCortina['modelo']) : undefined, // modelo PRÓPRIO da camada (Victor v.4.1)
+    modelo: modeloDeCalculoCamada(c.modelo), // modelo PRÓPRIO da camada (Victor v.4.1); variantes de prega viram 'prega'
     metodo_altura: c.metodo_altura === 'barra_postica' ? 'barra_postica' : c.metodo_altura === 'emenda' ? 'emenda' : undefined,
     costurado_quantidade: c.costurado_quantidade === 'proporcao_franzido' ? 'proporcao_franzido' : c.costurado_quantidade === 'mesma_quantidade' ? 'mesma_quantidade' : undefined,
   }));
