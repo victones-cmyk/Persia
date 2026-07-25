@@ -33,6 +33,7 @@ import {
   buscarEventosAgenda,
   desvincularEventoAgenda,
   listarVinculosAgenda,
+  listarVinculosAgendaEmLote,
   vincularEventosAgenda,
 } from '../controllers/agendaController';
 
@@ -48,6 +49,8 @@ router.get('/ordens-producao/:id/etiqueta.zpl', baixarZplEtiqueta);
 router.post('/ordens-producao/:id/imprimir-etiqueta', imprimirEtiquetaOrdem);
 router.get('/ordens-producao', listarOrdensProducao);
 router.get('/producao/aprovacoes-pendentes', listarAprovacoesPendentesMedicao);
+// Antes das rotas /:id/* — "agenda" aqui é literal, não um id de orçamento.
+router.get('/agenda/vinculos', listarVinculosAgendaEmLote);
 router.get('/:id/producao', getProducaoOrcamento);
 router.get('/:id/ordens-producao/pdf', baixarPdfOrdensOrcamento);
 router.post('/:id/ordens-producao/imprimir-etiquetas', imprimirEtiquetasOrcamento);

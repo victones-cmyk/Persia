@@ -19,6 +19,8 @@ import { PeriodoRange } from '../components/PeriodoRange';
 import { ProducaoModal } from '../components/ProducaoModal';
 import { useAuth } from '../hooks/useAuth';
 import { useAprovacoesPendentes } from '../hooks/useAprovacoesPendentes';
+import { AgendaImprimirBotoes } from '../components/AgendaImprimirBotoes';
+import type { EventoAgenda } from '../components/AgendaVinculo';
 
 const FILTROS: { valor: '' | StatusOrcamento; label: string }[] = [
   { valor: '', label: 'Todos' },
@@ -122,6 +124,10 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
   const [producaoOrc, setProducaoOrc] = useState<OrcamentoListItem | null>(null);
   const [vendaOrc, setVendaOrc] = useState<OrcamentoListItem | null>(null);
   const [pedidoExistente, setPedidoExistente] = useState('');
+  // OS do Agenda vinculadas, por orçamento — carregadas em lote para a página
+  // atual, para os atalhos de impressão não fazerem uma requisição por linha.
+  const [vinculosAgenda, setVinculosAgenda] = useState<Record<string, EventoAgenda[]>>({});
+  const [agendaBaseUrl, setAgendaBaseUrl] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const carregar = useCallback(async () => {
@@ -159,6 +165,26 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
   useEffect(() => {
     salvarFiltrosOrcamento({ status, cliente, periodo, dataDe, dataAte, pagina });
   }, [status, cliente, periodo, dataDe, dataAte, pagina]);
+
+  // Carrega as OS do Agenda dos orçamentos exibidos (só na tela de Vendas).
+  const idsPagina = orcamentos.map((o) => o.id).join(',');
+  useEffect(() => {
+    if (!somenteVendas || !idsPagina) {
+      setVinculosAgenda({});
+      return;
+    }
+    let vivo = true;
+    api.get<{ habilitado: boolean; agenda_base_url: string; vinculos: Record<string, EventoAgenda[]> }>(
+      `/orcamentos/agenda/vinculos?ids=${encodeURIComponent(idsPagina)}`,
+    )
+      .then((r) => {
+        if (!vivo) return;
+        setVinculosAgenda(r.habilitado ? r.vinculos : {});
+        setAgendaBaseUrl(r.agenda_base_url ?? '');
+      })
+      .catch(() => { if (vivo) setVinculosAgenda({}); });
+    return () => { vivo = false; };
+  }, [somenteVendas, idsPagina]);
 
   async function reenviar(id: string) {
     setAcaoEmId(id);
@@ -455,6 +481,9 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                         >
                           <FontAwesomeIcon icon={faIndustry} />
                         </button>
+                      )}
+                      {somenteVendas && vinculosAgenda[o.id]?.length > 0 && (
+                        <AgendaImprimirBotoes eventos={vinculosAgenda[o.id]} agendaBaseUrl={agendaBaseUrl} />
                       )}
                       {!somenteVendas && (
                         <button

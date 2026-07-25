@@ -7,6 +7,7 @@
 
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
+import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import {
   agendaHabilitado,
@@ -47,6 +48,46 @@ export async function listarVinculosAgenda(req: Request, res: Response): Promise
   // aparece — a lista reflete o que existe hoje, não o histórico do vínculo.
   const eventos = await buscarEventosPorIds(ids);
   res.json({ habilitado: true, eventos });
+}
+
+/**
+ * GET /api/orcamentos/agenda/vinculos?ids=a,b,c — vínculos de vários orçamentos
+ * de uma vez, para a lista de Vendas exibir os atalhos de impressão sem fazer
+ * uma requisição por linha.
+ */
+export async function listarVinculosAgendaEmLote(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  const ids = String(req.query.ids ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 100);
+  // A base do Agenda vai junto para o frontend montar o link de impressão sem
+  // precisar de uma configuração própria.
+  const base = { habilitado: agendaHabilitado(), agenda_base_url: env.AGENDA_BASE_URL };
+  if (!base.habilitado || ids.length === 0) {
+    res.json({ ...base, vinculos: {} });
+    return;
+  }
+
+  const vinculos = await prisma.orcamentoAgendaVinculo.findMany({
+    where: {
+      orcamento_id: { in: ids },
+      // Vendedor só enxerga os vínculos dos próprios orçamentos.
+      ...(sessao.perfil === 'admin' ? {} : { orcamento: { usuario_id: sessao.id } }),
+    },
+    select: { orcamento_id: true, agenda_appointment_id: true },
+  });
+  if (vinculos.length === 0) {
+    res.json({ ...base, vinculos: {} });
+    return;
+  }
+
+  const eventos = await buscarEventosPorIds([...new Set(vinculos.map((v) => v.agenda_appointment_id))]);
+  const porId = new Map(eventos.map((e) => [e.id, e]));
+  const saida: Record<string, EventoAgenda[]> = {};
+  for (const v of vinculos) {
+    const evento = porId.get(v.agenda_appointment_id);
+    if (!evento) continue; // evento apagado no Agenda: some da lista
+    (saida[v.orcamento_id] ??= []).push(evento);
+  }
+  res.json({ ...base, vinculos: saida });
 }
 
 /**
