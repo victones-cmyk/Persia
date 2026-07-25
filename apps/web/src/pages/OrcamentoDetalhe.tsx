@@ -12,6 +12,7 @@ import { erroGcLegivel } from '../lib/erroGc';
 import { StatusBadge } from '../components/StatusBadge';
 import { ClienteSearch } from '../components/ClienteSearch';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { AgendaVinculo } from '../components/AgendaVinculo';
 import type { OrcamentoDetalhe as Orc, ItemSnapshot } from '../lib/orcamentoTypes';
 import type { ClienteResumo } from '../lib/calcTypes';
 import { TIPOS_PERSIANA, ACIONAMENTOS } from '../lib/calcTypes';
@@ -350,6 +351,10 @@ export function OrcamentoDetalhe() {
           <span className="font-bold">Valor total</span>
           <span className="font-mono font-bold text-xl-ui">{formatBRL(Number(orc.valor_final))}</span>
         </div>
+
+        {/* OS do Agenda: aqui cobre também o orçamento que ainda não virou pedido
+            (ex.: medição feita antes da venda), que não aparece na tela de Vendas. */}
+        {!eRascunho && <div className="mt-4"><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} /></div>}
 
         {/* Cliente — erro: seletor (retentativa); demais: exibe o cliente atual */}
         {emEdicao ? (

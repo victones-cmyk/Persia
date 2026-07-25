@@ -63,6 +63,12 @@ export const env = {
   ZEBRA_PORT: Number(optional('ZEBRA_PORT', '9100')),
   ZEBRA_TCP_TIMEOUT_MS: Number(optional('ZEBRA_TCP_TIMEOUT_MS', '3000')),
 
+  // App Agenda (CurtainField) — outro app no mesmo servidor Postgres. Conexão
+  // dedicada com usuário restrito (SELECT em appointments/users + UPDATE apenas
+  // de order_number). Vazio → integração desligada, sem quebrar o resto do app.
+  AGENDA_DATABASE_URL: optional('AGENDA_DATABASE_URL', ''),
+  AGENDA_BASE_URL: optional('AGENDA_BASE_URL', 'https://agenda.texhaus.com.br'),
+
   // Servidor
   PORT: Number(optional('PORT', '3001')),
   NODE_ENV: optional('NODE_ENV', 'development'),

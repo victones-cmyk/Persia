@@ -29,6 +29,12 @@ import {
   preverMedicaoProducao,
   solicitarAbsorcaoMedicao,
 } from '../controllers/producaoController';
+import {
+  buscarEventosAgenda,
+  desvincularEventoAgenda,
+  listarVinculosAgenda,
+  vincularEventosAgenda,
+} from '../controllers/agendaController';
 
 const router = Router();
 router.use(requireAuth);
@@ -45,6 +51,10 @@ router.get('/producao/aprovacoes-pendentes', listarAprovacoesPendentesMedicao);
 router.get('/:id/producao', getProducaoOrcamento);
 router.get('/:id/ordens-producao/pdf', baixarPdfOrdensOrcamento);
 router.post('/:id/ordens-producao/imprimir-etiquetas', imprimirEtiquetasOrcamento);
+router.get('/:id/agenda', listarVinculosAgenda);
+router.get('/:id/agenda/buscar', buscarEventosAgenda);
+router.post('/:id/agenda', vincularEventosAgenda);
+router.delete('/:id/agenda/:appointmentId', desvincularEventoAgenda);
 router.post('/:id/producao/medicao/preview', preverMedicaoProducao);
 router.post('/:id/producao/medicao/venda-ajuste', gerarVendaAjusteMedicao);
 router.post('/:id/producao/medicao/solicitar-absorcao', solicitarAbsorcaoMedicao);

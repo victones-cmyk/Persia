@@ -113,11 +113,32 @@ model Orcamento {
   criado_em             DateTime        @default(now()) @db.Timestamptz
   atualizado_em         DateTime        @updatedAt @db.Timestamptz
   ordens_producao       OrdemProducao[]
+  agenda_vinculos       OrcamentoAgendaVinculo[]
 
   @@index([usuario_id, criado_em(sort: Desc)])
   @@index([status])
   @@index([gc_orcamento_id])
   @@map("orcamentos")
+}
+
+// Vínculo com uma OS (appointment) do app Agenda (CurtainField) — outro app na
+// mesma VPS/Postgres. NÃO tem FK de banco pro appointment (vive em outro
+// database, curtainfield); agenda_appointment_id só referencia por id, lido
+// ao vivo via conexão dedicada (AGENDA_DATABASE_URL) na hora de exibir.
+model OrcamentoAgendaVinculo {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orcamento_id          String    @db.Uuid
+  orcamento             Orcamento @relation(fields: [orcamento_id], references: [id])
+  agenda_appointment_id Int
+  // Snapshot do tipo no momento do vínculo (measurement/installation/return/warranty)
+  // — não é a verdade atual (essa vem sempre ao vivo do Agenda), só contexto de log.
+  tipo                  String    @db.VarChar(20)
+  criado_por            String    @db.Uuid
+  criado_em             DateTime  @default(now()) @db.Timestamptz
+
+  @@unique([orcamento_id, agenda_appointment_id])
+  @@index([orcamento_id])
+  @@map("orcamento_agenda_vinculos")
 }
 
 model OrdemProducao {

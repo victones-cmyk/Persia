@@ -5,6 +5,7 @@ import { api, ApiError } from '../lib/api';
 import type { ItemSnapshot, OrcamentoListItem } from '../lib/orcamentoTypes';
 import { useAuth } from '../hooks/useAuth';
 import { EtiquetaPreviewModal, type EtiquetaPreviewOrdem } from './EtiquetaPreviewModal';
+import { AgendaVinculo } from './AgendaVinculo';
 import { DESCONTOS_CORTINA, type DescontoCortina, type FixacaoCortina } from '../lib/cortinaTypes';
 
 interface OrdemProducao {
@@ -702,6 +703,8 @@ export function ProducaoModal({
             />
           </div>
         </div>
+
+        <AgendaVinculo orcamentoId={orcamento.id} nomeCliente={orcamento.nome_cliente} />
 
         <div className="mb-4" style={{ border: '1px solid #dee2e6', borderRadius: 3, padding: 12, background: '#f8f9fa' }}>
           <div className="text-sm-ui font-bold mb-2">Impressão em lote</div>

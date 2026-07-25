@@ -31,6 +31,11 @@
   --color-info:           #17a2b8;
   --color-info-subtle:    #d1ecf1;
   --color-info-border:    #bee5eb;
+  /* Texto sobre os fundos "subtle" acima (contraste alto, WCAG AA). */
+  --color-success-text:   #155724;
+  --color-warning-text:   #856404;
+  --color-error-text:     #721c24;
+  --color-info-text:      #0c5460;
 
   /* STATUS DE ORÇAMENTO */
   --status-sent:          #28a745;
@@ -385,6 +390,9 @@ input[type='number'] {
   }
   .badge-secondary { background: var(--neutral-200); color: var(--neutral-600); border-color: var(--neutral-300); }
   .badge-primary   { background: #cce5ff; color: #004085; border-color: #b8daff; }
+  .badge-success   { background: var(--color-success-subtle); color: var(--color-success-text); border-color: var(--color-success-border); }
+  .badge-warning   { background: var(--color-warning-subtle); color: var(--color-warning-text); border-color: var(--color-warning-border); }
+  .badge-info      { background: var(--color-info-subtle); color: var(--color-info-text); border-color: var(--color-info-border); }
 
   /* ---- Tabelas responsivas ---- */
   .table-scroll {
