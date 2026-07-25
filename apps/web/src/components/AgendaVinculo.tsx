@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCalendarCheck, faMagnifyingGlass, faSpinner, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faCalendarCheck, faHashtag, faMagnifyingGlass, faSpinner, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 
 export interface EventoAgenda {
@@ -96,7 +96,11 @@ export function AgendaVinculo({ orcamentoId, nomeCliente }: { orcamentoId: strin
   const [candidatos, setCandidatos] = useState<EventoAgenda[] | null>(null);
   const [selecionados, setSelecionados] = useState<number[]>([]);
   const [termoCliente, setTermoCliente] = useState('');
-  const [buscaPorCliente, setBuscaPorCliente] = useState(false);
+  const [termoOs, setTermoOs] = useState('');
+  // Busca manual aberta: por nome do cliente ou pelo número da OS. Esta última
+  // resolve os casos em que a OS está no nome de outra pessoa (parente, quem
+  // recebe o técnico), que nunca bateria com o cliente do orçamento.
+  const [modoManual, setModoManual] = useState<'cliente' | 'os' | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
@@ -115,12 +119,20 @@ export function AgendaVinculo({ orcamentoId, nomeCliente }: { orcamentoId: strin
 
   useEffect(() => { void carregar(); }, [carregar]);
 
-  async function buscar(porCliente: boolean) {
+  async function buscar(modo: 'pedido' | 'cliente' | 'os') {
+    if (modo === 'os' && !termoOs.trim()) {
+      setModoManual('os');
+      return;
+    }
     setBuscando(true);
     setErro(null);
     setAviso(null);
     try {
-      const query = porCliente ? `?cliente=${encodeURIComponent(termoCliente || nomeCliente)}` : '';
+      const query = modo === 'cliente'
+        ? `?cliente=${encodeURIComponent(termoCliente || nomeCliente)}`
+        : modo === 'os'
+          ? `?os=${encodeURIComponent(termoOs.trim())}`
+          : '';
       const r = await api.get<{ eventos: EventoAgenda[]; sem_pedido?: boolean; sugestao_cliente?: string }>(
         `/orcamentos/${orcamentoId}/agenda/buscar${query}`,
       );
@@ -128,16 +140,18 @@ export function AgendaVinculo({ orcamentoId, nomeCliente }: { orcamentoId: strin
       const novos = r.eventos.filter((e) => !jaVinculados.has(e.id));
       setCandidatos(novos);
       setSelecionados(novos.map((e) => e.id));
-      setBuscaPorCliente(porCliente);
+      if (modo !== 'pedido') setModoManual(modo);
       if (r.sem_pedido) {
-        // Orçamento ainda sem pedido: a busca útil é por nome do cliente.
+        // Orçamento ainda sem pedido: a busca útil é por nome ou número da OS.
         setTermoCliente(r.sugestao_cliente ?? nomeCliente);
-        setBuscaPorCliente(true);
-        setAviso('Este orçamento ainda não tem número de pedido. Busque a OS pelo nome do cliente.');
+        setModoManual('cliente');
+        setAviso('Este orçamento ainda não tem número de pedido. Busque a OS pelo nome do cliente ou pelo número da OS.');
       } else if (novos.length === 0) {
-        setAviso(porCliente
-          ? 'Nenhuma OS nova encontrada para esse cliente.'
-          : 'Nenhuma OS encontrada com esse número de pedido. Tente buscar pelo nome do cliente.');
+        setAviso(
+          modo === 'cliente' ? 'Nenhuma OS nova encontrada para esse cliente.'
+            : modo === 'os' ? `Nenhuma OS nova encontrada com o número ${termoOs.trim()}.`
+              : 'Nenhuma OS encontrada com esse número de pedido. Tente pelo nome do cliente ou pelo número da OS.',
+        );
       }
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao buscar OS no Agenda.');
@@ -190,11 +204,14 @@ export function AgendaVinculo({ orcamentoId, nomeCliente }: { orcamentoId: strin
           <FontAwesomeIcon icon={faCalendarCheck} /> OS do Agenda
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="btn btn-default btn-xs" disabled={buscando || carregando} onClick={() => void buscar(false)}>
-            {buscando && !buscaPorCliente ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faMagnifyingGlass} />} Buscar pelo pedido
+          <button type="button" className="btn btn-default btn-xs" disabled={buscando || carregando} onClick={() => void buscar('pedido')}>
+            <FontAwesomeIcon icon={buscando ? faSpinner : faMagnifyingGlass} spin={buscando} /> Buscar pelo pedido
           </button>
-          <button type="button" className="btn btn-default btn-xs" disabled={buscando || carregando} onClick={() => void buscar(true)}>
-            {buscando && buscaPorCliente ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faMagnifyingGlass} />} Buscar por cliente
+          <button type="button" className="btn btn-default btn-xs" disabled={buscando || carregando} onClick={() => void buscar('cliente')}>
+            <FontAwesomeIcon icon={faMagnifyingGlass} /> Buscar por cliente
+          </button>
+          <button type="button" className="btn btn-default btn-xs" disabled={buscando || carregando} onClick={() => void buscar('os')}>
+            <FontAwesomeIcon icon={faHashtag} /> Buscar por nº da OS
           </button>
         </div>
       </div>
@@ -228,7 +245,7 @@ export function AgendaVinculo({ orcamentoId, nomeCliente }: { orcamentoId: strin
         </div>
       )}
 
-      {buscaPorCliente && (
+      {modoManual === 'cliente' && (
         <div className="flex flex-wrap items-end gap-2 px-3 pb-3">
           <div style={{ minWidth: 220, flex: '1 1 220px' }}>
             <label className="form-label" htmlFor={`agenda-cliente-${orcamentoId}`}>Nome do cliente no Agenda</label>
@@ -238,11 +255,35 @@ export function AgendaVinculo({ orcamentoId, nomeCliente }: { orcamentoId: strin
               value={termoCliente}
               placeholder={nomeCliente}
               onChange={(e) => setTermoCliente(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void buscar('cliente'); }}
             />
           </div>
-          <button type="button" className="btn btn-default btn-sm" disabled={buscando} onClick={() => void buscar(true)}>
+          <button type="button" className="btn btn-default btn-sm" disabled={buscando} onClick={() => void buscar('cliente')}>
             {buscando ? 'Buscando…' : 'Buscar'}
           </button>
+        </div>
+      )}
+
+      {modoManual === 'os' && (
+        <div className="flex flex-wrap items-end gap-2 px-3 pb-3">
+          <div style={{ minWidth: 180, flex: '0 1 200px' }}>
+            <label className="form-label" htmlFor={`agenda-os-${orcamentoId}`}>Nº da OS no Agenda</label>
+            <input
+              id={`agenda-os-${orcamentoId}`}
+              className="input input-mono"
+              value={termoOs}
+              placeholder="Ex.: 561"
+              inputMode="numeric"
+              onChange={(e) => setTermoOs(e.target.value.replace(/\D/g, ''))}
+              onKeyDown={(e) => { if (e.key === 'Enter') void buscar('os'); }}
+            />
+          </div>
+          <button type="button" className="btn btn-default btn-sm" disabled={buscando || !termoOs.trim()} onClick={() => void buscar('os')}>
+            {buscando ? 'Buscando…' : 'Buscar'}
+          </button>
+          <div className="helper-text" style={{ flexBasis: '100%' }}>
+            Use quando a OS estiver no nome de outra pessoa (parente, quem recebe o técnico no local).
+          </div>
         </div>
       )}
 

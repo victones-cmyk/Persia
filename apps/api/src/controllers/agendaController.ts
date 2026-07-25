@@ -99,6 +99,19 @@ export async function buscarEventosAgenda(req: Request, res: Response): Promise<
   exigirAgenda();
   const orc = await carregarOrcamentoAutorizado(req);
   const termoCliente = String(req.query.cliente ?? '').trim();
+  const termoOs = String(req.query.os ?? '').trim();
+
+  // Busca direta pelo número da OS: resolve os casos em que o nome no Agenda é
+  // de outra pessoa (parente, quem recebe o técnico no local) e não bate com o
+  // cliente do orçamento.
+  if (termoOs) {
+    const id = Number(termoOs);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new AppError(400, 'OS_INVALIDA', 'Informe um número de OS válido.');
+    }
+    res.json({ modo: 'os', eventos: await buscarEventosPorIds([id]) });
+    return;
+  }
 
   if (termoCliente) {
     if (termoCliente.length < 3) {
