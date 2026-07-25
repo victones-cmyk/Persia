@@ -278,8 +278,9 @@ export function CortinaCard({
   const tamanhoBarraNum = tamanhoBarra === '' ? undefined : Number(tamanhoBarra) / 100;
   const tipoBarraVal = tipoBarra || undefined;
   const franzidoDe = (c: CamadaState) => (c.franzido === '' ? undefined : Number(c.franzido));
-  const modeloDisplay = (modeloCortinaNome || MODELOS_CORTINA.find((x) => x.value === camadas[0]?.modelo)?.label || '').replace(/^Cortina\s+/i, '').trim();
-  const nomeProdutoPreview = ['Cortina', ambiente.trim(), modeloDisplay].filter(Boolean).join(' ') + ` L:${formatNum(Number(largura), 2)}m X A:${formatNum(Number(altura), 2)}m`;
+  // Sem o modelo no nome (espelha nomeProdutoCortina no servidor): o modelo de
+  // cada camada já aparece na descrição, com a prega específica.
+  const nomeProdutoPreview = ['Cortina', ambiente.trim()].filter(Boolean).join(' ') + ` L:${formatNum(Number(largura), 2)}m X A:${formatNum(Number(altura), 2)}m`;
 
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seqCalc = useRef(0);

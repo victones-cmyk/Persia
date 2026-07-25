@@ -1,6 +1,6 @@
 // Formatação do produto sintético de cortina criado no GestãoClick.
 
-import { ehVariantePrega, type FixacaoCortina, type ModeloCamadaEntrada, type ModeloCortina } from './cortina';
+import { ehVariantePrega, type FixacaoCortina, type ModeloCamadaEntrada } from './cortina';
 import { MODELOS_CORTINA_LABEL, MODELOS_PREGA_VARIANTE_LABEL } from './cortinaLabels';
 
 type CamadaProdutoCortina = {
@@ -32,10 +32,6 @@ function nomeCamada(camada: CamadaProdutoCortina, index: number): string {
   return textoLimpo(camada.nome) || (index === 0 ? 'Frente' : `Camada ${index + 1}`);
 }
 
-function modeloLimpo(modelo: string): string {
-  return textoLimpo(modelo).replace(/^cortina\s+/i, '');
-}
-
 function modeloLabel(modelo: ModeloCamadaEntrada | null | undefined): string {
   if (!modelo) return 'Cortina';
   if (modelo === 'costurado_junto') return 'Costurado junto';
@@ -57,16 +53,17 @@ function franzidoLabel(franzido: number | string | null | undefined): string | n
   return `${numeroBR(n, Number.isInteger(n) ? 0 : 1)}x`;
 }
 
+/**
+ * Nome curto do produto: sem o modelo. O modelo de cada camada já vai na
+ * descrição ("Frente: Prega Macho"), e repeti-lo aqui de forma genérica
+ * ("Cortina SALA Prega") criava ambiguidade sobre qual prega é.
+ */
 export function nomeProdutoCortina(params: {
   ambiente?: string | null;
-  modelo_cortina_nome?: string | null;
-  modelo_fallback?: ModeloCortina | null;
   largura: number;
   altura: number;
 }): string {
-  const ambiente = textoLimpo(params.ambiente);
-  const modelo = modeloLimpo(params.modelo_cortina_nome || modeloLabel(params.modelo_fallback));
-  const partes = ['Cortina', ambiente, modelo].filter(Boolean);
+  const partes = ['Cortina', textoLimpo(params.ambiente)].filter(Boolean);
   return `${partes.join(' ')} L:${numeroBR(params.largura)}m X A:${numeroBR(params.altura)}m`;
 }
 

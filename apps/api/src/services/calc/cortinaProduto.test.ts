@@ -3,13 +3,7 @@ import { descricaoProdutoCortina, nomeProdutoCortina } from './cortinaProduto';
 
 describe('produto sintetico de cortina', () => {
   it('monta nome curto e descricao detalhada para o GestaoClick', () => {
-    const nome = nomeProdutoCortina({
-      ambiente: 'Sala',
-      modelo_cortina_nome: 'Cortina Wave',
-      modelo_fallback: 'wave',
-      largura: 2.5,
-      altura: 2.7,
-    });
+    const nome = nomeProdutoCortina({ ambiente: 'Sala', largura: 2.5, altura: 2.7 });
 
     const descricao = descricaoProdutoCortina({
       fixacao: 'trilho',
@@ -29,7 +23,8 @@ describe('produto sintetico de cortina', () => {
       ],
     });
 
-    expect(nome).toBe('Cortina Sala Wave L:2,50m X A:2,70m');
+    // Sem o modelo: ele aparece por camada na descrição, com a prega específica.
+    expect(nome).toBe('Cortina Sala L:2,50m X A:2,70m');
     expect(descricao).toBe('Fixação: Trilho | Abertura: Sem abertura | Frente: Wave | Tecido: TEX-101 BLACKOUT 70% DE VEDAÇÃO LISO LARGURA: 2,80m COR: 02 – MARROM | Franzido: 2,7x | Forro: Franzido | Tecido: TEX-202 BLACKOUT 70% DE VEDAÇÃO LISO LARGURA: 2,80m COR: 01 – BRANCO | Franzido: 2x');
     expect(descricao).not.toContain('\n');
   });

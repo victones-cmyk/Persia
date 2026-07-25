@@ -167,13 +167,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     }
   }
 
-  const nomeProduto = nomeProdutoCortina({
-    ambiente: c.ambiente,
-    modelo_cortina_nome: c.modelo_cortina_nome,
-    modelo_fallback: c.modelo,
-    largura,
-    altura,
-  });
+  const nomeProduto = nomeProdutoCortina({ ambiente: c.ambiente, largura, altura });
   const descricaoProduto = descricaoProdutoCortina({
     fixacao: c.fixacao,
     aberturas: c.aberturas,
