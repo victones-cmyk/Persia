@@ -2,8 +2,8 @@
 // Formulário de persiana MULTI-ITENS (SRD §8 Etapa 2A).
 // Victor (26/06/2026): o PRODUTO SOB MEDIDA e a INSTALAÇÃO são POR ITEM — cada janela
 // escolhe seu tipo de persiana (com sua lista de tecidos) e seu tipo de instalação
-// (grupo INSTALAÇÃO), que entra embutida no preço. A instalação é sugerida pelo
-// acionamento (motorizado → MOTORIZADA; senão → MANUAL), mas é editável.
+// (grupo INSTALAÇÃO), que entra embutida no preço. A instalação é escolha
+// obrigatória do vendedor — não é sugerida pelo acionamento.
 
 import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -52,7 +52,6 @@ interface ItemForm {
   bando_nome: string;
   fixacao_instalacao: string;
   instalacao_id: string;
-  instManual: boolean;
 }
 
 interface ItemErro {
@@ -68,10 +67,9 @@ interface ComponenteOpcao {
 }
 
 function itemVazio(): ItemForm {
-  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', comando: '', bando_codigo: '', bando_nome: '', fixacao_instalacao: '', instalacao_id: '', instManual: false };
+  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', comando: '', bando_codigo: '', bando_nome: '', fixacao_instalacao: '', instalacao_id: '' };
 }
 
-const ehMotorizado = (ac: string) => ac === 'motorizado_com_bando' || ac === 'motorizado_sem_bando';
 const COMANDOS_VERTICAL = ['Lateral', 'Lateral invertido', 'Central', 'Central com junção'] as const;
 const GRUPO_BANDO_VERTICAL = '5969405';
 const ACIONAMENTOS_POR_VARIANTE: Array<{ receita: keyof CalculadoraPersiana['receitas']; value: Acionamento; label: string }> = [
@@ -87,15 +85,8 @@ function normalizarRolamento(valor: string | null | undefined): string {
   return valor ?? '';
 }
 
-/** Instalação sugerida pelo acionamento: motorizado → MOTORIZADA; senão → MANUAL (com fallbacks). */
-function sugerirInstalacao(instalacoes: TipoInstalacao[], acionamento: string): string {
-  if (instalacoes.length === 0 || !acionamento) return '';
-  const motor = /motoriz/i;
-  if (ehMotorizado(acionamento)) {
-    return (instalacoes.find((i) => motor.test(i.nome)) ?? instalacoes[0]).id;
-  }
-  return (instalacoes.find((i) => /manual/i.test(i.nome)) ?? instalacoes.find((i) => !motor.test(i.nome)) ?? instalacoes[0]).id;
-}
+/** Valor do seletor para "sem instalação" — distingue de "não escolhi" (vazio). */
+const SEM_INSTALACAO = 'sem_instalacao';
 
 /** Converte um item salvo (ItemInput) no estado do formulário (para edição de rascunho). */
 function inputParaForm(it: ItemInput, tipoFallback: TipoPersiana | ''): ItemForm {
@@ -116,8 +107,9 @@ function inputParaForm(it: ItemInput, tipoFallback: TipoPersiana | ''): ItemForm
     bando_codigo: it.bando_codigo ?? '',
     bando_nome: it.bando_nome ?? '',
     fixacao_instalacao: it.fixacao_instalacao ?? '',
-    instalacao_id: it.instalacao_id ?? '',
-    instManual: it.instalacao_id != null && it.instalacao_id !== '',
+    // Orçamento salvo SEM instalação volta como escolha explícita: antes o
+    // formulário reinseria a instalação sugerida ao editar/duplicar.
+    instalacao_id: it.instalacao_id || SEM_INSTALACAO,
   };
 }
 
@@ -141,7 +133,6 @@ function snapParaForm(s: PersianaItemSnap, tipoFallback: TipoPersiana | ''): Ite
     bando_nome: s.bando_nome ?? '',
     fixacao_instalacao: s.fixacao_instalacao ?? '',
     instalacao_id: s.instalacao_id ?? '',
-    instManual: s.instManual ?? false,
   };
 }
 
@@ -149,7 +140,7 @@ function formParaSnap(it: ItemForm): PersianaItemSnap {
   return {
     ambiente: it.ambiente, tipo: it.tipo, tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
     largura: it.largura, altura: it.altura, tc: it.tc, tcManual: it.tcManual,
-    rolamento: it.rolamento, base: it.base, comando: it.comando, bando_codigo: it.bando_codigo, bando_nome: it.bando_nome, fixacao_instalacao: it.fixacao_instalacao, instalacao_id: it.instalacao_id, instManual: it.instManual,
+    rolamento: it.rolamento, base: it.base, comando: it.comando, bando_codigo: it.bando_codigo, bando_nome: it.bando_nome, fixacao_instalacao: it.fixacao_instalacao, instalacao_id: it.instalacao_id,
   };
 }
 
@@ -229,16 +220,6 @@ export function PersianaForm({
   }, []);
 
 
-  // Quando a lista de instalações chega, preenche o sugerido nos itens ainda sem escolha.
-  useEffect(() => {
-    if (instalacoes.length === 0) return;
-    setItens((prev) => prev.map((it) =>
-      !it.instManual && !it.instalacao_id && it.acionamento
-        ? { ...it, instalacao_id: sugerirInstalacao(instalacoes, it.acionamento) }
-        : it));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [instalacoes]);
-
   function atualizar(idx: number, patch: Partial<ItemForm>) {
     setItens((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
@@ -261,21 +242,19 @@ export function PersianaForm({
     atualizar(idx, {
       tipo: novoTipo,
       tecido_id: '',
-      ...(acionamentoValido ? {} : { acionamento: '', instalacao_id: '', instManual: false }),
+      ...(acionamentoValido ? {} : { acionamento: '' }),
       ...(vertical ? { cor: '', rolamento: '', base: '', comando: '' } : {}),
     });
     setErros((p) => { const n = { ...p }; delete n[idx]; return n; });
   }
 
   function onAcionamentoChange(idx: number, ac: Acionamento) {
-    const it = itens[idx];
     const patch: Partial<ItemForm> = { acionamento: ac };
     if (ac !== 'com_bando') {
       patch.bando_codigo = '';
       patch.bando_nome = '';
     }
     // Sugere a instalação pelo acionamento, a menos que o vendedor já tenha escolhido manualmente.
-    if (!it.instManual && instalacoes.length > 0) patch.instalacao_id = sugerirInstalacao(instalacoes, ac);
     atualizar(idx, patch);
   }
 
@@ -343,7 +322,13 @@ export function PersianaForm({
     && opcoesAcionamentoDaCalculadora(calculadoraDoItem(it)).some((op) => op.value === it.acionamento)
     && (!ehVertical(it) || it.acionamento !== 'com_bando' || it.bando_codigo !== '')
     && Number(it.largura) > 0
-    && Number(it.altura) > 0;
+    && Number(it.altura) > 0
+    // Escolhas de configuração/instalação: obrigatórias, e cobradas só quando o
+    // campo aparece na tela (rolamento e base não existem na vertical).
+    && (ehVertical(it) || (it.rolamento !== '' && it.base !== ''))
+    && it.comando !== ''
+    && it.fixacao_instalacao !== ''
+    && it.instalacao_id !== '';
   // Só os itens completos entram no cálculo; itens incompletos bloqueiam o envio.
   const itensComp = itens.map((it, idx) => ({ it, idx })).filter(({ it }) => itemValido(it));
   const temIncompleto = itens.some((it) => !itemValido(it));
@@ -371,7 +356,7 @@ export function PersianaForm({
       bando_codigo: ehVertical(it) && it.acionamento === 'com_bando' ? it.bando_codigo || null : null,
       bando_nome: ehVertical(it) && it.acionamento === 'com_bando' ? it.bando_nome || null : null,
       fixacao_instalacao: it.fixacao_instalacao === 'teto' || it.fixacao_instalacao === 'parede' ? it.fixacao_instalacao : null,
-      instalacao_id: it.instalacao_id || null,
+      instalacao_id: it.instalacao_id && it.instalacao_id !== SEM_INSTALACAO ? it.instalacao_id : null,
     };
   }
 
@@ -533,7 +518,7 @@ export function PersianaForm({
                 <div>
                   <label className="form-label" htmlFor={`cor-persiana-${idx}`}>Cor Acessório<span className="label-required">*</span></label>
                   <select id={`cor-persiana-${idx}`} className="input" value={it.cor} onChange={(e) => atualizar(idx, { cor: e.target.value as Cor })}>
-                    <option value="">—</option>
+                    <option value="">Selecione…</option>
                     {CORES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
@@ -541,7 +526,7 @@ export function PersianaForm({
               <div>
                 <label className="form-label" htmlFor={`acionamento-persiana-${idx}`}>Acionamento<span className="label-required">*</span></label>
                 <select id={`acionamento-persiana-${idx}`} className="input" value={it.acionamento} onChange={(e) => onAcionamentoChange(idx, e.target.value as Acionamento)}>
-                  <option value="">—</option>
+                  <option value="">Selecione…</option>
                   {opcoesAcionamento.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
               </div>
@@ -588,16 +573,16 @@ export function PersianaForm({
               {!vertical && (
                 <>
                   <div>
-                    <label className="form-label" htmlFor={`rolamento-persiana-${idx}`}>Rolamento</label>
+                    <label className="form-label" htmlFor={`rolamento-persiana-${idx}`}>Rolamento<span className="label-required">*</span></label>
                     <select id={`rolamento-persiana-${idx}`} className="input" value={it.rolamento} onChange={(e) => atualizar(idx, { rolamento: e.target.value })}>
-                      <option value="">—</option>
+                      <option value="">Selecione…</option>
                       {ROLAMENTOS.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="form-label" htmlFor={`base-persiana-${idx}`}>Base</label>
+                    <label className="form-label" htmlFor={`base-persiana-${idx}`}>Base<span className="label-required">*</span></label>
                     <select id={`base-persiana-${idx}`} className="input" value={it.base} onChange={(e) => atualizar(idx, { base: e.target.value })}>
-                      <option value="">—</option>
+                      <option value="">Selecione…</option>
                       {CORES.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
@@ -605,28 +590,29 @@ export function PersianaForm({
               )}
             </div>
 
-            {/* Instalação (embutida no preço) — sugerida pelo acionamento, editável */}
+            {/* Instalação (embutida no preço) — escolha obrigatória do vendedor */}
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="form-label" htmlFor={`comando-persiana-${idx}`}>Comando</label>
+                <label className="form-label" htmlFor={`comando-persiana-${idx}`}>Comando<span className="label-required">*</span></label>
                 <select id={`comando-persiana-${idx}`} className="input" value={it.comando} onChange={(e) => atualizar(idx, { comando: e.target.value })}>
-                  <option value="">—</option>
+                  <option value="">Selecione…</option>
                   {opcoesComando.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
-                <label className="form-label" htmlFor={`fixacao-persiana-${idx}`}>Fixação</label>
+                <label className="form-label" htmlFor={`fixacao-persiana-${idx}`}>Fixação<span className="label-required">*</span></label>
                 <select id={`fixacao-persiana-${idx}`} className="input" value={it.fixacao_instalacao} onChange={(e) => atualizar(idx, { fixacao_instalacao: e.target.value })}>
-                  <option value="">—</option>
+                  <option value="">Selecione…</option>
                   <option value="teto">Teto</option>
                   <option value="parede">Parede</option>
                 </select>
               </div>
               <div>
-                <label className="form-label" htmlFor={`instalacao-persiana-${idx}`}>Instalação</label>
+                <label className="form-label" htmlFor={`instalacao-persiana-${idx}`}>Instalação<span className="label-required">*</span></label>
                 <select id={`instalacao-persiana-${idx}`} className="input" value={it.instalacao_id}
-                  onChange={(e) => atualizar(idx, { instalacao_id: e.target.value, instManual: true })}>
-                  <option value="">Sem instalação</option>
+                  onChange={(e) => atualizar(idx, { instalacao_id: e.target.value })}>
+                  <option value="">Selecione…</option>
+                  <option value={SEM_INSTALACAO}>Sem instalação</option>
                   {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
                 </select>
               </div>

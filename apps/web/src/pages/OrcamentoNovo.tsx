@@ -121,6 +121,10 @@ export function OrcamentoNovo() {
   const trilhoSnapRef = useRef<ProdutoExtraSnap[] | null>(rascunhoLocal?.trilhos_especiais ?? null);
   const avulsoSnapRef = useRef<ProdutoExtraSnap[] | null>(rascunhoLocal?.produtos_avulsos ?? null);
   const persianaSujoRef = useRef(false);
+  // Espelho em estado: uma persiana começada mas sem nenhum item completo não
+  // gera resultado, e sem isso o aviso seria "preencha ao menos um item" em vez
+  // de apontar o campo obrigatório que falta.
+  const [persianaSuja, setPersianaSuja] = useState(false);
   const cortinaSujoRef = useRef(false);
   const trilhoSujoRef = useRef(false);
   const avulsoSujoRef = useRef(false);
@@ -157,7 +161,7 @@ export function OrcamentoNovo() {
   const atualizarDirty = useCallback(() => {
     setDirty(persianaSujoRef.current || cortinaSujoRef.current || trilhoSujoRef.current || avulsoSujoRef.current);
   }, [setDirty]);
-  const onDirtyPersiana = useCallback((sujo: boolean) => { persianaSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
+  const onDirtyPersiana = useCallback((sujo: boolean) => { persianaSujoRef.current = sujo; setPersianaSuja(sujo); atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
   const onDirtyCortina = useCallback((sujo: boolean) => { cortinaSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
   const onDirtyTrilho = useCallback((sujo: boolean) => { trilhoSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
   const onDirtyAvulso = useCallback((sujo: boolean) => { avulsoSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
@@ -296,9 +300,9 @@ export function OrcamentoNovo() {
 
   // --- Derivados ---
   const persianaItens: ItemInput[] = resultado ? resultado.itens.map((it) => it.input) : [];
-  const temPersiana = persianaItens.length > 0;
+  const temPersiana = persianaItens.length > 0 || persianaSuja;
   const persianaTotal = resultado ? roundHalfUp(resultado.itens.reduce((s, it) => s + (it.resultado.valor_bruto ?? 0), 0)) : 0;
-  const persianaIncompleto = !!resultado?.incompleto;
+  const persianaIncompleto = !!resultado?.incompleto || (persianaSuja && persianaItens.length === 0);
 
   const temCortina = cortinaEstado.temCortinas;
   const cortinaTotal = cortinaEstado.total;

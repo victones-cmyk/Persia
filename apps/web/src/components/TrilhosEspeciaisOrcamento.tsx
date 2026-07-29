@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCopy, faPlus, faSpinner, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faChevronRight, faCopy, faPlus, faSpinner, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
 import { formatBRL, formatNum } from '../lib/formatacao';
@@ -141,6 +141,7 @@ export function TrilhosEspeciaisOrcamento({
   const [carregando, setCarregando] = useState(true);
   const [calculando, setCalculando] = useState(false);
   const [produtosPorGrupo, setProdutosPorGrupo] = useState<Record<string, ComponenteOpcaoGrupo[]>>({});
+  const [minimizados, setMinimizados] = useState<Set<string>>(new Set());
   const sequencia = useRef(0);
   const gruposCarregados = useRef<Set<string>>(new Set());
 
@@ -264,6 +265,15 @@ export function TrilhosEspeciaisOrcamento({
     setLinhas((atuais) => atuais.map((l) => l.id === id ? { ...l, ...patch } : l));
   }
 
+  function toggleMinimizado(id: string) {
+    setMinimizados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function duplicar(index: number) {
     setLinhas((atuais) => {
       const novas = [...atuais];
@@ -293,8 +303,46 @@ export function TrilhosEspeciaisOrcamento({
           const variante = variantePara(calculadoras, linha);
           const mostrarEmendas = usaVariavel(variante, 'EMENDAS');
           const mostrarTc = usaVariavel(variante, 'TC');
+          const minimizado = minimizados.has(linha.id);
+          const nomeLinha = [
+            calculadoras.find((c) => c.id === linha.calculadora_id)?.nome,
+            variante?.nome,
+            linha.ambiente.trim() || null,
+          ].filter(Boolean).join(' · ') || 'Trilho sem modelo';
           return (
             <div key={linha.id} className="rounded-sm border border-neutral-300 p-3 bg-neutral-50">
+              <div className={`flex items-center justify-between ${minimizado ? '' : 'mb-2'}`}>
+                <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
+                  <button
+                    type="button"
+                    className="btn btn-default btn-xs"
+                    onClick={() => toggleMinimizado(linha.id)}
+                    aria-expanded={!minimizado}
+                    title={minimizado ? 'Expandir trilho' : 'Minimizar trilho'}
+                  >
+                    <FontAwesomeIcon icon={minimizado ? faChevronRight : faChevronDown} />
+                  </button>
+                  <span className="text-xs-ui font-bold text-neutral-600 whitespace-nowrap">Trilho {index + 1}</span>
+                  <span className="truncate text-sm-ui font-semibold text-neutral-800" title={nomeLinha}>{nomeLinha}</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  {minimizado && calculado && (
+                    <span className="font-mono tabular-nums text-xs-ui font-semibold text-neutral-800">{formatBRL(resultado.valor_total)}</span>
+                  )}
+                  {minimizado && (
+                    <button type="button" className="text-primary hover:opacity-80 text-xs-ui flex items-center gap-1" onClick={() => duplicar(index)} title="Duplicar trilho">
+                      <FontAwesomeIcon icon={faCopy} /> Duplicar
+                    </button>
+                  )}
+                  {linhas.length > 1 && (
+                    <button type="button" className="text-error hover:opacity-80 text-xs-ui flex items-center gap-1" onClick={() => setLinhas((atuais) => atuais.filter((l) => l.id !== linha.id))} title="Remover trilho">
+                      <FontAwesomeIcon icon={faTrash} /> Remover
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {!minimizado && (<>
               <div className="grid grid-cols-12 gap-2 items-end">
                 <div className="col-span-12 md:col-span-3">
                   <label className="form-label">Modelo de trilho<span className="label-required">*</span></label>
@@ -411,6 +459,7 @@ export function TrilhosEspeciaisOrcamento({
                   <button type="button" className="text-error hover:opacity-80 text-xs-ui flex items-center gap-1" onClick={() => setLinhas((atuais) => atuais.filter((l) => l.id !== linha.id))} disabled={linhas.length === 1}><FontAwesomeIcon icon={faTrash} /> Remover</button>
                 </div>
               </div>
+              </>)}
             </div>
           );
         })}

@@ -21,7 +21,6 @@ export interface PersianaItemSnap {
   bando_nome?: string;
   fixacao_instalacao?: string;
   instalacao_id: string;
-  instManual: boolean;
 }
 export interface PersianaSnapshot {
   tipo: string; // legado: tipo representativo (cada item tem o seu)
