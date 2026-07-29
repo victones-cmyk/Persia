@@ -190,6 +190,7 @@ export function AdminRegras() {
           <Num label="Espaçamento dos ilhós (m)" value={c.espacamento_ilhos_default} step={0.01} ro={ro} onChange={(v) => up((r) => { r.cortina.espacamento_ilhos_default = v; })} />
           <Num label="Espaçamento da ferragem (m)" hint="Argola/rodízio a cada X m" value={c.espacamento_ferragem_default} step={0.01} ro={ro} onChange={(v) => up((r) => { r.cortina.espacamento_ferragem_default = v; })} />
           <Num label="Aberturas padrão" value={c.aberturas_default} step={1} ro={ro} onChange={(v) => up((r) => { r.cortina.aberturas_default = v; })} />
+          <Num label="Faixa por instalação (m)" hint="1 instalação a cada X m de largura" value={c.instalacao_faixa_m} step={0.5} ro={ro} onChange={(v) => up((r) => { r.cortina.instalacao_faixa_m = v; })} />
         </div>
       </Secao>
 

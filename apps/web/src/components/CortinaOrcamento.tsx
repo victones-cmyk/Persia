@@ -70,6 +70,9 @@ export function CortinaOrcamento({
   const [ids, setIds] = useState<string[]>(estadoInicial.map((e) => e.id));
   const [resumos, setResumos] = useState<Record<string, CortinaResumo>>({});
   const [preenchidos, setPreenchidos] = useState<Record<string, boolean>>({});
+  // Faixa de largura por instalação (Regras de Cálculo): cortina larga paga mais
+  // de uma. O padrão espelha REGRAS_DEFAULT até a resposta chegar.
+  const [instalacaoFaixaM, setInstalacaoFaixaM] = useState(4);
   const [snaps, setSnaps] = useState<Record<string, CortinaCardSnap>>({});
   const [calculandoCards, setCalculandoCards] = useState<Record<string, boolean>>({});
   const [enviando, setEnviando] = useState(false);
@@ -88,8 +91,11 @@ export function CortinaOrcamento({
     getCacheado<AcessoriosCortinaResp>('cortina-acessorios', '/calcular/cortina/acessorios')
       .then((o) => setOpcoes(o))
       .catch(() => {});
-    getCacheado<{ instalacoes: TipoInstalacao[] }>('instalacoes', '/calcular/instalacoes')
-      .then((r) => setInstalacoes(r.instalacoes))
+    getCacheado<{ instalacoes: TipoInstalacao[]; instalacao_faixa_m?: number }>('instalacoes', '/calcular/instalacoes')
+      .then((r) => {
+        setInstalacoes(r.instalacoes);
+        if (r.instalacao_faixa_m && r.instalacao_faixa_m > 0) setInstalacaoFaixaM(r.instalacao_faixa_m);
+      })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -197,6 +203,7 @@ export function CortinaOrcamento({
           tecidos={tecidos}
           opcoes={opcoes}
           instalacoes={instalacoes}
+          instalacaoFaixaM={instalacaoFaixaM}
           inicial={iniciais.current[id] ?? undefined}
           restauro={restauros.current[id]}
           onChange={(r) => setResumo(id, r)}

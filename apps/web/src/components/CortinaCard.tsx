@@ -99,13 +99,15 @@ function modeloCamadaPayload(modelo: ModeloCortinaOpcao | ''): ModeloCortinaOpca
 }
 
 export function CortinaCard({
-  indice, tecidos, opcoes, instalacoes, inicial, restauro, onChange, onRemover, podeRemover, onPreenchidoChange, onSnapshot, onDuplicar,
+  indice, tecidos, opcoes, instalacoes, instalacaoFaixaM, inicial, restauro, onChange, onRemover, podeRemover, onPreenchidoChange, onSnapshot, onDuplicar,
   onCalculandoChange,
 }: {
   indice: number;
   tecidos: TecidoOpcao[];
   opcoes: AcessoriosCortinaResp | null;
   instalacoes: TipoInstalacao[];
+  /** Largura coberta por 1 instalação (m) — espelha a regra do servidor. */
+  instalacaoFaixaM: number;
   inicial?: CortinaInicial;
   restauro?: CortinaCardSnap;
   onChange: (resumo: CortinaResumo) => void;
@@ -305,6 +307,12 @@ export function CortinaCard({
 
   // Campos obrigatórios que entram no cálculo: sem eles o motor usaria padrões e
   // os valores mudariam depois, então nem calcula até estarem preenchidos.
+  // Quantidade de instalações pela largura (espelha quantidadeInstalacaoCortina
+  // no servidor): o preço do GestãoClick cobre uma faixa por unidade.
+  const qtdInstalacao = Number(largura) > 0 && instalacaoFaixaM > 0
+    ? Math.max(1, Math.ceil(Number(largura) / instalacaoFaixaM - 1e-9))
+    : 1;
+
   const obrigatoriosPreenchidos = fixacao !== '' && desconto !== '' && tamanhoBarra !== ''
     && tipoBarra !== '' && aberturas !== '' && instalacaoId !== '';
   const podeCalcular = Number(largura) > 0 && Number(altura) > 0 && camadas.length > 0
@@ -401,8 +409,10 @@ export function CortinaCard({
       acessoriosPayload.push({ item: a.item, categoria: a.categoria, produto_id: sel ?? '', quantidade: qtd, preco });
     }
     // Instalação embutida (Victor 26/06/2026): soma no total e vai no payload (o servidor recalcula).
+    // Instalação por faixa de largura: uma cortina de 6 m com faixa de 4 m paga
+    // 2 instalações. Mesma conta do servidor (quantidadeInstalacaoCortina).
     const instSel = instalacoes.find((i) => i.id === instalacaoId);
-    if (instSel) total += instSel.preco;
+    if (instSel) total += instSel.preco * qtdInstalacao;
 
     // Nome curto; o servidor recalcula e envia os detalhes técnicos na descrição.
     return {
@@ -564,6 +574,11 @@ export function CortinaCard({
           <option value={SEM_INSTALACAO}>Sem instalação</option>
           {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
         </select>
+        {instalacaoId && instalacaoId !== SEM_INSTALACAO && qtdInstalacao > 1 && (
+          <div className="helper-text">
+            {qtdInstalacao} instalações: a largura de {formatNum(Number(largura), 2)} m passa de {formatNum(instalacaoFaixaM, 2)} m por unidade.
+          </div>
+        )}
       </div>
 
       {/* Camadas (cada uma com MODELO + tecido + franzido próprios) */}

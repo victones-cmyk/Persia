@@ -31,6 +31,7 @@ import {
 import { listarProdutos } from '../services/gc/catalogos';
 import { listarInstalacoes, indiceInstalacoes, type TipoInstalacao } from '../services/gc/instalacao';
 import { linhaInstalacaoBreakdown, componenteInstalacao } from '../services/calc/instalacaoCalc';
+import { getRegras } from '../services/calc/regras';
 import { listarAcessoriosCortina, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo } from '../services/gc/acessorios';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { listarProdutosParaOrcamento } from '../services/calc/itensExtras';
@@ -51,7 +52,9 @@ export async function listarTecidos(req: Request, res: Response): Promise<void> 
 /** GET /api/calcular/instalacoes — tipos de instalação (grupo INSTALAÇÃO do GestãoClick). */
 export async function listarInstalacoesController(_req: Request, res: Response): Promise<void> {
   const instalacoes = await listarInstalacoes();
-  res.json({ instalacoes });
+  // A faixa vai junto para o formulário calcular a mesma quantidade que o
+  // servidor cobrará (cortina larga paga mais de uma instalação).
+  res.json({ instalacoes, instalacao_faixa_m: getRegras().cortina.instalacao_faixa_m });
 }
 
 /** GET /api/calcular/componentes?grupo_id=5969405 — produtos/componentes para escolhas do formulário. */

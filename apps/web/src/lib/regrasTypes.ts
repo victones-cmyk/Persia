@@ -32,6 +32,8 @@ export interface RegrasCalculo {
     espacamento_ilhos_default: number;
     espacamento_ferragem_default: number;
     aberturas_default: number;
+  /** 1 instalação de cortina a cada X m de largura. */
+  instalacao_faixa_m: number;
     folga_topo: Record<ModeloCortina, number>;
     tem_entretela: Record<ModeloCortina, boolean>;
   };

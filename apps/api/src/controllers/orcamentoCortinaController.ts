@@ -12,6 +12,7 @@ import { calcularCortinaMultiCamada, modeloDeCalculoCamada, type CamadaCortina, 
 import { buscarTecidoCortinaGc } from '../services/gc/tecidos';
 import { buscarAcessorioGc, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo, type CategoriaAcessorio } from '../services/gc/acessorios';
 import { indiceInstalacoes } from '../services/gc/instalacao';
+import { quantidadeInstalacaoCortina } from '../services/calc/instalacaoCalc';
 import { valorComRt } from '../services/calc/rtCalc';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
@@ -166,9 +167,13 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
   if (c.instalacao_id) {
     const inst = (await indiceInstalacoes()).get(String(c.instalacao_id));
     if (inst) {
-      valorTotal = roundHalfUp(valorTotal + inst.preco);
-      valorCusto = roundHalfUp(valorCusto + inst.custo);
-      acessoriosSnap.push({ item: 'Instalação', categoria: 'instalacao', produto_id: inst.id, produto_nome: inst.nome, quantidade: 1, preco: inst.preco, subtotal: inst.preco });
+      // A instalação é cobrada por faixa de largura: o preço do GestãoClick vale
+      // por faixa (ex.: 4 m), então uma cortina de 6 m paga 2 instalações. Vale
+      // para manual e motorizada — muda só o preço unitário do produto.
+      const qtd = quantidadeInstalacaoCortina(largura);
+      valorTotal = roundHalfUp(valorTotal + inst.preco * qtd);
+      valorCusto = roundHalfUp(valorCusto + inst.custo * qtd);
+      acessoriosSnap.push({ item: 'Instalação', categoria: 'instalacao', produto_id: inst.id, produto_nome: inst.nome, quantidade: qtd, preco: inst.preco, subtotal: roundHalfUp(inst.preco * qtd) });
     }
   }
 

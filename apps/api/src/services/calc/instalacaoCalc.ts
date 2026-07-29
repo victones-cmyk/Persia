@@ -5,6 +5,20 @@
 
 import type { TipoInstalacao } from '../gc/instalacao';
 import type { LinhaCustoPersiana } from './persianaPreco';
+import { roundHalfUp } from './arredondamento';
+import { getRegras } from './regras';
+
+/**
+ * Quantidade de instalações de uma CORTINA pela largura: o preço cadastrado no
+ * GestãoClick cobre uma faixa (padrão 4 m), então 4 m paga 1, 6 m paga 2, 8 m
+ * paga 2, 8,5 m paga 3. Vale para manual e motorizada — muda só o preço unitário
+ * do produto escolhido. A faixa é configurável em Regras de Cálculo.
+ */
+export function quantidadeInstalacaoCortina(largura: number): number {
+  const faixa = getRegras().cortina.instalacao_faixa_m;
+  if (!(largura > 0) || !(faixa > 0)) return 1;
+  return Math.max(1, Math.ceil(roundHalfUp(largura / faixa, 6)));
+}
 
 /** Linha da instalação no breakdown de preço (mesmo formato dos componentes da persiana). */
 export function linhaInstalacaoBreakdown(inst: TipoInstalacao): LinhaCustoPersiana {

@@ -40,6 +40,9 @@ export interface RegrasCalculo {
     espacamento_ilhos_default: number;
     espacamento_ferragem_default: number;
     aberturas_default: number;
+    /** Faixa de largura coberta por 1 unidade de instalação (m). Uma cortina de
+     *  6 m com faixa de 4 m cobra 2 instalações. */
+    instalacao_faixa_m: number;
     folga_topo: Record<ModeloCortina, number>;
     tem_entretela: Record<ModeloCortina, boolean>;
   };
@@ -76,6 +79,7 @@ export const REGRAS_DEFAULT: RegrasCalculo = {
     espacamento_ilhos_default: 0.15,
     espacamento_ferragem_default: 0.1,
     aberturas_default: 1,
+    instalacao_faixa_m: 4,
     folga_topo: { ilhos: 0.1, prega: 0.12, franzido: 0.08, wave: 0.12 },
     tem_entretela: { ilhos: true, prega: true, franzido: false, wave: true },
   },
@@ -137,6 +141,8 @@ export function normalizar(input: unknown): RegrasCalculo {
       espacamento_ilhos_default: num(c.espacamento_ilhos_default, d.cortina.espacamento_ilhos_default),
       espacamento_ferragem_default: num(c.espacamento_ferragem_default, d.cortina.espacamento_ferragem_default),
       aberturas_default: num(c.aberturas_default, d.cortina.aberturas_default),
+      // Faixa 0 dividiria por zero no cálculo da quantidade — cai no padrão.
+      instalacao_faixa_m: num(c.instalacao_faixa_m, d.cortina.instalacao_faixa_m) || d.cortina.instalacao_faixa_m,
       folga_topo: folga,
       tem_entretela: entre,
     },
