@@ -47,6 +47,9 @@ export interface CortinaResumo {
 
 interface CamadaState { id: string; nome: string; tecidoId: string; modelo: ModeloCortinaOpcao | ''; franzido: string; metodoAltura: MetodoAlturaCortina; costuradoQuantidade: QuantidadeCosturadoJunto; }
 
+/** Valor do seletor para "sem instalação" — distingue de "não escolhido" (vazio). */
+const SEM_INSTALACAO = 'sem_instalacao';
+
 const nomePadraoCamada = (index: number): string => (index === 0 ? 'Frente' : `Camada ${index + 1}`);
 const novaCamada = (modelo: ModeloCortinaOpcao | '' = '', index = 0): CamadaState => ({ id: crypto.randomUUID(), nome: nomePadraoCamada(index), tecidoId: '', modelo, franzido: '', metodoAltura: 'emenda', costuradoQuantidade: 'mesma_quantidade' });
 const calcCache = new Map<string, { expiraEm: number; valor: CalcCortinaCompletaResp }>();
@@ -122,8 +125,10 @@ export function CortinaCard({
     );
 
   const [ambiente, setAmbiente] = useState(restauro?.ambiente ?? inicial?.ambiente ?? '');
-  const [fixacao, setFixacao] = useState<FixacaoCortina>((restauro?.fixacao as FixacaoCortina) ?? inicial?.fixacao ?? 'varao');
-  const [desconto, setDesconto] = useState<DescontoCortina>((restauro?.desconto as DescontoCortina | undefined) ?? (inicial as { desconto?: DescontoCortina } | undefined)?.desconto ?? 'sem_desconto');
+  // Fixação e desconto começam VAZIOS e são obrigatórios: o vendedor decide caso
+  // a caso, e um padrão silencioso já saiu em orçamento sem ninguém conferir.
+  const [fixacao, setFixacao] = useState<FixacaoCortina | ''>((restauro?.fixacao as FixacaoCortina) ?? inicial?.fixacao ?? '');
+  const [desconto, setDesconto] = useState<DescontoCortina | ''>((restauro?.desconto as DescontoCortina | undefined) ?? (inicial as { desconto?: DescontoCortina } | undefined)?.desconto ?? '');
   const [largura, setLargura] = useState(restauro?.largura ?? (inicial ? String(inicial.largura) : ''));
   const [altura, setAltura] = useState(restauro?.altura ?? (inicial ? String(inicial.altura) : ''));
   const [tamanhoBarra, setTamanhoBarra] = useState(restauro?.tamanhoBarra ?? (inicial?.tamanho_barra != null ? String(inicial.tamanho_barra * 100) : ''));
@@ -165,13 +170,13 @@ export function CortinaCard({
     const calc = calculadoras.find((c) => c.id === id);
     if (!calc) return;
     setModeloCortinaNome(calc.nome);
-    
-    setFixacao(calc.fixacao_default as FixacaoCortina);
-    setTamanhoBarra(calc.tamanho_barra_default != null ? String(calc.tamanho_barra_default * 100) : '');
-    setTipoBarra(calc.tipo_barra_default || '');
-    setAberturas(calc.aberturas_default != null ? String(calc.aberturas_default) : '');
+
+    // Fixação, barra, abertura, desconto e instalação NÃO são herdados da
+    // calculadora: são obrigatórios e ficam em branco para o vendedor decidir
+    // por cortina. A calculadora define só a composição das camadas.
     setBainhasLaterais(calc.bainhas_laterais_default != null ? String(calc.bainhas_laterais_default * 100) : '');
-    
+
+
     const novasCamadas = calc.camadas.map((cam, i) => ({
       id: crypto.randomUUID(),
       nome: cam.nome || nomePadraoCamada(i),
@@ -190,7 +195,11 @@ export function CortinaCard({
   const [qtdManual, setQtdManual] = useState<Record<string, string>>(
     restauro?.qtdManual ?? (inicial ? Object.fromEntries(inicial.acessorios.map((a) => [a.item, String(a.quantidade)])) : {}),
   );
-  const [instalacaoId, setInstalacaoId] = useState<string>(restauro?.instalacaoId ?? inicial?.instalacao_id ?? '');
+  // Orçamento salvo sem instalação volta como escolha explícita, para não virar
+  // pendência ao reabrir; formulário novo começa vazio (obrigatório).
+  const [instalacaoId, setInstalacaoId] = useState<string>(
+    restauro?.instalacaoId ?? (inicial ? (inicial.instalacao_id || SEM_INSTALACAO) : ''),
+  );
 
   const [calc, setCalc] = useState<CalcCortinaCompletaResp | null>(null);
   const [calculando, setCalculando] = useState(false);
@@ -200,18 +209,20 @@ export function CortinaCard({
   // Modelos escolhidos nas camadas → fixações comuns. Ajusta a fixação se ficar inválida.
   const modelosSelecionados = camadas.map((c) => c.modelo).filter((m): m is ModeloCortinaOpcao => m !== '');
   const fixacoesPermitidas = fixacoesComuns(modelosSelecionados);
+  // Uma escolha que deixou de ser válida é LIMPA, não trocada por outra: o campo
+  // é obrigatório, então quem decide o substituto é o vendedor.
   useEffect(() => {
-    if (modelosSelecionados.length > 0 && !fixacoesPermitidas.includes(fixacao)) {
-      setFixacao(fixacoesPermitidas[0] ?? 'varao');
+    if (fixacao !== '' && modelosSelecionados.length > 0 && !fixacoesPermitidas.includes(fixacao)) {
+      setFixacao('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(modelosSelecionados)]);
 
   const fixacoesDisponiveis = FIXACOES_CORTINA.filter((f) => fixacoesPermitidas.includes(f.value));
-  const descontosDisponiveis = DESCONTOS_CORTINA.filter((d) => !d.fixacoes || d.fixacoes.includes(fixacao));
+  const descontosDisponiveis = DESCONTOS_CORTINA.filter((d) => !d.fixacoes || (fixacao !== '' && d.fixacoes.includes(fixacao)));
   useEffect(() => {
-    if (!descontosDisponiveis.some((d) => d.value === desconto)) {
-      setDesconto('sem_desconto');
+    if (desconto !== '' && !descontosDisponiveis.some((d) => d.value === desconto)) {
+      setDesconto('');
     }
   }, [fixacao, desconto, descontosDisponiveis]);
   const modeloPrincipal = camadas[0]?.modelo || '';
@@ -278,8 +289,13 @@ export function CortinaCard({
     camadas: camadas.map((c) => ({ t: c.tecidoId, m: c.modelo, f: c.modelo === 'costurado_junto' && c.costuradoQuantidade === 'mesma_quantidade' ? '' : c.franzido, ma: c.metodoAltura, cq: c.modelo === 'costurado_junto' ? c.costuradoQuantidade : '' })),
   });
 
+  // Campos obrigatórios que entram no cálculo: sem eles o motor usaria padrões e
+  // os valores mudariam depois, então nem calcula até estarem preenchidos.
+  const obrigatoriosPreenchidos = fixacao !== '' && desconto !== '' && tamanhoBarra !== ''
+    && tipoBarra !== '' && aberturas !== '' && instalacaoId !== '';
   const podeCalcular = Number(largura) > 0 && Number(altura) > 0 && camadas.length > 0
-    && camadas.every((c) => c.tecidoId && c.modelo) && fixacoesPermitidas.length > 0;
+    && camadas.every((c) => c.tecidoId && c.modelo) && fixacoesPermitidas.length > 0
+    && obrigatoriosPreenchidos;
 
   const tamanhoBarraNum = tamanhoBarra === '' ? undefined : Number(tamanhoBarra) / 100;
   const tipoBarraVal = tipoBarra || undefined;
@@ -345,7 +361,9 @@ export function CortinaCard({
   };
 
   const resumo = useMemo<CortinaResumo>(() => {
-    if (!calc) return { total: 0, completo: false, payload: null };
+    // `calc` só existe quando podeCalcular passou, o que garante os obrigatórios
+    // preenchidos — daí fixação e desconto nunca chegam vazios ao payload.
+    if (!calc || fixacao === '' || desconto === '') return { total: 0, completo: false, payload: null };
     let total = calc.valor_tecido_total;
     let completo = true;
     const acessoriosPayload: NonNullable<CortinaResumo['payload']>['acessorios'] = [];
@@ -384,7 +402,7 @@ export function CortinaCard({
         bainhas_laterais: bainhasLaterais === '' ? undefined : Number(bainhasLaterais) / 100,
         camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: modeloCamadaPayload(c.modelo) ?? 'franzido', franzido: franzidoDe(c), metodo_altura: c.metodoAltura, ...(c.modelo === 'costurado_junto' ? { costurado_quantidade: c.costuradoQuantidade } : {}) })),
         acessorios: acessoriosPayload, nome_produto: nomeProdutoPreview, ja_possui_varao: jaPossuiVarao,
-        instalacao_id: instalacaoId || null,
+        instalacao_id: instalacaoId && instalacaoId !== SEM_INSTALACAO ? instalacaoId : null,
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -392,7 +410,7 @@ export function CortinaCard({
 
   useEffect(() => { onChange(resumo); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [resumo]);
 
-  const preenchido = ambiente !== '' || largura !== '' || altura !== '' || desconto !== 'sem_desconto' ||
+  const preenchido = ambiente !== '' || largura !== '' || altura !== '' || desconto !== '' || fixacao !== '' || instalacaoId !== '' ||
     tamanhoBarra !== '' || tipoBarra !== '' || aberturas !== '' || bainhasLaterais !== '' || camadas.some((c) => c.tecidoId || c.franzido || c.modelo) ||
     Object.keys(acessorioSel).length > 0 || Object.values(qtdManual).some((v) => v !== '');
   useEffect(() => { onPreenchidoChange?.(preenchido); }, [preenchido, onPreenchidoChange]);
@@ -480,8 +498,8 @@ export function CortinaCard({
         </div>
         <div>
           <label className="form-label" htmlFor={`fixacao-cortina-${indice}`}>Fixação<span className="label-required">*</span></label>
-          <select id={`fixacao-cortina-${indice}`} className="input" value={fixacao} disabled={modelosSelecionados.length === 0} onChange={(e) => setFixacao(e.target.value as FixacaoCortina)}>
-            {modelosSelecionados.length === 0 && <option value="">Escolha o modelo</option>}
+          <select id={`fixacao-cortina-${indice}`} className="input" value={fixacao} disabled={modelosSelecionados.length === 0} onChange={(e) => setFixacao(e.target.value as FixacaoCortina | '')}>
+            <option value="">{modelosSelecionados.length === 0 ? 'Escolha o modelo' : 'Selecione…'}</option>
             {fixacoesDisponiveis.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
           {modelosSelecionados.length > 0 && fixacoesDisponiveis.length === 0 && (
@@ -489,11 +507,11 @@ export function CortinaCard({
           )}
         </div>
         <div>
-          <label className="form-label" htmlFor={`tamanho-barra-cortina-${indice}`}>Tamanho da barra (cm)</label>
+          <label className="form-label" htmlFor={`tamanho-barra-cortina-${indice}`}>Tamanho da barra (cm)<span className="label-required">*</span></label>
           <input id={`tamanho-barra-cortina-${indice}`} type="number" className="input" min={0} step={1} value={tamanhoBarra} onChange={(e) => setTamanhoBarra(e.target.value)} placeholder="" />
         </div>
         <div>
-          <label className="form-label" htmlFor={`tipo-barra-cortina-${indice}`}>Tipo de barra</label>
+          <label className="form-label" htmlFor={`tipo-barra-cortina-${indice}`}>Tipo de barra<span className="label-required">*</span></label>
           <select id={`tipo-barra-cortina-${indice}`} className="input" value={tipoBarra} onChange={(e) => setTipoBarra(e.target.value as 'simples' | 'dupla' | '')}>
             <option value="">Selecione…</option>
             <option value="simples">Simples</option>
@@ -501,13 +519,14 @@ export function CortinaCard({
           </select>
         </div>
         <div>
-          <label className="form-label" htmlFor={`desconto-cortina-${indice}`}>Desconto</label>
-          <select id={`desconto-cortina-${indice}`} className="input" value={desconto} onChange={(e) => setDesconto(e.target.value as DescontoCortina)}>
+          <label className="form-label" htmlFor={`desconto-cortina-${indice}`}>Desconto<span className="label-required">*</span></label>
+          <select id={`desconto-cortina-${indice}`} className="input" value={desconto} onChange={(e) => setDesconto(e.target.value as DescontoCortina | '')}>
+            <option value="">Selecione…</option>
             {descontosDisponiveis.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </select>
         </div>
         <div>
-          <label className="form-label" htmlFor={`abertura-cortina-${indice}`}>Tipo de abertura</label>
+          <label className="form-label" htmlFor={`abertura-cortina-${indice}`}>Tipo de abertura<span className="label-required">*</span></label>
           <select id={`abertura-cortina-${indice}`} className="input" value={aberturas} onChange={(e) => setAberturas(e.target.value)}>
             <option value="">Selecione…</option>
             <option value="2">Central</option>
@@ -523,9 +542,12 @@ export function CortinaCard({
 
       {/* Instalação embutida no preço (Victor 26/06/2026): tipo por cortina */}
       <div className="mb-3">
-        <label className="form-label">Instalação</label>
+        <label className="form-label">Instalação<span className="label-required">*</span></label>
+        {/* "Sem instalação" é uma escolha explícita (SEM_INSTALACAO), diferente de
+            "ainda não escolhi" (vazio) — senão o campo obrigatório passaria batido. */}
         <select className="input" value={instalacaoId} onChange={(e) => setInstalacaoId(e.target.value)}>
-          <option value="">Sem instalação</option>
+          <option value="">Selecione…</option>
+          <option value={SEM_INSTALACAO}>Sem instalação</option>
           {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
         </select>
       </div>

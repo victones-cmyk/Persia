@@ -22,7 +22,10 @@ import type { CortinaSnapshot, CortinaCardSnap } from '../lib/rascunhoLocal';
 export interface CortinaOrcamentoEstado {
   total: number; // soma das cortinas (instalação embutida)
   todasCompletas: boolean;
-  temCortinas: boolean; // ao menos uma cortina com payload
+  // Ao menos uma cortina com payload OU já começada: uma cortina com campo
+  // obrigatório em branco não gera payload, mas precisa contar como "preenchida"
+  // para o pai avisar o que falta em vez de "preencha ao menos um item".
+  temCortinas: boolean;
   count: number; // nº de cortinas com payload
   cortinas: NonNullable<CortinaResumo['payload']>[];
   totais: number[]; // total de cada cortina (alinhado com `cortinas`) — p/ aplicar RT por item
@@ -145,8 +148,8 @@ export function CortinaOrcamento({
     const comPayload = ids.filter((id) => resumos[id]?.payload);
     const cortinas = comPayload.map((id) => resumos[id]!.payload!) as NonNullable<CortinaResumo['payload']>[];
     const totais = comPayload.map((id) => resumos[id]!.total);
-    onEstadoRef.current?.({ total: totalCortinas, todasCompletas, temCortinas: cortinas.length > 0, count: cortinas.length, cortinas, totais, calculando });
-  }, [embutido, totalCortinas, todasCompletas, ids, resumos, calculando]);
+    onEstadoRef.current?.({ total: totalCortinas, todasCompletas, temCortinas: cortinas.length > 0 || sujo, count: cortinas.length, cortinas, totais, calculando });
+  }, [embutido, totalCortinas, todasCompletas, ids, resumos, calculando, sujo]);
 
   const gcOffline = gcStatus !== 'online';
   const semVendedor = !gcUsuarioId;
@@ -244,7 +247,7 @@ export function CortinaOrcamento({
               <div key={id} className="flex justify-between py-1 text-xs-ui border-b border-neutral-200 last:border-b-0">
                 <span className="text-neutral-600">
                   Cortina {i + 1}
-                  {resumos[id] && !resumos[id].completo && <span className="text-warning"> (acessório a definir)</span>}
+                  {resumos[id] && !resumos[id].completo && <span className="text-warning"> (incompleto)</span>}
                 </span>
                 <span className="font-mono tabular-nums text-neutral-800">
                   {calculandoCards[id] ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(resumos[id]?.total ?? 0)}

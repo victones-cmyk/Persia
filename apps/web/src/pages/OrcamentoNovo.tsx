@@ -564,7 +564,7 @@ export function OrcamentoNovo() {
                 </span>
               </div>
               <div className="flex justify-between text-xs-ui">
-                <span className="text-neutral-600">Cortinas {temCortina ? `(${cortinaEstado.count})` : ''}{temCortina && !cortinaCompletas ? <span className="text-warning"> (acessório a definir)</span> : null}</span>
+                <span className="text-neutral-600">Cortinas {temCortina ? `(${cortinaEstado.count})` : ''}{temCortina && !cortinaCompletas ? <span className="text-warning"> (incompleto)</span> : null}</span>
                 <span className="font-mono tabular-nums text-neutral-800">
                   {cortinaEstado.calculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(cortinaTotal)}
                 </span>
@@ -605,7 +605,7 @@ export function OrcamentoNovo() {
             {!algoPreenchido && <div className="alert alert-info mb-3 text-xs-ui"><span>Preencha ao menos um item das seções selecionadas.</span></div>}
             {algoPreenchido && usuario?.perfil === 'admin' && !lojaId && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione a <strong>Loja / Filial</strong> no topo.</span></div>}
             {temPersiana && persianaIncompleto && <div className="alert alert-warning mb-3 text-xs-ui"><span>Há <strong>persiana</strong> com campos obrigatórios em branco.</span></div>}
-            {temCortina && !cortinaCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Escolha o <strong>produto de cada acessório</strong> em todas as cortinas.</span></div>}
+            {temCortina && !cortinaCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Há <strong>cortina</strong> com campo obrigatório em branco ou acessório sem produto escolhido.</span></div>}
             {incluiTrilho && !trilhoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Selecione a calculadora e complete largura, emendas e quantidade dos <strong>trilhos especiais</strong>.</span></div>}
             {incluiAvulso && !avulsoEstado.completos && <div className="alert alert-warning mb-3 text-xs-ui"><span>Complete produto e quantidade dos <strong>produtos avulsos</strong>.</span></div>}
             {calculandoOrcamento && <div className="alert alert-info mb-3 text-xs-ui"><span>Aguarde o cálculo terminar para salvar ou enviar.</span></div>}
