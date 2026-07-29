@@ -161,6 +161,16 @@ export function CortinaCard({
       .catch(() => setCalculadoras([]));
   }, []);
 
+  // O que é salvo/duplicado é o NOME do modelo, não o id da calculadora: sem
+  // reencontrar o id, o seletor aparecia vazio ao duplicar uma cortina, restaurar
+  // um rascunho ou editar um orçamento. Só ajusta o seletor — passar por
+  // aoMudarModeloCortina reiniciaria as camadas.
+  useEffect(() => {
+    if (modeloCortinaId || !modeloCortinaNome || calculadoras.length === 0) return;
+    const calc = calculadoras.find((c) => c.nome === modeloCortinaNome);
+    if (calc) setModeloCortinaId(calc.id);
+  }, [calculadoras, modeloCortinaNome, modeloCortinaId]);
+
   const aoMudarModeloCortina = (id: string) => {
     setModeloCortinaId(id);
     if (!id) {
@@ -177,16 +187,20 @@ export function CortinaCard({
     setBainhasLaterais(calc.bainhas_laterais_default != null ? String(calc.bainhas_laterais_default * 100) : '');
 
 
-    const novasCamadas = calc.camadas.map((cam, i) => ({
-      id: crypto.randomUUID(),
-      nome: cam.nome || nomePadraoCamada(i),
-      tecidoId: '',
-      modelo: modeloCortinaParaOpcao(cam.modelo_default),
-      franzido: cam.franzido_default != null ? String(cam.franzido_default) : '',
-      metodoAltura: 'emenda' as MetodoAlturaCortina,
-      costuradoQuantidade: 'mesma_quantidade' as QuantidadeCosturadoJunto,
+    // Tecido e franzido já escolhidos são preservados por posição: trocar o
+    // modelo define a composição das camadas, não apaga o que já foi preenchido.
+    setCamadas((atuais) => calc.camadas.map((cam, i) => {
+      const atual = atuais[i];
+      return {
+        id: atual?.id ?? crypto.randomUUID(),
+        nome: cam.nome || nomePadraoCamada(i),
+        tecidoId: atual?.tecidoId ?? '',
+        modelo: modeloCortinaParaOpcao(cam.modelo_default),
+        franzido: atual?.franzido || (cam.franzido_default != null ? String(cam.franzido_default) : ''),
+        metodoAltura: atual?.metodoAltura ?? ('emenda' as MetodoAlturaCortina),
+        costuradoQuantidade: atual?.costuradoQuantidade ?? ('mesma_quantidade' as QuantidadeCosturadoJunto),
+      };
     }));
-    setCamadas(novasCamadas);
   };
 
   const [acessorioSel, setAcessorioSel] = useState<Record<string, string>>(
