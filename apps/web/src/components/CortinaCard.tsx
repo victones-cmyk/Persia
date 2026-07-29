@@ -217,7 +217,13 @@ export function CortinaCard({
   const modeloPrincipal = camadas[0]?.modelo || '';
   // Nome do item da barra conforme a fixação — para o "Já possui".
   const nomeBarra = fixacao === 'trilho' ? 'Trilho' : fixacao === 'varao_suico' ? 'Varão suíço' : 'Varão';
-  const ehBarra = (item: string) => item === nomeBarra || item.startsWith(`${nomeBarra} (camada `);
+  // "Já possui" cobre a barra E o acabamento das pontas dela: ponteiras (varão)
+  // e terminais (trilho/varão suíço) vêm junto com a peça que o cliente já tem.
+  // Espelha ehBarra em orcamentoCortinaController.ts.
+  const ehBarra = (item: string) => item === nomeBarra
+    || item.startsWith(`${nomeBarra} (`)
+    || item === 'Ponteira' || item === 'Ponteira (traseira)'
+    || item === 'Terminais';
   const isWaveCamada = (c: CamadaState) => c.modelo !== '' && c.modelo !== 'costurado_junto' && normalizarModeloCortina(c.modelo) === 'wave';
 
   const obterFormulaAcessorio = (item: string) => {

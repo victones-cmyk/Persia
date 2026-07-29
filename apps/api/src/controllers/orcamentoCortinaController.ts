@@ -123,7 +123,12 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
   // Nome do item da barra (trilho/varão) conforme a fixação — para o "Já possui".
   // O varão pode vir por camada ("Varão (camada N)"), então casa pela base do nome.
   const nomeBarra = c.fixacao === 'trilho' ? 'Trilho' : c.fixacao === 'varao_suico' ? 'Varão suíço' : 'Varão';
-  const ehBarra = (item: string) => item === nomeBarra || item.startsWith(`${nomeBarra} (camada `);
+  // "Já possui" cobre a barra E o acabamento das pontas dela: ponteiras (varão)
+  // e terminais (trilho/varão suíço) vêm junto com a peça que o cliente já tem.
+  const ehBarra = (item: string) => item === nomeBarra
+    || item.startsWith(`${nomeBarra} (`)
+    || item === 'Ponteira' || item === 'Ponteira (traseira)'
+    || item === 'Terminais';
 
   // Acessórios: preço do GC × quantidade (auto do motor; manual do cliente, ex.: suporte).
   const acessoriosSnap: Record<string, unknown>[] = [];
