@@ -58,8 +58,17 @@ const VARIANTES = [
   { key: 'motor_sem_bando', label: 'Motorizado sem Bandô' },
 ] as const;
 
-// As variantes de prega têm o mesmo cálculo e mudam só o nome na ficha do
-// produto enviada ao GestãoClick (ver cortina.ts).
+// Modelo físico base: o que o MOTOR entende. As variantes de prega não entram
+// aqui — todas calculam como 'prega' (ver cortina.ts).
+const MODELOS_BASE_CORTINA = [
+  { value: 'wave', label: 'Wave' },
+  { value: 'prega', label: 'Prega' },
+  { value: 'franzido', label: 'Franzido' },
+  { value: 'ilhos', label: 'Ilhós' },
+];
+
+// Modelo da camada: aceita as variantes de prega, que mudam só o nome na ficha
+// do produto enviada ao GestãoClick.
 const MODELOS_CORTINA = [
   { value: 'wave', label: 'Wave' },
   { value: 'prega_americana', label: 'Prega Americana' },
@@ -1431,7 +1440,7 @@ export function AdminCalculadoras() {
                         value={editandoCortina.modelo_base}
                         onChange={(e) => setEditandoCortina({ ...editandoCortina, modelo_base: e.target.value as any })}
                       >
-                        {MODELOS_CORTINA.map((m) => (
+                        {MODELOS_BASE_CORTINA.map((m) => (
                           <option key={m.value} value={m.value}>{m.label}</option>
                         ))}
                       </select>

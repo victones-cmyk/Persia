@@ -149,6 +149,14 @@ function normalizarCalculadorasCortina(calculadoras: CalculadoraCortina[]): Calc
     ...c,
     ativo: c.ativo !== false,
     bainhas_laterais_default: Number.isFinite(Number(c.bainhas_laterais_default)) ? Number(c.bainhas_laterais_default) : 0,
+    // Calculadoras salvas antes das variantes guardavam o genérico 'prega', que
+    // não corresponde a nenhuma opção do seletor do admin — a tela exibia a
+    // primeira da lista (Wave) e salvar trocaria o modelo sem querer. Migra para
+    // a variante explícita, que é o que o app já assumia na prática.
+    camadas: (c.camadas ?? []).map((cam) => ({
+      ...cam,
+      modelo_default: (cam.modelo_default as string) === 'prega' ? 'prega_americana' : cam.modelo_default,
+    })),
   }));
 }
 
