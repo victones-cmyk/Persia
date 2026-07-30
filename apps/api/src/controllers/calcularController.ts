@@ -441,6 +441,8 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
         quantidade: a.quantidade,
         unidade: a.unidade,
         auto: a.auto,
+        // Varão cobrado por barra fechada: a tela mostra a medida a cortar.
+        ...(a.medida_real !== undefined ? { medida_real: a.medida_real } : {}),
       };
       if (ehWaveFixo(a.item)) {
         const prod = await resolverProdutoWaveFixo(a.item);

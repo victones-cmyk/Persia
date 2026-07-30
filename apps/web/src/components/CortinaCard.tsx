@@ -253,7 +253,7 @@ export function CortinaCard({
     || item === 'Terminais';
   const isWaveCamada = (c: CamadaState) => c.modelo !== '' && c.modelo !== 'costurado_junto' && normalizarModeloCortina(c.modelo) === 'wave';
 
-  const obterFormulaAcessorio = (item: string) => {
+  const obterFormulaAcessorio = (item: string, medidaReal?: number) => {
     const L = Number(largura) || 0;
     const frente = calc?.camadas[0];
     const consumoFrente = frente?.consumo || 0;
@@ -262,6 +262,10 @@ export function CortinaCard({
     const metodo = frente?.metodo || 'normal';
     
     if (item === 'Trilho' || item === 'Varão' || item === 'Varão suíço' || item.startsWith('Trilho (') || item.startsWith('Varão (')) {
+      // Varão é vendido em passos: cobra arredondado, corta na medida real.
+      if (medidaReal !== undefined) {
+        return `Largura real da cortina: ${formatNum(medidaReal, 2)} m (cortar) — cobrado por barra fechada`;
+      }
       return `Largura real da cortina: ${formatNum(L, 2)} m`;
     }
     if (item === 'Cordão wave') {
@@ -729,7 +733,7 @@ export function CortinaCard({
                 );
               }
               const qtd = qtdDe(a.item, a.auto, a.quantidade);
-              const formulaText = obterFormulaAcessorio(a.item);
+              const formulaText = obterFormulaAcessorio(a.item, a.medida_real);
               
               // Item obrigatório do wave: produto resolvido pelo servidor (sem seletor).
               if (a.auto_produto) {

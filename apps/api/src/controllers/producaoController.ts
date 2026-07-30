@@ -56,7 +56,7 @@ interface CortinaSnapshotProducao {
     barra_postica_acrescimo?: number | null;
     valor_tecido?: number;
   }>;
-  acessorios?: Array<{ item?: string; produto_nome?: string; quantidade?: number; preco?: number; subtotal?: number }>;
+  acessorios?: Array<{ item?: string; produto_nome?: string; quantidade?: number; preco?: number; subtotal?: number; medida_real?: number }>;
   valor_total?: number;
   nome_produto?: string;
 }
@@ -248,10 +248,12 @@ function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
     ].filter(Boolean).join('\n'),
     componentes: [
       ...(c.camadas ?? []).map(componenteTecidoCortina),
+      // A produção corta na MEDIDA REAL; a quantidade cobrada (varão em passos
+      // de venda) só vale para o valor do orçamento.
       ...(c.acessorios ?? []).map((a) => ({
         grupo: 'Acessorio',
         descricao: a.produto_nome || a.item || '-',
-        quantidade: Number(a.quantidade ?? 0),
+        quantidade: Number(a.medida_real ?? a.quantidade ?? 0),
         unidade: 'un',
       })),
     ],

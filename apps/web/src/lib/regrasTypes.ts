@@ -34,6 +34,8 @@ export interface RegrasCalculo {
     aberturas_default: number;
   /** 1 instalação de cortina a cada X m de largura. */
   instalacao_faixa_m: number;
+  /** Varão cobrado em múltiplos de X m (0 = medida exata). */
+  passo_varao_m: number;
     folga_topo: Record<ModeloCortina, number>;
     tem_entretela: Record<ModeloCortina, boolean>;
   };

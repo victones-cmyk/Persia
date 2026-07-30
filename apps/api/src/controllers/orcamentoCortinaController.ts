@@ -159,7 +159,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     if (!(qtd > 0)) throw new AppError(400, 'ACESSORIO_QTD', `Quantidade inválida para "${a.item}".`);
     const subtotal = roundHalfUp(prod.preco * qtd);
     valorTotal = roundHalfUp(valorTotal + subtotal);
-    acessoriosSnap.push({ item: a.item, categoria, produto_id: prod.id, produto_nome: prod.nome, quantidade: qtd, preco: prod.preco, subtotal });
+    acessoriosSnap.push({ item: a.item, categoria, produto_id: prod.id, produto_nome: prod.nome, quantidade: qtd, preco: prod.preco, subtotal, ...(a.medida_real !== undefined ? { medida_real: a.medida_real } : {}) });
   }
 
   // Instalação embutida (Victor 26/06/2026): tipo escolhido por cortina, do grupo

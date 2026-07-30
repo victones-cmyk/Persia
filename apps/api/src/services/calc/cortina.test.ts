@@ -382,3 +382,52 @@ describe('variantes de prega (Americana/Macho/Fêmea)', () => {
     expect(comVariante.camadas[0].metragem).toBe(generica.camadas[0].metragem);
   });
 });
+
+describe('Cortina — varão vendido em passos de 0,5 m', () => {
+  const varao = (r: ResultadoCortinaCompleta, item = 'Varão') => r.acessorios.find((a) => a.item === item)!;
+
+  it('cobra a barra fechada e guarda a medida real a cortar', () => {
+    const r = calcularCortinaMultiCamada({
+      modelo: 'franzido', fixacao: 'varao', largura: 5.4, altura: 2.5,
+      camadas: [{ largura_tecido: 3, franzido: 3 }],
+    });
+    expect(varao(r).quantidade).toBe(5.5);
+    expect(varao(r).medida_real).toBe(5.4);
+  });
+
+  it('largura já múltipla do passo não vira medida_real', () => {
+    const r = calcularCortinaMultiCamada({
+      modelo: 'franzido', fixacao: 'varao', largura: 5.5, altura: 2.5,
+      camadas: [{ largura_tecido: 3, franzido: 3 }],
+    });
+    expect(varao(r).quantidade).toBe(5.5);
+    expect(varao(r).medida_real).toBeUndefined();
+  });
+
+  it('trilho e varão suíço continuam pela medida exata', () => {
+    const trilho = calcularCortinaMultiCamada({
+      modelo: 'franzido', fixacao: 'trilho', largura: 5.4, altura: 2.5,
+      camadas: [{ largura_tecido: 3, franzido: 3 }],
+    });
+    expect(varao(trilho, 'Trilho').quantidade).toBe(5.4);
+    expect(varao(trilho, 'Trilho').medida_real).toBeUndefined();
+
+    const suico = calcularCortinaMultiCamada({
+      modelo: 'franzido', fixacao: 'varao_suico', largura: 5.4, altura: 2.5,
+      camadas: [{ largura_tecido: 3, franzido: 3 }],
+    });
+    expect(varao(suico, 'Varão suíço').quantidade).toBe(5.4);
+  });
+
+  it('duas camadas: os varões saem juntos no topo da lista', () => {
+    const r = calcularCortinaMultiCamada({
+      modelo: 'franzido', fixacao: 'varao', largura: 5.4, altura: 2.5,
+      camadas: [{ largura_tecido: 3, franzido: 3 }, { largura_tecido: 3, franzido: 2 }],
+    });
+    const nomes = r.acessorios.map((a) => a.item);
+    expect(nomes[0]).toBe('Varão (camada 1)');
+    expect(nomes[1]).toBe('Varão (camada 2)');
+    expect(r.acessorios[1].quantidade).toBe(5.5);
+    expect(r.acessorios[1].medida_real).toBe(5.4);
+  });
+});

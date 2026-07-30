@@ -151,9 +151,12 @@ export interface CamadaCalc {
 export interface AcessorioCalc {
   item: string;
   categoria: CategoriaAcessorio | null;
+  /** Quantidade COBRADA (já no passo de venda do varão, quando houver). */
   quantidade: number;
   unidade: 'm' | 'un';
   auto: boolean;
+  /** Medida real a cortar, quando difere da cobrada (varão vendido em passos). */
+  medida_real?: number;
   // Wave (Victor v.4.1): itens obrigatórios com produto resolvido pelo servidor — o
   // vendedor não escolhe; a tela só exibe o produto/preço.
   auto_produto?: boolean;

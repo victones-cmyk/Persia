@@ -74,9 +74,13 @@ export interface EntradaCortina {
 export interface ItemCortina {
   tipo: 'tecido' | 'acessorio';
   item: string;
+  /** Quantidade COBRADA (já no passo de venda, quando houver). */
   quantidade: number;
   unidade: 'm' | 'un';
   auto: boolean; // false = sugerido, mas o vendedor ajusta/escolhe (ex.: suporte)
+  /** Medida real a cortar, quando o item é vendido em passos (varão). Só o valor
+   *  usa `quantidade`; ficha, etiqueta e OS mostram esta medida. */
+  medida_real?: number;
 }
 
 export interface ResultadoCortina {
@@ -210,8 +214,24 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   }
 
   // ---- Varão / trilho (1 por face de varão) ----
-  itens.push({ tipo: 'acessorio', item: nomeVarao(e.fixacao), quantidade: roundHalfUp(e.largura), unidade: 'm', auto: true });
-  if (varaoDuplo) itens.push({ tipo: 'acessorio', item: `${nomeVarao(e.fixacao)} (traseiro)`, quantidade: roundHalfUp(e.largura), unidade: 'm', auto: true });
+  // O VARÃO é vendido em passos (padrão 0,5 m): 5,40 m de cortina cobra 5,50 m.
+  // A medida real segue junto para o corte, a ficha e a OS. Trilho e varão suíço
+  // continuam pela medida exata.
+  const larguraReal = roundHalfUp(e.largura);
+  const passoVarao = getRegras().cortina.passo_varao_m;
+  const larguraVarao = e.fixacao === 'varao' && passoVarao > 0
+    ? arredondaParaMultiplo(e.largura, passoVarao)
+    : larguraReal;
+  const varaoItem = (sufixo = ''): ItemCortina => ({
+    tipo: 'acessorio',
+    item: `${nomeVarao(e.fixacao)}${sufixo}`,
+    quantidade: larguraVarao,
+    unidade: 'm',
+    auto: true,
+    ...(larguraVarao !== larguraReal ? { medida_real: larguraReal } : {}),
+  });
+  itens.push(varaoItem());
+  if (varaoDuplo) itens.push(varaoItem(' (traseiro)'));
 
   // ---- Suporte: ENTRADA MANUAL (Victor) ----
   itens.push({ tipo: 'acessorio', item: varaoDuplo ? 'Suporte duplo' : 'Suporte', quantidade: 0, unidade: 'un', auto: false });
@@ -417,11 +437,15 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
     }
   });
 
+  // Varões/trilhos de todas as camadas ficam juntos no topo: antes o da camada 2
+  // caía no fim da lista, longe do da camada 1.
+  const todos = [...acc.values()];
+  const ehBarraItem = (item: string) => item === nomeBarraBase || item.startsWith(`${nomeBarraBase} (`);
   return {
     modelo: e.modelo,
     fixacao: e.fixacao,
     n_camadas: e.camadas.length,
     camadas,
-    acessorios: [...acc.values()],
+    acessorios: [...todos.filter((i) => ehBarraItem(i.item)), ...todos.filter((i) => !ehBarraItem(i.item))],
   };
 }

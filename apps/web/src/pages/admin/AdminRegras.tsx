@@ -191,6 +191,7 @@ export function AdminRegras() {
           <Num label="Espaçamento da ferragem (m)" hint="Argola/rodízio a cada X m" value={c.espacamento_ferragem_default} step={0.01} ro={ro} onChange={(v) => up((r) => { r.cortina.espacamento_ferragem_default = v; })} />
           <Num label="Aberturas padrão" value={c.aberturas_default} step={1} ro={ro} onChange={(v) => up((r) => { r.cortina.aberturas_default = v; })} />
           <Num label="Faixa por instalação (m)" hint="1 instalação a cada X m de largura" value={c.instalacao_faixa_m} step={0.5} ro={ro} onChange={(v) => up((r) => { r.cortina.instalacao_faixa_m = v; })} />
+          <Num label="Passo de venda do varão (m)" hint="Cobra em múltiplos de X (0 = medida exata)" value={c.passo_varao_m} step={0.1} ro={ro} onChange={(v) => up((r) => { r.cortina.passo_varao_m = v; })} />
         </div>
       </Secao>
 
