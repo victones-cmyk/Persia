@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronDown, faChevronRight, faCopy, faPlus, faSpinner, faTrash } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
+import { BuscaSelect } from './BuscaSelect';
 import { formatBRL, formatNum } from '../lib/formatacao';
 import type { CalculadoraTrilhoEspecial, VarianteCalculadoraTrilho } from '../lib/calcTypes';
 import type { ProdutoExtraSnap } from '../lib/rascunhoLocal';
@@ -406,14 +407,14 @@ export function TrilhosEspeciaisOrcamento({
                   {componentesGrupo(variante).map((comp) => (
                     <div key={comp.id} className="col-span-6 md:col-span-3">
                       <label className="form-label">{comp.descricao}<span className="label-required">*</span></label>
-                      <select
-                        className="input"
+                      <BuscaSelect
+                        options={(produtosPorGrupo[comp.grupo_id!] ?? []).map((p) => ({ id: p.id, nome: p.nome, preco: p.preco_venda }))}
                         value={linha.selecoes_componentes[comp.id] ?? ''}
-                        onChange={(e) => alterar(linha.id, { selecoes_componentes: { ...linha.selecoes_componentes, [comp.id]: e.target.value } })}
-                      >
-                        <option value="">Selecione…</option>
-                        {(produtosPorGrupo[comp.grupo_id!] ?? []).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                      </select>
+                        onChange={(id) => alterar(linha.id, { selecoes_componentes: { ...linha.selecoes_componentes, [comp.id]: id } })}
+                        disabled={!produtosPorGrupo[comp.grupo_id!]}
+                        placeholder={produtosPorGrupo[comp.grupo_id!] ? `Buscar ${comp.descricao.toLowerCase()}…` : 'carregando opções…'}
+                        ariaLabel={`Buscar ${comp.descricao}`}
+                      />
                     </div>
                   ))}
                 </div>
