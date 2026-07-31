@@ -328,7 +328,15 @@ export function OrcamentoNovo() {
   // que a soma bata com o GestãoClick (servidor aplica o mesmo fator em cada produto).
   const rtNum = Math.max(0, Math.min(99, Number(rt) || 0));
   const fatorRtUi = rtNum > 0 ? 1 / (1 - rtNum / 100) : 1;
-  const grossItem = (v: number) => roundHalfUp(v * fatorRtUi);
+  // Desconto da revenda: espelha o cálculo do servidor (RT primeiro, desconto depois,
+  // cada etapa arredondada) só pra a prévia bater com o valor que será salvo/enviado.
+  const descontoNum = ehRevenda ? Math.max(0, Math.min(99, Number(usuario?.desconto_percentual) || 0)) : 0;
+  const fatorDescontoUi = descontoNum > 0 ? 1 - descontoNum / 100 : 1;
+  const comRt = (v: number) => roundHalfUp(v * fatorRtUi);
+  const grossItem = (v: number) => {
+    const v1 = comRt(v);
+    return descontoNum > 0 ? roundHalfUp(v1 * fatorDescontoUi) : v1;
+  };
   const persianaTotalRt = resultado ? roundHalfUp(resultado.itens.reduce((s, it) => s + grossItem(it.resultado.valor_bruto ?? 0), 0)) : 0;
   const cortinaTotalRt = roundHalfUp((cortinaEstado.totais ?? []).reduce((s, t) => s + grossItem(t), 0));
   const trilhoTotalRt = grossItem(trilhoTotal);
@@ -336,6 +344,16 @@ export function OrcamentoNovo() {
   const totalBase = roundHalfUp(persianaTotal + cortinaTotal + trilhoTotal + avulsoTotal);
   const totalGeral = roundHalfUp(persianaTotalRt + cortinaTotalRt + trilhoTotalRt + avulsoTotalRt);
   const rtValor = roundHalfUp(totalGeral - totalBase);
+  // Total só com RT (sem desconto) — usado apenas para mostrar o valor do desconto embutido.
+  const totalComRtSemDesconto = resultado || cortinaEstado.totais?.length || trilhoTotal || avulsoTotal
+    ? roundHalfUp(
+        (resultado ? resultado.itens.reduce((s, it) => s + comRt(it.resultado.valor_bruto ?? 0), 0) : 0) +
+          (cortinaEstado.totais ?? []).reduce((s, t) => s + comRt(t), 0) +
+          comRt(trilhoTotal) +
+          comRt(avulsoTotal),
+      )
+    : 0;
+  const descontoValor = descontoNum > 0 ? roundHalfUp(totalComRtSemDesconto - totalGeral) : 0;
 
   // Persiana (se houver) precisa estar completa; cortina (se houver) idem.
   const persianaOk = !temPersiana || !persianaIncompleto;
@@ -639,6 +657,10 @@ export function OrcamentoNovo() {
               <div className="helper-text mb-3">RT ({rtNum}%): <strong>{formatBRL(rtValor)}</strong> embutido no total</div>
             )}
             {!(rtNum > 0 && algoPreenchido) && <div className="mb-3" />}
+
+            {descontoNum > 0 && algoPreenchido && (
+              <div className="helper-text mb-3">Desconto revenda ({descontoNum}%): <strong>-{formatBRL(descontoValor)}</strong> já aplicado no total</div>
+            )}
 
             <label className="form-label" htmlFor="total-misto">Valor total</label>
             <input id="total-misto" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}
