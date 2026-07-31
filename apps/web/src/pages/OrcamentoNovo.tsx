@@ -343,9 +343,9 @@ export function OrcamentoNovo() {
   const avulsoTotalRt = grossItem(avulsoTotal);
   const totalBase = roundHalfUp(persianaTotal + cortinaTotal + trilhoTotal + avulsoTotal);
   const totalGeral = roundHalfUp(persianaTotalRt + cortinaTotalRt + trilhoTotalRt + avulsoTotalRt);
-  const rtValor = roundHalfUp(totalGeral - totalBase);
-  // Total só com RT (sem desconto) — usado apenas para mostrar o valor do desconto embutido.
-  const totalComRtSemDesconto = resultado || cortinaEstado.totais?.length || trilhoTotal || avulsoTotal
+  // Total só com RT (sem desconto) — usado só pro "RT embutido" não misturar com o
+  // desconto da revenda (que já vem silenciosamente embutido em totalGeral).
+  const totalComRt = resultado || cortinaEstado.totais?.length || trilhoTotal || avulsoTotal
     ? roundHalfUp(
         (resultado ? resultado.itens.reduce((s, it) => s + comRt(it.resultado.valor_bruto ?? 0), 0) : 0) +
           (cortinaEstado.totais ?? []).reduce((s, t) => s + comRt(t), 0) +
@@ -353,7 +353,7 @@ export function OrcamentoNovo() {
           comRt(avulsoTotal),
       )
     : 0;
-  const descontoValor = descontoNum > 0 ? roundHalfUp(totalComRtSemDesconto - totalGeral) : 0;
+  const rtValor = roundHalfUp(totalComRt - totalBase);
 
   // Persiana (se houver) precisa estar completa; cortina (se houver) idem.
   const persianaOk = !temPersiana || !persianaIncompleto;
@@ -657,10 +657,6 @@ export function OrcamentoNovo() {
               <div className="helper-text mb-3">RT ({rtNum}%): <strong>{formatBRL(rtValor)}</strong> embutido no total</div>
             )}
             {!(rtNum > 0 && algoPreenchido) && <div className="mb-3" />}
-
-            {descontoNum > 0 && algoPreenchido && (
-              <div className="helper-text mb-3">Desconto revenda ({descontoNum}%): <strong>-{formatBRL(descontoValor)}</strong> já aplicado no total</div>
-            )}
 
             <label className="form-label" htmlFor="total-misto">Valor total</label>
             <input id="total-misto" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}
