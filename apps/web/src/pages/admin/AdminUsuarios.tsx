@@ -8,7 +8,9 @@ import { api, ApiError } from '../../lib/api';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmModal } from '../../components/ConfirmModal';
 import { CampoSenha } from '../../components/CampoSenha';
+import { ClienteSearch } from '../../components/ClienteSearch';
 import { senhaValida } from '../../lib/validacao';
+import type { ClienteResumo } from '../../lib/calcTypes';
 
 interface Loja {
   id: string;
@@ -22,13 +24,26 @@ interface Usuario {
   id: string;
   nome: string;
   email: string;
-  perfil: 'vendedor' | 'admin';
+  perfil: 'vendedor' | 'admin' | 'revenda';
   loja_id: string | null;
   gc_usuario_id: string | null;
   ativo: boolean;
   senha_provisoria: boolean;
+  gc_cliente_vinculado_id: string | null;
+  gc_cliente_vinculado_nome: string | null;
+  desconto_percentual: number | null;
+  calculadoras_permitidas: string[];
   loja?: Loja | null;
 }
+
+const CALCULADORAS: { valor: string; label: string }[] = [
+  { valor: 'persiana', label: 'Persianas' },
+  { valor: 'cortina', label: 'Cortinas' },
+  { valor: 'trilho', label: 'Trilhos especiais' },
+  { valor: 'avulso', label: 'Produtos avulsos' },
+];
+
+const PERFIL_LABEL: Record<Usuario['perfil'], string> = { admin: 'Administrador', vendedor: 'Vendedor', revenda: 'Revenda' };
 
 export function AdminUsuarios() {
   const { showToast } = useToast();
@@ -140,7 +155,7 @@ export function AdminUsuarios() {
                     )}
                   </td>
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{u.email}</td>
-                  <td style={{ padding: 12 }}><span className="badge badge-secondary">{u.perfil === 'admin' ? 'Administrador' : 'Vendedor'}</span></td>
+                  <td style={{ padding: 12 }}><span className="badge badge-secondary">{PERFIL_LABEL[u.perfil]}</span></td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.loja?.nome ?? '—'}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.gc_usuario_id ? (funcMap[u.gc_usuario_id] ?? `ID ${u.gc_usuario_id}`) : <span className="text-error">—</span>}</td>
                   <td style={{ padding: 12 }} className="text-sm-ui">{u.ativo ? 'Sim' : 'Não'}</td>
@@ -212,10 +227,19 @@ function ModalUsuario({
   const [nome, setNome] = useState(usuario?.nome ?? '');
   const [email, setEmail] = useState(usuario?.email ?? '');
   const [senha, setSenha] = useState('');
-  const [perfil, setPerfil] = useState<'' | 'vendedor' | 'admin'>(usuario?.perfil ?? '');
+  const [perfil, setPerfil] = useState<'' | 'vendedor' | 'admin' | 'revenda'>(usuario?.perfil ?? '');
   const [lojaId, setLojaId] = useState(usuario?.loja_id ?? '');
   const [gcUsuarioId, setGcUsuarioId] = useState(usuario?.gc_usuario_id ?? '');
   const [salvando, setSalvando] = useState(false);
+
+  // Campos exclusivos do perfil revenda.
+  const [clienteRevenda, setClienteRevenda] = useState<ClienteResumo | null>(
+    usuario?.gc_cliente_vinculado_id
+      ? { id: usuario.gc_cliente_vinculado_id, nome: usuario.gc_cliente_vinculado_nome ?? '', tipo_pessoa: '', documento: null }
+      : null,
+  );
+  const [descontoPercentual, setDescontoPercentual] = useState(usuario?.desconto_percentual != null ? String(usuario.desconto_percentual) : '');
+  const [calculadorasPermitidas, setCalculadorasPermitidas] = useState<string[]>(usuario?.calculadoras_permitidas ?? []);
 
   // Seletor de vendedor: lista de funcionários do GestãoClick (carregada da API).
   const [funcionarios, setFuncionarios] = useState<FuncionarioGc[]>([]);
@@ -261,6 +285,14 @@ function ModalUsuario({
         loja_id: lojaId || null,
         gc_usuario_id: gcUsuarioId || null,
         ...(senha ? { senha } : {}),
+        ...(perfil === 'revenda'
+          ? {
+              gc_cliente_vinculado_id: clienteRevenda?.id ?? null,
+              gc_cliente_vinculado_nome: clienteRevenda?.nome ?? null,
+              desconto_percentual: descontoPercentual === '' ? null : Number(descontoPercentual),
+              calculadoras_permitidas: calculadorasPermitidas,
+            }
+          : {}),
       };
       if (novo) await api.post('/admin/usuarios', body);
       else await api.put(`/admin/usuarios/${usuario!.id}`, body);
@@ -294,10 +326,11 @@ function ModalUsuario({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="form-label">Perfil<span className="label-required">*</span></label>
-              <select className="input" value={perfil} required onChange={(e) => setPerfil(e.target.value as '' | 'vendedor' | 'admin')}>
+              <select className="input" value={perfil} required onChange={(e) => setPerfil(e.target.value as '' | 'vendedor' | 'admin' | 'revenda')}>
                 <option value="">Selecione</option>
                 <option value="vendedor">Vendedor</option>
                 <option value="admin">Administrador</option>
+                <option value="revenda">Revenda</option>
               </select>
             </div>
             <div>
@@ -334,6 +367,51 @@ function ModalUsuario({
               </select>
             )}
           </div>
+
+          {perfil === 'revenda' && (
+            <div className="space-y-3 border-t border-neutral-200 pt-3">
+              <div>
+                <label className="form-label">Cliente Gestão Click vinculado<span className="label-required">*</span></label>
+                <ClienteSearch selecionado={clienteRevenda} onSelecionar={setClienteRevenda} />
+                <div className="helper-text">Todo orçamento desta revenda sairá em nome deste cliente.</div>
+              </div>
+              <div>
+                <label className="form-label">Desconto (%)</label>
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={99}
+                  step={1}
+                  placeholder="0"
+                  value={descontoPercentual}
+                  onChange={(e) => setDescontoPercentual(e.target.value)}
+                />
+                <div className="helper-text">Embutido no preço de venda — o orçamento já sai com o desconto aplicado.</div>
+              </div>
+              <div>
+                <label className="form-label">Calculadoras permitidas</label>
+                <div className="flex flex-wrap gap-4 mt-1">
+                  {CALCULADORAS.map((c) => (
+                    <label key={c.valor} className="flex items-center gap-2 text-sm-ui cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={calculadorasPermitidas.includes(c.valor)}
+                        onChange={(e) =>
+                          setCalculadorasPermitidas((prev) =>
+                            e.target.checked ? [...prev, c.valor] : prev.filter((v) => v !== c.valor),
+                          )
+                        }
+                      />
+                      {c.label}
+                    </label>
+                  ))}
+                </div>
+                <div className="helper-text">Nenhuma vem marcada por padrão — libere manualmente o que esta revenda pode orçar.</div>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className="btn btn-default" onClick={onFechar}>Cancelar</button>
             <button type="submit" className="btn btn-success" disabled={salvando}>

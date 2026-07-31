@@ -12,7 +12,9 @@ import { ReceitaPendenteError } from '../services/calc/persianaPreco';
 import { precoPersianaItem, mapasDePrecoComponentes, componentesSnapshot } from '../services/calc/persianaPrecoGc';
 import { componenteInstalacao } from '../services/calc/instalacaoCalc';
 import { valorComRt, componenteRt } from '../services/calc/rtCalc';
+import { valorComDesconto, componenteDesconto } from '../services/calc/descontoCalc';
 import { encontrarCalculadora, exigeLarguraTecido } from '../services/calc/calculadoras';
+import { verificarAcessoCalculadora, clienteGcDaRevenda } from '../lib/permissaoRevenda';
 
 import { indiceInstalacoes } from '../services/gc/instalacao';
 import {
@@ -350,15 +352,22 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
 
   // Tipo POR ITEM (Victor 26/06/2026): `b.tipo` é só fallback p/ rascunhos antigos.
   const tipoFallback = isTipoPersiana(b.tipo) ? (b.tipo as TipoPersiana) : null;
-  const itensEntrada: ItemEntrada[] = Array.isArray(b.itens) ? b.itens : [];
+  verificarAcessoCalculadora(sessao, 'persiana');
+  const itensEntrada: ItemEntrada[] = (Array.isArray(b.itens) ? b.itens : []).map((it: ItemEntrada) =>
+    // Revenda não tem serviço de instalação — ignora qualquer instalacao_id enviado.
+    sessao.perfil === 'revenda' ? { ...it, instalacao_id: null } : it,
+  );
   if (itensEntrada.length === 0) throw new AppError(400, 'SEM_ITENS', 'Adicione ao menos um item ao orçamento.');
   if (!tipoFallback && !itensEntrada.every((it) => isTipoPersiana(it.tipo ?? ''))) {
     throw new AppError(400, 'TIPO_INVALIDO', 'Selecione o produto sob medida de todos os itens.');
   }
 
+  // Revenda: cliente é sempre o vinculado ao usuário (ignora o corpo da requisição).
+  const gcClienteId = sessao.perfil === 'revenda' ? clienteGcDaRevenda(sessao) : b.gc_cliente_id ? String(b.gc_cliente_id) : null;
+
   // apenas_salvar = rascunho local (não envia ao GestãoClick; cliente opcional).
   const apenasSalvar = b.apenas_salvar === true;
-  if (!apenasSalvar && (!b.gc_cliente_id || !b.nome_cliente)) {
+  if (!apenasSalvar && (!gcClienteId || !b.nome_cliente)) {
     throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
   }
 
@@ -397,16 +406,26 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       p.componentes = [...p.componentes, componenteRt(rtPct)];
     }
   }
+  // Desconto da revenda (embutido, análogo ao RT mas reduzindo o valor): fixo por
+  // usuário, salvo no orçamento para o reenvio reproduzir o mesmo % mesmo que o
+  // admin altere o desconto da revenda depois.
+  const descontoPct = sessao.perfil === 'revenda' ? Math.max(0, Math.min(99, Number(sessao.desconto_percentual) || 0)) : 0;
+  if (descontoPct > 0) {
+    for (const p of preparados) {
+      p.valor_final = valorComDesconto(p.valor_final, descontoPct);
+      p.componentes = [...p.componentes, componenteDesconto(descontoPct)];
+    }
+  }
   const lojaIdOrcamento = sessao.perfil === 'admin'
     ? (b.loja_id ?? editarOrc?.loja_id ?? sessao.loja_id)
     : (editarOrc?.loja_id ?? sessao.loja_id);
   const loja = await resolverLoja(lojaIdOrcamento);
   const primeiro = preparados[0];
-  // Instalação e RT já estão embutidos no valor de cada item — sem linha à parte.
+  // Instalação, RT e desconto já estão embutidos no valor de cada item — sem linha à parte.
   const valorTotal = roundHalfUp(preparados.reduce((s, p) => s + p.valor_final, 0));
 
   // Entrada bruta — permite reabrir o rascunho na calculadora (tipo + instalação + RT).
-  const entradaJson = { tipo: primeiro.tipo, itens: itensEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue;
+  const entradaJson = { tipo: primeiro.tipo, itens: itensEntrada, rt_pct: rtPct, desconto_pct: descontoPct } as unknown as Prisma.InputJsonValue;
 
   // Grava: cria novo ou atualiza o rascunho em edição (mesmo registro).
   const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>
@@ -425,7 +444,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     loja_id: loja.id,
     entrada_json: entradaJson,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
-    gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
+    gc_cliente_id: gcClienteId,
     tecido_codigo_gc: primeiro.tecido.id,
     tecido_nome: preparados.length > 1 ? `${primeiro.tecido.nome} (+${preparados.length - 1})` : primeiro.tecido.nome,
     largura_m: primeiro.largura,
@@ -456,7 +475,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   try {
     const envio = await executarEnvioGc({
       itens: preparados.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
-      gc_cliente_id: String(b.gc_cliente_id),
+      gc_cliente_id: gcClienteId!,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
     });
@@ -516,6 +535,7 @@ export async function recalcularPersianasDeEntrada(
   tipoFallback: TipoPersiana | null,
   itens: ItemEntrada[],
   rtPct: number,
+  descontoPct = 0,
 ): Promise<ItemPreparado[]> {
   const tecidos = new Map<string, TecidoGc>();
   for (const it of itens) {
@@ -535,6 +555,13 @@ export async function recalcularPersianasDeEntrada(
       p.componentes = [...p.componentes, componenteRt(pct)];
     }
   }
+  const descPct = Math.max(0, Math.min(99, Number(descontoPct) || 0));
+  if (descPct > 0) {
+    for (const p of preparados) {
+      p.valor_final = valorComDesconto(p.valor_final, descPct);
+      p.componentes = [...p.componentes, componenteDesconto(descPct)];
+    }
+  }
   return preparados;
 }
 
@@ -550,7 +577,7 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
   if (orc.tipo_produto === 'cortina') { await reenviarCortina(orc, sessao, res); return; }
   if (orc.tipo_produto === 'misto') { await reenviarMisto(orc, sessao, res); return; }
 
-  const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; rt_pct?: number } | null;
+  const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; rt_pct?: number; desconto_pct?: number } | null;
   const itensEntrada = Array.isArray(entrada?.itens) ? entrada.itens : [];
   const recalcular = itensEntrada.length > 0;
   const snaps = (orc.itens_json as unknown as ItemSnapshot[] | null) ?? [];
@@ -566,6 +593,7 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
           tipoFallback,
           itensEntrada,
           Number(entrada?.rt_pct) || 0,
+          Number(entrada?.desconto_pct) || 0,
         )
       : null;
 
@@ -836,7 +864,9 @@ export async function atualizarOrcamento(req: Request, res: Response): Promise<v
   }
   const b = req.body ?? {};
   const data: Prisma.OrcamentoUpdateInput = {};
-  if (b.gc_cliente_id !== undefined) data.gc_cliente_id = b.gc_cliente_id ? String(b.gc_cliente_id) : null;
+  // Revenda: cliente é sempre o vinculado ao usuário (ignora o corpo da requisição).
+  if (sessao.perfil === 'revenda') data.gc_cliente_id = clienteGcDaRevenda(sessao);
+  else if (b.gc_cliente_id !== undefined) data.gc_cliente_id = b.gc_cliente_id ? String(b.gc_cliente_id) : null;
   if (b.nome_cliente !== undefined) data.nome_cliente = b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)';
   const atualizado = await prisma.orcamento.update({ where: { id: orc.id }, data });
   res.json({ orcamento: atualizado });

@@ -3,6 +3,7 @@
 
 import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { validarSenha } from '../lib/senha';
 
@@ -11,10 +12,14 @@ function toSessionUser(u: {
   id: string;
   nome: string;
   email: string;
-  perfil: 'vendedor' | 'admin';
+  perfil: 'vendedor' | 'admin' | 'revenda';
   loja_id: string | null;
   gc_usuario_id: string | null;
   senha_provisoria: boolean;
+  gc_cliente_vinculado_id: string | null;
+  gc_cliente_vinculado_nome: string | null;
+  desconto_percentual: Prisma.Decimal | null;
+  calculadoras_permitidas: string[];
 }) {
   return {
     id: u.id,
@@ -24,6 +29,10 @@ function toSessionUser(u: {
     loja_id: u.loja_id,
     gc_usuario_id: u.gc_usuario_id,
     senha_provisoria: u.senha_provisoria,
+    gc_cliente_vinculado_id: u.gc_cliente_vinculado_id,
+    gc_cliente_vinculado_nome: u.gc_cliente_vinculado_nome,
+    desconto_percentual: u.desconto_percentual != null ? Number(u.desconto_percentual) : null,
+    calculadoras_permitidas: u.calculadoras_permitidas,
   };
 }
 

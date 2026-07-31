@@ -18,6 +18,7 @@ import { indicePrecosComponentes } from '../services/gc/componentesPersiana';
 import type { Acionamento, Cor } from '../services/calc/tipos';
 import type { VariantePersiana } from '../services/calc/persianaReceitas.data';
 import { diagnosticarProdutoLocal, sincronizarCatalogoLocal, statusCatalogoLocal } from '../services/gc/catalogoLocal';
+import { SECOES_CALCULADORA } from '../lib/permissaoRevenda';
 
 // ---------------------------------------------------------------------------
 // Versão em produção (só admin) — usado para conferir o auto-deploy do Railway.
@@ -266,8 +267,35 @@ const USUARIO_SELECT = {
   gc_usuario_id: true,
   ativo: true,
   senha_provisoria: true,
+  gc_cliente_vinculado_id: true,
+  gc_cliente_vinculado_nome: true,
+  desconto_percentual: true,
+  calculadoras_permitidas: true,
   loja: { select: { id: true, nome: true } },
 } as const;
+
+const PERFIS_VALIDOS = ['admin', 'vendedor', 'revenda'] as const;
+
+function perfilValido(v: unknown): 'admin' | 'vendedor' | 'revenda' {
+  return (PERFIS_VALIDOS as readonly string[]).includes(String(v)) ? (v as 'admin' | 'vendedor' | 'revenda') : 'vendedor';
+}
+
+/** Valida e normaliza o desconto (%) da revenda: 0–99,99, ou null para limpar. */
+function descontoValido(v: unknown): number | null {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 99.99) {
+    throw new AppError(400, 'DESCONTO_INVALIDO', 'O desconto deve estar entre 0 e 99,99%.');
+  }
+  return n;
+}
+
+/** Valida a lista de calculadoras permitidas da revenda (subconjunto das seções conhecidas). */
+function calculadorasPermitidasValidas(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const validas = new Set<string>(SECOES_CALCULADORA);
+  return v.map((s) => String(s)).filter((s) => validas.has(s));
+}
 
 export async function listarUsuarios(_req: Request, res: Response): Promise<void> {
   const usuarios = await prisma.usuario.findMany({
@@ -314,11 +342,16 @@ export async function criarUsuario(req: Request, res: Response): Promise<void> {
       nome: String(b.nome),
       email: String(b.email).toLowerCase().trim(),
       senha_hash: bcrypt.hashSync(String(b.senha), 10),
-      perfil: b.perfil === 'admin' ? 'admin' : 'vendedor',
+      perfil: perfilValido(b.perfil),
       loja_id: b.loja_id || null,
       gc_usuario_id: b.gc_usuario_id || null,
       // Senha definida pelo admin é provisória — o usuário troca no primeiro acesso.
       senha_provisoria: true,
+      // Campos exclusivos do perfil revenda — sem exigir no cadastro (dá pra vincular depois).
+      gc_cliente_vinculado_id: b.gc_cliente_vinculado_id || null,
+      gc_cliente_vinculado_nome: b.gc_cliente_vinculado_nome || null,
+      desconto_percentual: descontoValido(b.desconto_percentual),
+      calculadoras_permitidas: calculadorasPermitidasValidas(b.calculadoras_permitidas),
     },
     select: USUARIO_SELECT,
   });
@@ -348,10 +381,15 @@ export async function editarUsuario(req: Request, res: Response): Promise<void> 
       data.email = novoLogin;
     }
   }
-  if (b.perfil !== undefined) data.perfil = b.perfil === 'admin' ? 'admin' : 'vendedor';
+  if (b.perfil !== undefined) data.perfil = perfilValido(b.perfil);
   if (b.loja_id !== undefined) data.loja_id = b.loja_id || null;
   if (b.gc_usuario_id !== undefined) data.gc_usuario_id = b.gc_usuario_id || null;
   if (b.ativo !== undefined) data.ativo = Boolean(b.ativo);
+  // Campos exclusivos do perfil revenda — editáveis a qualquer momento.
+  if (b.gc_cliente_vinculado_id !== undefined) data.gc_cliente_vinculado_id = b.gc_cliente_vinculado_id || null;
+  if (b.gc_cliente_vinculado_nome !== undefined) data.gc_cliente_vinculado_nome = b.gc_cliente_vinculado_nome || null;
+  if (b.desconto_percentual !== undefined) data.desconto_percentual = descontoValido(b.desconto_percentual);
+  if (b.calculadoras_permitidas !== undefined) data.calculadoras_permitidas = calculadorasPermitidasValidas(b.calculadoras_permitidas);
   if (b.senha) {
     const erroSenhaEditar = validarSenha(b.senha);
     if (erroSenhaEditar) throw new AppError(400, 'SENHA_FRACA', erroSenhaEditar);

@@ -20,6 +20,8 @@ import {
 } from './orcamentoController';
 import { prepararCortina, recalcularCortinasDeEntrada, type CortinaEntrada, type CortinaPreparada } from './orcamentoCortinaController';
 import { valorComRt, componenteRt } from '../services/calc/rtCalc';
+import { valorComDesconto, componenteDesconto } from '../services/calc/descontoCalc';
+import { verificarAcessoCalculadora, clienteGcDaRevenda } from '../lib/permissaoRevenda';
 import {
   prepararProdutosAvulsos,
   prepararTrilhosEspeciais,
@@ -28,7 +30,15 @@ import {
   type TrilhoEspecialEntrada,
 } from '../services/calc/itensExtras';
 
-interface SessaoUsuario { id: string; perfil: 'vendedor' | 'admin'; gc_usuario_id: string | null; loja_id: string | null }
+interface SessaoUsuario {
+  id: string;
+  perfil: 'vendedor' | 'admin' | 'revenda';
+  gc_usuario_id: string | null;
+  loja_id: string | null;
+  gc_cliente_vinculado_id?: string | null;
+  desconto_percentual?: number | null;
+  calculadoras_permitidas?: string[];
+}
 
 /** Produto (linha) para o envio combinado ao GestãoClick. */
 type LinhaProduto = { gc_produto_id?: string | null; nome_produto: string; descricao_produto?: string; quantidade?: number; valor_final: number; valor_custo: number };
@@ -40,10 +50,19 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const apenasSalvar = b.apenas_salvar === true;
 
   const tipoFallback = isTipoPersiana(b.tipo) ? (b.tipo as TipoPersiana) : null;
-  const itensEntrada: ItemEntrada[] = Array.isArray(b.itens) ? b.itens : [];
-  const cortinasEntrada: CortinaEntrada[] = Array.isArray(b.cortinas) ? b.cortinas : [];
+  const semInstalacao = sessao.perfil === 'revenda'; // revenda não tem serviço de instalação
+  const itensEntrada: ItemEntrada[] = (Array.isArray(b.itens) ? b.itens : []).map((it: ItemEntrada) =>
+    semInstalacao ? { ...it, instalacao_id: null } : it,
+  );
+  const cortinasEntrada: CortinaEntrada[] = (Array.isArray(b.cortinas) ? b.cortinas : []).map((c: CortinaEntrada) =>
+    semInstalacao ? { ...c, instalacao_id: null } : c,
+  );
   const trilhosEntrada: TrilhoEspecialEntrada[] = Array.isArray(b.trilhos_especiais) ? b.trilhos_especiais : [];
   const avulsosEntrada: ProdutoAvulsoEntrada[] = Array.isArray(b.produtos_avulsos) ? b.produtos_avulsos : [];
+  if (itensEntrada.length > 0) verificarAcessoCalculadora(sessao, 'persiana');
+  if (cortinasEntrada.length > 0) verificarAcessoCalculadora(sessao, 'cortina');
+  if (trilhosEntrada.length > 0) verificarAcessoCalculadora(sessao, 'trilho');
+  if (avulsosEntrada.length > 0) verificarAcessoCalculadora(sessao, 'avulso');
   const totalSecoes = [itensEntrada.length, cortinasEntrada.length, trilhosEntrada.length, avulsosEntrada.length].filter((n) => n > 0).length;
   if (totalSecoes === 0) {
     throw new AppError(400, 'MISTO_INVALIDO', 'Adicione ao menos um item ao orçamento.');
@@ -51,7 +70,10 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   if (itensEntrada.length > 0 && !tipoFallback && !itensEntrada.every((it) => isTipoPersiana(it.tipo ?? ''))) {
     throw new AppError(400, 'TIPO_INVALIDO', 'Selecione o produto sob medida de todas as persianas.');
   }
-  if (!apenasSalvar && (!b.gc_cliente_id || !b.nome_cliente)) {
+
+  // Revenda: cliente é sempre o vinculado ao usuário (ignora o corpo da requisição).
+  const gcClienteId = sessao.perfil === 'revenda' ? clienteGcDaRevenda(sessao) : b.gc_cliente_id ? String(b.gc_cliente_id) : null;
+  if (!apenasSalvar && (!gcClienteId || !b.nome_cliente)) {
     throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
   }
 
@@ -108,6 +130,23 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       p.valor_final = p.tipo === 'produto_avulso' ? ajustarTotalParaQuantidade(comRt, p.quantidade) : comRt;
     }
   }
+  // Desconto da revenda (embutido, análogo ao RT mas reduzindo o valor). Fixo por
+  // usuário; vale para tudo que ela orçar (persiana, cortina, trilhos e avulsos).
+  const descontoPct = sessao.perfil === 'revenda' ? Math.max(0, Math.min(99, Number(sessao.desconto_percentual) || 0)) : 0;
+  if (descontoPct > 0) {
+    for (const p of persPrep) {
+      p.valor_final = valorComDesconto(p.valor_final, descontoPct);
+      p.componentes = [...p.componentes, componenteDesconto(descontoPct)];
+    }
+    for (const p of cortPrep) {
+      p.valor_total = valorComDesconto(p.valor_total, descontoPct);
+      (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
+    }
+    for (const p of extrasPrep) {
+      const comDesconto = valorComDesconto(p.valor_final, descontoPct);
+      p.valor_final = p.tipo === 'produto_avulso' ? ajustarTotalParaQuantidade(comDesconto, p.quantidade) : comDesconto;
+    }
+  }
   const valorCortinas = roundHalfUp(cortPrep.reduce((s, p) => s + p.valor_total, 0));
   const persTotal = roundHalfUp(persPrep.reduce((s, p) => s + p.valor_final, 0));
   const extrasTotal = roundHalfUp(extrasPrep.reduce((s, p) => s + p.valor_final, 0));
@@ -127,7 +166,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
     ...extrasPrep.map((p) => ({ gc_produto_id: p.tipo === 'produto_avulso' ? p.produto_id : null, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, quantidade: p.tipo === 'produto_avulso' ? p.quantidade : undefined, valor_final: p.valor_final, valor_custo: p.valor_custo })),
   ];
 
-  const entradaJson = { tipo: persPrep[0]?.tipo ?? null, itens: itensEntrada, cortinas: cortinasEntrada, trilhos_especiais: trilhosEntrada, produtos_avulsos: avulsosEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue;
+  const entradaJson = { tipo: persPrep[0]?.tipo ?? null, itens: itensEntrada, cortinas: cortinasEntrada, trilhos_especiais: trilhosEntrada, produtos_avulsos: avulsosEntrada, rt_pct: rtPct, desconto_pct: descontoPct } as unknown as Prisma.InputJsonValue;
   const primeiro = persPrep[0] ?? null;
   const primeiraCortina = cortPrep[0]?.snapshot as { largura_m?: number; altura_m?: number; nome_produto?: string } | undefined;
   const primeiroExtra = extrasPrep[0] ?? null;
@@ -137,7 +176,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
     loja_id: loja.id,
     entrada_json: entradaJson,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
-    gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
+    gc_cliente_id: gcClienteId,
     tecido_codigo_gc: primeiro?.tecido.id ?? primeiroExtra?.produto_id ?? '',
     tecido_nome: [
       persPrep.length ? `${persPrep.length} persiana(s)` : null,
@@ -181,7 +220,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   try {
     const envio = await executarEnvioGc({
       itens: produtosEnvio,
-      gc_cliente_id: String(b.gc_cliente_id),
+      gc_cliente_id: gcClienteId!,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
     });
@@ -220,7 +259,7 @@ interface MistoItensJson { persiana?: { tipo: string; itens: ItemSnapshot[] }; c
 
 /** Reenvia um orçamento MISTO ao GestãoClick (replay do snapshot salvo). */
 export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
-  const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; cortinas?: CortinaEntrada[]; trilhos_especiais?: TrilhoEspecialEntrada[]; produtos_avulsos?: ProdutoAvulsoEntrada[]; rt_pct?: number } | null;
+  const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; cortinas?: CortinaEntrada[]; trilhos_especiais?: TrilhoEspecialEntrada[]; produtos_avulsos?: ProdutoAvulsoEntrada[]; rt_pct?: number; desconto_pct?: number } | null;
   const itensEntrada = Array.isArray(entrada?.itens) ? entrada.itens : [];
   const cortinasEntrada = Array.isArray(entrada?.cortinas) ? entrada.cortinas : [];
   const trilhosEntrada = Array.isArray(entrada?.trilhos_especiais) ? entrada.trilhos_especiais : [];
@@ -238,12 +277,13 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
 
   // Recalcula a partir da entrada (preferido); garante valor derivado do servidor (RN-10).
   const rtPct = Number(entrada?.rt_pct) || 0;
+  const descontoPct = Number(entrada?.desconto_pct) || 0;
   const tipoFallback = isTipoPersiana(entrada?.tipo ?? '') ? (entrada?.tipo as TipoPersiana) : null;
   const persPrep = itensEntrada.length > 0
-    ? await recalcularPersianasDeEntrada(tipoFallback, itensEntrada, rtPct)
+    ? await recalcularPersianasDeEntrada(tipoFallback, itensEntrada, rtPct, descontoPct)
     : null;
   const cortPrep = cortinasEntrada.length > 0
-    ? await recalcularCortinasDeEntrada(cortinasEntrada, rtPct)
+    ? await recalcularCortinasDeEntrada(cortinasEntrada, rtPct, descontoPct)
     : null;
   const trilhosPrep = trilhosEntrada.length > 0 ? await prepararTrilhosEspeciais(trilhosEntrada) : [];
   const avulsosPrep = avulsosEntrada.length > 0 ? await prepararProdutosAvulsos(avulsosEntrada) : [];
@@ -252,6 +292,12 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
     for (const p of extrasPrep) {
       const comRt = valorComRt(p.valor_final, rtPct);
       p.valor_final = p.tipo === 'produto_avulso' ? ajustarTotalParaQuantidade(comRt, p.quantidade) : comRt;
+    }
+  }
+  if (descontoPct > 0) {
+    for (const p of extrasPrep) {
+      const comDesconto = valorComDesconto(p.valor_final, descontoPct);
+      p.valor_final = p.tipo === 'produto_avulso' ? ajustarTotalParaQuantidade(comDesconto, p.quantidade) : comDesconto;
     }
   }
 

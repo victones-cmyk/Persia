@@ -77,9 +77,18 @@ export function OrcamentoNovo() {
     }
   }, [usuario]);
 
-  const [cliente, setCliente] = useState<ClienteResumo | null>(
-    rascunhoLocal?.cliente ? { id: rascunhoLocal.cliente.id, nome: rascunhoLocal.cliente.nome, tipo_pessoa: '', documento: null } : null,
-  );
+  // Revenda não escolhe cliente: usa sempre o cliente do GestãoClick vinculado ao
+  // seu próprio usuário; só preenche um nome livre (seu controle interno).
+  const ehRevenda = usuario?.perfil === 'revenda';
+  const [cliente, setCliente] = useState<ClienteResumo | null>(() => {
+    if (ehRevenda) {
+      return usuario?.gc_cliente_vinculado_id
+        ? { id: usuario.gc_cliente_vinculado_id, nome: usuario.gc_cliente_vinculado_nome ?? '', tipo_pessoa: '', documento: null }
+        : null;
+    }
+    return rascunhoLocal?.cliente ? { id: rascunhoLocal.cliente.id, nome: rascunhoLocal.cliente.nome, tipo_pessoa: '', documento: null } : null;
+  });
+  const [nomeClienteRevenda, setNomeClienteRevenda] = useState('');
   const [resultado, setResultado] = useState<OrcamentoCalculado | null>(null); // persiana
   const [cortinaEstado, setCortinaEstado] = useState<CortinaOrcamentoEstado>(ESTADO_CORTINA_VAZIO);
   const [trilhoEstado, setTrilhoEstado] = useState<ItensExtrasEstado>(ESTADO_EXTRA_VAZIO);
@@ -340,7 +349,7 @@ export function OrcamentoNovo() {
   const semVendedor = !usuario?.gc_usuario_id;
   const ocupado = enviando || salvando || calculandoOrcamento;
   const podeSalvar = conteudoValido && !ocupado;
-  const podeEnviar = conteudoValido && !gcOffline && !!cliente && !ocupado;
+  const podeEnviar = conteudoValido && !gcOffline && !!cliente && (!ehRevenda || nomeClienteRevenda.trim() !== '') && !ocupado;
 
   function aoEnviado(orc: { status: string }) {
     if (orc.status === 'enviado' || orc.status === 'rascunho') {
@@ -357,7 +366,7 @@ export function OrcamentoNovo() {
       const comum = {
         rt_pct: rtNum,
         ...(usuario?.perfil === 'admin' ? { loja_id: lojaId || undefined } : {}),
-        ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: cliente.nome } : {}),
+        ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: ehRevenda ? nomeClienteRevenda : cliente.nome } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(editarId ? { editar_id: editarId } : {}),
       };
@@ -457,8 +466,28 @@ export function OrcamentoNovo() {
       <div className="card p-4 mb-4">
         <div className={usuario?.perfil === 'admin' ? 'grid grid-cols-1 lg:grid-cols-3 gap-4' : ''}>
           <div className={usuario?.perfil === 'admin' ? 'lg:col-span-2' : ''}>
-            <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar ao GestãoClick)</span></label>
-            <ClienteSearch selecionado={cliente} onSelecionar={onSelecionarCliente} />
+            {ehRevenda ? (
+              <>
+                <label className="form-label">Cliente (Gestão Click)</label>
+                <div className="flex items-center justify-between border border-neutral-300 rounded p-2 mb-3" style={{ background: 'var(--surface-muted, #f5f5f5)' }}>
+                  <div className="text-sm-ui font-semibold text-neutral-800">{cliente?.nome || 'Nenhum cliente vinculado — contate o administrador'}</div>
+                </div>
+                <label className="form-label" htmlFor="nome-cliente-revenda">Nome do cliente <span className="label-optional">(seu controle — não é enviado ao Gestão Click)</span></label>
+                <input
+                  id="nome-cliente-revenda"
+                  className="input"
+                  value={nomeClienteRevenda}
+                  onChange={(e) => { setNomeClienteRevenda(e.target.value); agendarSalvar(); }}
+                  maxLength={150}
+                  placeholder="Ex.: João da esquina"
+                />
+              </>
+            ) : (
+              <>
+                <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar ao GestãoClick)</span></label>
+                <ClienteSearch selecionado={cliente} onSelecionar={onSelecionarCliente} />
+              </>
+            )}
           </div>
           {usuario?.perfil === 'admin' && (
             <div>
@@ -479,22 +508,30 @@ export function OrcamentoNovo() {
       <div className="card p-4 mb-4">
         <div className="form-label mb-2">O que incluir neste orçamento?</div>
         <div className="flex flex-wrap gap-6">
-          <label className="flex items-center gap-2 text-md-ui cursor-pointer">
-            <input type="checkbox" checked={incluiPersiana} onChange={(e) => toggleIncluiPersiana(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
-            <FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas
-          </label>
-          <label className="flex items-center gap-2 text-md-ui cursor-pointer">
-            <input type="checkbox" checked={incluiCortina} onChange={(e) => toggleIncluiCortina(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
-            <FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas
-          </label>
-          <label className="flex items-center gap-2 text-md-ui cursor-pointer">
-            <input type="checkbox" checked={incluiTrilho} onChange={(e) => toggleIncluiTrilho(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
-            <FontAwesomeIcon icon={faGripLines} className="text-neutral-500" /> Trilhos especiais
-          </label>
-          <label className="flex items-center gap-2 text-md-ui cursor-pointer">
-            <input type="checkbox" checked={incluiAvulso} onChange={(e) => toggleIncluiAvulso(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
-            <FontAwesomeIcon icon={faBoxOpen} className="text-neutral-500" /> Produtos avulsos
-          </label>
+          {(!ehRevenda || usuario?.calculadoras_permitidas.includes('persiana')) && (
+            <label className="flex items-center gap-2 text-md-ui cursor-pointer">
+              <input type="checkbox" checked={incluiPersiana} onChange={(e) => toggleIncluiPersiana(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
+              <FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas
+            </label>
+          )}
+          {(!ehRevenda || usuario?.calculadoras_permitidas.includes('cortina')) && (
+            <label className="flex items-center gap-2 text-md-ui cursor-pointer">
+              <input type="checkbox" checked={incluiCortina} onChange={(e) => toggleIncluiCortina(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
+              <FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas
+            </label>
+          )}
+          {(!ehRevenda || usuario?.calculadoras_permitidas.includes('trilho')) && (
+            <label className="flex items-center gap-2 text-md-ui cursor-pointer">
+              <input type="checkbox" checked={incluiTrilho} onChange={(e) => toggleIncluiTrilho(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
+              <FontAwesomeIcon icon={faGripLines} className="text-neutral-500" /> Trilhos especiais
+            </label>
+          )}
+          {(!ehRevenda || usuario?.calculadoras_permitidas.includes('avulso')) && (
+            <label className="flex items-center gap-2 text-md-ui cursor-pointer">
+              <input type="checkbox" checked={incluiAvulso} onChange={(e) => toggleIncluiAvulso(e.target.checked)} style={{ accentColor: 'var(--action-add)' }} />
+              <FontAwesomeIcon icon={faBoxOpen} className="text-neutral-500" /> Produtos avulsos
+            </label>
+          )}
         </div>
       </div>
 
@@ -512,7 +549,7 @@ export function OrcamentoNovo() {
               <section key="persiana">
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
                 {prontoEdicao && (
-                  <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} onCalculandoChange={setPersianaCalculando} />
+                  <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} onCalculandoChange={setPersianaCalculando} permitirInstalacao={!ehRevenda} />
                 )}
               </section>
             );
@@ -532,6 +569,7 @@ export function OrcamentoNovo() {
                     onSnapshot={onSnapCortina}
                     onEnviado={() => {}}
                     onEstado={setCortinaEstado}
+                    permitirInstalacao={!ehRevenda}
                   />
                 )}
               </section>

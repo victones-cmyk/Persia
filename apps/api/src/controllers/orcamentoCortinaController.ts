@@ -14,6 +14,8 @@ import { buscarAcessorioGc, categoriaDoItem, ehWaveFixo, resolverProdutoWaveFixo
 import { indiceInstalacoes } from '../services/gc/instalacao';
 import { quantidadeInstalacaoCortina } from '../services/calc/instalacaoCalc';
 import { valorComRt } from '../services/calc/rtCalc';
+import { valorComDesconto } from '../services/calc/descontoCalc';
+import { verificarAcessoCalculadora, clienteGcDaRevenda } from '../lib/permissaoRevenda';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
@@ -210,9 +212,16 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   const b = req.body ?? {};
   const apenasSalvar = b.apenas_salvar === true;
 
-  const cortinasEntrada: CortinaEntrada[] = Array.isArray(b.cortinas) ? b.cortinas : [];
+  verificarAcessoCalculadora(sessao, 'cortina');
+  const cortinasEntrada: CortinaEntrada[] = (Array.isArray(b.cortinas) ? b.cortinas : []).map((c: CortinaEntrada) =>
+    // Revenda não tem serviço de instalação — ignora qualquer instalacao_id enviado.
+    sessao.perfil === 'revenda' ? { ...c, instalacao_id: null } : c,
+  );
   if (cortinasEntrada.length === 0) throw new AppError(400, 'SEM_ITENS', 'Adicione ao menos uma cortina.');
-  if (!apenasSalvar && (!b.gc_cliente_id || !b.nome_cliente)) {
+
+  // Revenda: cliente é sempre o vinculado ao usuário (ignora o corpo da requisição).
+  const gcClienteId = sessao.perfil === 'revenda' ? clienteGcDaRevenda(sessao) : b.gc_cliente_id ? String(b.gc_cliente_id) : null;
+  if (!apenasSalvar && (!gcClienteId || !b.nome_cliente)) {
     throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Selecione um cliente.');
   }
 
@@ -241,7 +250,16 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
     }
   }
-  // Instalação e RT já estão embutidos no valor de cada cortina.
+  // Desconto da revenda (embutido, análogo ao RT mas reduzindo o valor). Fixo por
+  // usuário; salvo no orçamento para o reenvio reproduzir o mesmo % depois.
+  const descontoPct = sessao.perfil === 'revenda' ? Math.max(0, Math.min(99, Number(sessao.desconto_percentual) || 0)) : 0;
+  if (descontoPct > 0) {
+    for (const p of preparadas) {
+      p.valor_total = valorComDesconto(p.valor_total, descontoPct);
+      (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
+    }
+  }
+  // Instalação, RT e desconto já estão embutidos no valor de cada cortina.
   const valorTotal = roundHalfUp(preparadas.reduce((s, p) => s + p.valor_total, 0));
   const lojaIdOrcamento = sessao.perfil === 'admin'
     ? (b.loja_id ?? editarOrc?.loja_id ?? sessao.loja_id)
@@ -259,9 +277,9 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     tipo_produto: 'cortina' as const,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
     loja_id: loja.id,
-    entrada_json: { cortinas: cortinasEntrada, rt_pct: rtPct } as unknown as Prisma.InputJsonValue,
+    entrada_json: { cortinas: cortinasEntrada, rt_pct: rtPct, desconto_pct: descontoPct } as unknown as Prisma.InputJsonValue,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
-    gc_cliente_id: b.gc_cliente_id ? String(b.gc_cliente_id) : null,
+    gc_cliente_id: gcClienteId,
     tecido_codigo_gc: primeira.tecido_id,
     tecido_nome: preparadas.length > 1 ? `${primeira.tecido_nome} (+${preparadas.length - 1})` : primeira.tecido_nome,
     largura_m: primeira.largura,
@@ -294,7 +312,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     // Instalação embutida no valor de cada cortina (Victor 26/06/2026) — sem serviço.
     // Sem número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
     const orc = await gcCriarOrcamento({
-      cliente_id: String(b.gc_cliente_id),
+      cliente_id: gcClienteId!,
       produtos: linhas,
       servicos: [],
       data: new Date().toISOString().slice(0, 10),
@@ -338,7 +356,7 @@ interface CortinaSnapshot { nome_produto?: string; descricao_produto?: string; v
  * valores do snapshot. Usado no reenvio para garantir que o valor enviado ao
  * GestãoClick venha sempre de recálculo no servidor com preços atuais (RN-10).
  */
-export async function recalcularCortinasDeEntrada(cortinas: CortinaEntrada[], rtPct: number): Promise<CortinaPreparada[]> {
+export async function recalcularCortinasDeEntrada(cortinas: CortinaEntrada[], rtPct: number, descontoPct = 0): Promise<CortinaPreparada[]> {
   const preparadas: CortinaPreparada[] = [];
   for (const c of cortinas) preparadas.push(await prepararCortina(c));
   const pct = Math.max(0, Math.min(99, Number(rtPct) || 0));
@@ -348,12 +366,19 @@ export async function recalcularCortinasDeEntrada(cortinas: CortinaEntrada[], rt
       (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
     }
   }
+  const descPct = Math.max(0, Math.min(99, Number(descontoPct) || 0));
+  if (descPct > 0) {
+    for (const p of preparadas) {
+      p.valor_total = valorComDesconto(p.valor_total, descPct);
+      (p.snapshot as { valor_total?: number }).valor_total = p.valor_total;
+    }
+  }
   return preparadas;
 }
 
 /** Reenvia um rascunho/erro de CORTINA ao GestãoClick (recalcula da entrada; snapshot é fallback legado). */
 export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
-  const entrada = orc.entrada_json as { cortinas?: CortinaEntrada[]; rt_pct?: number } | null;
+  const entrada = orc.entrada_json as { cortinas?: CortinaEntrada[]; rt_pct?: number; desconto_pct?: number } | null;
   const recalcular = Array.isArray(entrada?.cortinas) && entrada!.cortinas!.length > 0;
   const snapCortinas = (orc.itens_json as { cortinas?: CortinaSnapshot[] } | null)?.cortinas ?? [];
   if (!recalcular && snapCortinas.length === 0) throw new AppError(400, 'SEM_ITENS', 'Orçamento de cortina sem itens para enviar.');
@@ -363,7 +388,9 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
   const criados: string[] = [];
   try {
     // Recalcula a partir da entrada (preferido); cai para o snapshot só em registros legados.
-    const preparadas = recalcular ? await recalcularCortinasDeEntrada(entrada!.cortinas!, Number(entrada!.rt_pct) || 0) : null;
+    const preparadas = recalcular
+      ? await recalcularCortinasDeEntrada(entrada!.cortinas!, Number(entrada!.rt_pct) || 0, Number(entrada!.desconto_pct) || 0)
+      : null;
     const fonte = preparadas
       ? preparadas.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_total: p.valor_total, valor_custo: p.valor_custo }))
       : snapCortinas.map((c) => ({ nome_produto: String(c.nome_produto ?? 'Cortina'), descricao_produto: c.descricao_produto ? String(c.descricao_produto) : undefined, valor_total: Number(c.valor_total) || 0, valor_custo: Number(c.valor_custo) || 0 }));

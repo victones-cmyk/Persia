@@ -13,6 +13,7 @@ datasource db {
 enum Perfil {
   vendedor
   admin
+  revenda
 }
 
 enum StatusOrcamento {
@@ -63,6 +64,13 @@ model Usuario {
   ativo            Boolean     @default(true)
   // true → senha definida pelo admin (provisória); usuário deve trocá-la no próximo login.
   senha_provisoria Boolean     @default(false)
+  // Campos exclusivos do perfil revenda: cliente do GestãoClick ao qual o usuário
+  // está atrelado (todo orçamento sai em nome dele), desconto embutido no preço de
+  // venda e quais calculadoras a revenda pode acessar (vazio = nenhuma, por padrão).
+  gc_cliente_vinculado_id   String?  @db.VarChar(50)
+  gc_cliente_vinculado_nome String?  @db.VarChar(150)
+  desconto_percentual       Decimal? @db.Decimal(5, 2)
+  calculadoras_permitidas   String[] @default([])
   criado_em        DateTime    @default(now()) @db.Timestamptz
   atualizado_em    DateTime    @updatedAt @db.Timestamptz
   orcamentos       Orcamento[] @relation("OrcamentosVendedor")

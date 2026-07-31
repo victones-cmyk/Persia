@@ -7,7 +7,7 @@ import { api, ApiError, setUnauthorizedHandler } from '../lib/api';
 import { limparRascunhoLocal } from '../lib/rascunhoLocal';
 import { limparFiltrosOrcamento } from '../lib/filtrosSessao';
 
-export type Perfil = 'vendedor' | 'admin';
+export type Perfil = 'vendedor' | 'admin' | 'revenda';
 
 export interface Usuario {
   id: string;
@@ -17,6 +17,11 @@ export interface Usuario {
   loja_id: string | null;
   gc_usuario_id: string | null;
   senha_provisoria: boolean;
+  // Só relevantes para perfil revenda.
+  gc_cliente_vinculado_id: string | null;
+  gc_cliente_vinculado_nome: string | null;
+  desconto_percentual: number | null;
+  calculadoras_permitidas: string[];
 }
 
 interface AuthContextValue {

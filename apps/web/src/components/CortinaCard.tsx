@@ -100,7 +100,7 @@ function modeloCamadaPayload(modelo: ModeloCortinaOpcao | ''): ModeloCortinaOpca
 
 export function CortinaCard({
   indice, tecidos, opcoes, instalacoes, instalacaoFaixaM, inicial, restauro, onChange, onRemover, podeRemover, onPreenchidoChange, onSnapshot, onDuplicar,
-  onCalculandoChange,
+  onCalculandoChange, permitirInstalacao = true,
 }: {
   indice: number;
   tecidos: TecidoOpcao[];
@@ -117,6 +117,8 @@ export function CortinaCard({
   onSnapshot?: (snap: CortinaCardSnap) => void;
   onDuplicar?: () => void;
   onCalculandoChange?: (calculando: boolean) => void;
+  /** false p/ revenda: sem serviço de instalação — o seletor some. */
+  permitirInstalacao?: boolean;
 }) {
   // Modelo da camada: restauro/inicial por camada; fallback ao modelo único antigo (compat).
   const modeloCamadaInicial = (i: number): ModeloCortinaOpcao | '' =>
@@ -214,7 +216,7 @@ export function CortinaCard({
   // Orçamento salvo sem instalação volta como escolha explícita, para não virar
   // pendência ao reabrir; formulário novo começa vazio (obrigatório).
   const [instalacaoId, setInstalacaoId] = useState<string>(
-    restauro?.instalacaoId ?? (inicial ? (inicial.instalacao_id || SEM_INSTALACAO) : ''),
+    restauro?.instalacaoId ?? (inicial ? (inicial.instalacao_id || SEM_INSTALACAO) : (permitirInstalacao ? '' : SEM_INSTALACAO)),
   );
 
   const [calc, setCalc] = useState<CalcCortinaCompletaResp | null>(null);
@@ -569,21 +571,23 @@ export function CortinaCard({
       </label>
 
       {/* Instalação embutida no preço (Victor 26/06/2026): tipo por cortina */}
-      <div className="mb-3">
-        <label className="form-label">Instalação<span className="label-required">*</span></label>
-        {/* "Sem instalação" é uma escolha explícita (SEM_INSTALACAO), diferente de
-            "ainda não escolhi" (vazio) — senão o campo obrigatório passaria batido. */}
-        <select className="input" value={instalacaoId} onChange={(e) => setInstalacaoId(e.target.value)}>
-          <option value="">Selecione…</option>
-          <option value={SEM_INSTALACAO}>Sem instalação</option>
-          {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
-        </select>
-        {instalacaoId && instalacaoId !== SEM_INSTALACAO && qtdInstalacao > 1 && (
-          <div className="helper-text">
-            {qtdInstalacao} instalações: a largura de {formatNum(Number(largura), 2)} m passa de {formatNum(instalacaoFaixaM, 2)} m por unidade.
-          </div>
-        )}
-      </div>
+      {permitirInstalacao && (
+        <div className="mb-3">
+          <label className="form-label">Instalação<span className="label-required">*</span></label>
+          {/* "Sem instalação" é uma escolha explícita (SEM_INSTALACAO), diferente de
+              "ainda não escolhi" (vazio) — senão o campo obrigatório passaria batido. */}
+          <select className="input" value={instalacaoId} onChange={(e) => setInstalacaoId(e.target.value)}>
+            <option value="">Selecione…</option>
+            <option value={SEM_INSTALACAO}>Sem instalação</option>
+            {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
+          </select>
+          {instalacaoId && instalacaoId !== SEM_INSTALACAO && qtdInstalacao > 1 && (
+            <div className="helper-text">
+              {qtdInstalacao} instalações: a largura de {formatNum(Number(largura), 2)} m passa de {formatNum(instalacaoFaixaM, 2)} m por unidade.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Camadas (cada uma com MODELO + tecido + franzido próprios) */}
       <div className="mb-3">

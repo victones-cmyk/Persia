@@ -151,6 +151,7 @@ export function PersianaForm({
   onDirtyChange,
   onSnapshot,
   onCalculandoChange,
+  permitirInstalacao = true,
 }: {
   onResult: (dados: OrcamentoCalculado | null) => void;
   inicial?: { tipo: TipoPersiana; itens: ItemInput[] };
@@ -158,14 +159,20 @@ export function PersianaForm({
   onDirtyChange?: (sujo: boolean) => void;
   onSnapshot?: (snap: PersianaSnapshot) => void;
   onCalculandoChange?: (calculando: boolean) => void;
+  /** false p/ revenda: sem serviço de instalação — o seletor some e o item conta como "sem instalação". */
+  permitirInstalacao?: boolean;
 }) {
   const tipoFallback: TipoPersiana | '' = (restauro?.tipo as TipoPersiana | '') || inicial?.tipo || '';
+  // Sem instalação (revenda): força a escolha explícita "sem instalação" em todo item,
+  // novo ou restaurado, para o seletor oculto não bloquear a validação de completo.
+  const semInstalacao = (it: ItemForm): ItemForm => (permitirInstalacao ? it : { ...it, instalacao_id: SEM_INSTALACAO });
+  const criarItemVazio = () => semInstalacao(itemVazio());
   const [itens, setItens] = useState<ItemForm[]>(
     restauro && restauro.itens.length > 0
-      ? restauro.itens.map((s) => snapParaForm(s, tipoFallback))
+      ? restauro.itens.map((s) => semInstalacao(snapParaForm(s, tipoFallback)))
       : inicial && inicial.itens.length > 0
-        ? inicial.itens.map((it) => inputParaForm(it, tipoFallback))
-        : [itemVazio()],
+        ? inicial.itens.map((it) => semInstalacao(inputParaForm(it, tipoFallback)))
+        : [criarItemVazio()],
   );
   const [mesmoAmbiente, setMesmoAmbiente] = useState(false);
 
@@ -267,7 +274,7 @@ export function PersianaForm({
   }
 
   function adicionarItem() {
-    setItens((prev) => [...prev, itemVazio()]);
+    setItens((prev) => [...prev, criarItemVazio()]);
   }
   function executarRemover(idx: number) {
     setItens((prev) => prev.filter((_, i) => i !== idx));
@@ -607,15 +614,17 @@ export function PersianaForm({
                   <option value="parede">Parede</option>
                 </select>
               </div>
-              <div>
-                <label className="form-label" htmlFor={`instalacao-persiana-${idx}`}>Instalação<span className="label-required">*</span></label>
-                <select id={`instalacao-persiana-${idx}`} className="input" value={it.instalacao_id}
-                  onChange={(e) => atualizar(idx, { instalacao_id: e.target.value })}>
-                  <option value="">Selecione…</option>
-                  <option value={SEM_INSTALACAO}>Sem instalação</option>
-                  {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
-                </select>
-              </div>
+              {permitirInstalacao && (
+                <div>
+                  <label className="form-label" htmlFor={`instalacao-persiana-${idx}`}>Instalação<span className="label-required">*</span></label>
+                  <select id={`instalacao-persiana-${idx}`} className="input" value={it.instalacao_id}
+                    onChange={(e) => atualizar(idx, { instalacao_id: e.target.value })}>
+                    <option value="">Selecione…</option>
+                    <option value={SEM_INSTALACAO}>Sem instalação</option>
+                    {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* RN-01: erro de largura máxima + chips de alternativos (por item) */}
