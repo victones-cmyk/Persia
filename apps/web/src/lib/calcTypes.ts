@@ -214,6 +214,8 @@ export interface OrcamentoSalvo {
   id: string;
   status: 'rascunho' | 'enviado' | 'erro' | 'cancelado';
   gc_orcamento_id: string | null;
+  gc_pedido_id?: string | null;
+  gc_pedido_codigo?: string | null;
   valor_final: string;
   erro_gc?: string | null;
 }

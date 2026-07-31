@@ -20,6 +20,7 @@ function toSessionUser(u: {
   gc_cliente_vinculado_nome: string | null;
   desconto_percentual: Prisma.Decimal | null;
   calculadoras_permitidas: string[];
+  markup_percentual: Prisma.Decimal | null;
 }) {
   return {
     id: u.id,
@@ -33,6 +34,7 @@ function toSessionUser(u: {
     gc_cliente_vinculado_nome: u.gc_cliente_vinculado_nome,
     desconto_percentual: u.desconto_percentual != null ? Number(u.desconto_percentual) : null,
     calculadoras_permitidas: u.calculadoras_permitidas,
+    markup_percentual: u.markup_percentual != null ? Number(u.markup_percentual) : null,
   };
 }
 
@@ -149,6 +151,45 @@ export async function alterarSenha(req: Request, res: Response): Promise<void> {
       }
       res.json({ usuario: sessionUser });
     });
+  });
+}
+
+/**
+ * Markup próprio da revenda (autoatendimento — diferente do desconto, que é
+ * definido pelo admin). Só o perfil revenda pode usar; atualiza só o próprio usuário.
+ */
+export async function atualizarMarkup(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario;
+  if (!sessao) {
+    res.status(401).json({ error: 'NAO_AUTENTICADO', message: 'Sessão inválida ou expirada.' });
+    return;
+  }
+  if (sessao.perfil !== 'revenda') {
+    res.status(403).json({ error: 'ACESSO_NEGADO', message: 'Markup é exclusivo do perfil revenda.' });
+    return;
+  }
+
+  const { markup_percentual } = req.body ?? {};
+  const valor = markup_percentual === null || markup_percentual === '' ? null : Number(markup_percentual);
+  if (valor !== null && (!Number.isFinite(valor) || valor < 0 || valor > 999.99)) {
+    res.status(400).json({ error: 'MARKUP_INVALIDO', message: 'O markup deve estar entre 0 e 999,99%.' });
+    return;
+  }
+
+  const atualizado = await prisma.usuario.update({
+    where: { id: sessao.id },
+    data: { markup_percentual: valor },
+  });
+
+  const sessionUser = toSessionUser(atualizado);
+  req.session.usuario = sessionUser;
+  req.session.save((err) => {
+    if (err) {
+      console.error('[auth] falha ao salvar sessão após atualizar markup:', err);
+      res.status(500).json({ error: 'ERRO_INTERNO', message: 'Não foi possível salvar o markup.' });
+      return;
+    }
+    res.json({ usuario: sessionUser });
   });
 }
 

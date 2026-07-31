@@ -71,6 +71,9 @@ model Usuario {
   gc_cliente_vinculado_nome String?  @db.VarChar(150)
   desconto_percentual       Decimal? @db.Decimal(5, 2)
   calculadoras_permitidas   String[] @default([])
+  // Markup próprio da revenda (diferente do desconto: quem define e edita é ela
+  // mesma, não o admin) — usado só para mostrar "preço sugerido ao cliente dela".
+  markup_percentual         Decimal? @db.Decimal(5, 2)
   criado_em        DateTime    @default(now()) @db.Timestamptz
   atualizado_em    DateTime    @updatedAt @db.Timestamptz
   orcamentos       Orcamento[] @relation("OrcamentosVendedor")

@@ -22,6 +22,8 @@ export interface Usuario {
   gc_cliente_vinculado_nome: string | null;
   desconto_percentual: number | null;
   calculadoras_permitidas: string[];
+  // Diferente do desconto: a própria revenda define/edita (não o admin).
+  markup_percentual: number | null;
 }
 
 interface AuthContextValue {

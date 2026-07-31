@@ -6,11 +6,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Login } from './pages/Login';
 import { TrocarSenha } from './pages/TrocarSenha';
 import { Layout } from './components/Layout';
-import { ProtectedRoute, AdminRoute, SenhaDefinitivaRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, AdminRoute, RevendaRoute, SenhaDefinitivaRoute } from './components/ProtectedRoute';
 import { OrcamentoNovo } from './pages/OrcamentoNovo';
 import { Orcamentos, Vendas } from './pages/Orcamentos';
 import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
 import { Producao } from './pages/Producao';
+import { Markup } from './pages/Markup';
 import { AdminUsuarios } from './pages/admin/AdminUsuarios';
 import { AdminLog } from './pages/admin/AdminLog';
 import { AdminRegras } from './pages/admin/AdminRegras';
@@ -42,6 +43,10 @@ function App() {
               <Route path="/admin/calculadoras" element={<AdminCalculadoras />} />
               <Route path="/admin/materias-primas" element={<AdminMateriasPrimas />} />
               <Route path="/admin/log-acoes" element={<AdminLog />} />
+            </Route>
+
+            <Route element={<RevendaRoute />}>
+              <Route path="/markup" element={<Markup />} />
             </Route>
           </Route>
         </Route>

@@ -11,7 +11,7 @@ import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { ajustarTotalParaQuantidade, roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
-import { respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
+import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
 import {
@@ -218,11 +218,13 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   }
 
   try {
+    const vendaDireta = sessao.perfil === 'revenda';
     const envio = await executarEnvioGc({
       itens: produtosEnvio,
       gc_cliente_id: gcClienteId!,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
+      vendaDireta,
     });
     const persProdIds = envio.gc_produto_ids.slice(0, persPrep.length);
     const orcamento = await persistir({
@@ -231,11 +233,17 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       gc_produto_id: envio.gc_produto_ids[0] ?? null,
       gc_orcamento_id: envio.gc_orcamento_id,
       gc_codigo: envio.gc_codigo,
+      gc_pedido_id: envio.gc_pedido_id,
+      gc_pedido_codigo: envio.gc_pedido_codigo,
+      ...(envio.gc_pedido_id ? { pedido_confirmado_em: new Date() } : {}),
       itens_json: itensJson(persProdIds),
       payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
       resposta_gc: respostaComProdutosCriados(envio.resposta, envio.gc_produto_ids_criados) as Prisma.InputJsonValue,
     });
-    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_enviado_gc', detalhe: { orcamento_id: orcamento.id, tipo: 'misto', gc_orcamento_id: envio.gc_orcamento_id, persianas: persPrep.length, cortinas: cortPrep.length, trilhos_especiais: trilhosPrep.length, produtos_avulsos: avulsosPrep.length, valor_final: valorTotal } } });
+    if (envio.gc_pedido_id) {
+      await inativarProdutosSinteticosDoOrcamento(prisma, orcamento, sessao.id, 'venda_gerada');
+    }
+    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: vendaDireta ? 'venda_fechada_gc' : 'orcamento_enviado_gc', detalhe: { orcamento_id: orcamento.id, tipo: 'misto', gc_orcamento_id: envio.gc_orcamento_id, gc_pedido_id: envio.gc_pedido_id, persianas: persPrep.length, cortinas: cortPrep.length, trilhos_especiais: trilhosPrep.length, produtos_avulsos: avulsosPrep.length, valor_final: valorTotal } } });
     res.status(201).json({ orcamento });
   } catch (err) {
     const gc = err instanceof GcError ? err : null;
@@ -258,7 +266,7 @@ interface ExtraSnap { produto_id?: string; nome_produto?: string; descricao_prod
 interface MistoItensJson { persiana?: { tipo: string; itens: ItemSnapshot[] }; cortinas?: CortinaSnap[]; trilhos_especiais?: ExtraSnap[]; produtos_avulsos?: ExtraSnap[]; instalacao?: number }
 
 /** Reenvia um orçamento MISTO ao GestãoClick (replay do snapshot salvo). */
-export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
+export async function reenviarMisto(orc: Orcamento, sessao: { id: string; perfil: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
   const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; cortinas?: CortinaEntrada[]; trilhos_especiais?: TrilhoEspecialEntrada[]; produtos_avulsos?: ProdutoAvulsoEntrada[]; rt_pct?: number; desconto_pct?: number } | null;
   const itensEntrada = Array.isArray(entrada?.itens) ? entrada.itens : [];
   const cortinasEntrada = Array.isArray(entrada?.cortinas) ? entrada.cortinas : [];
@@ -320,6 +328,7 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
       gc_cliente_id: orc.gc_cliente_id!,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
+      vendaDireta: sessao.perfil === 'revenda',
     });
     // Quando recalculado, regrava o snapshot e o total a partir do que foi enviado.
     const persProdIds = envio.gc_produto_ids.slice(0, (persPrep ?? []).length);
@@ -336,6 +345,9 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
         gc_produto_id: envio.gc_produto_ids[0] ?? null,
         gc_orcamento_id: envio.gc_orcamento_id,
         gc_codigo: envio.gc_codigo,
+        gc_pedido_id: envio.gc_pedido_id,
+        gc_pedido_codigo: envio.gc_pedido_codigo,
+        ...(envio.gc_pedido_id ? { pedido_confirmado_em: new Date() } : {}),
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
         resposta_gc: respostaComProdutosCriados(envio.resposta, envio.gc_produto_ids_criados) as Prisma.InputJsonValue,
         erro_gc: null,
@@ -343,6 +355,9 @@ export async function reenviarMisto(orc: Orcamento, sessao: { id: string; gc_usu
         ...(novoTotal !== null ? { valor_bruto: novoTotal, valor_final: novoTotal } : {}),
       },
     });
+    if (envio.gc_pedido_id) {
+      await inativarProdutosSinteticosDoOrcamento(prisma, atualizado, sessao.id, 'venda_gerada');
+    }
     await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_reenviado', detalhe: { orcamento_id: orc.id, tipo: 'misto' } } });
     res.json({ orcamento: atualizado });
   } catch (err) {

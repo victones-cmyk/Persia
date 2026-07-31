@@ -1,7 +1,7 @@
 // apps/api/src/routes/auth.ts
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { login, logout, me, alterarSenha } from '../controllers/authController';
+import { login, logout, me, alterarSenha, atualizarMarkup } from '../controllers/authController';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -22,5 +22,6 @@ router.post('/login', loginLimiter, login);
 router.post('/logout', logout);
 router.get('/me', me);
 router.post('/alterar-senha', requireAuth, alterarSenha);
+router.put('/markup', requireAuth, atualizarMarkup);
 
 export default router;

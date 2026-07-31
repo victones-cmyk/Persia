@@ -355,6 +355,11 @@ export function OrcamentoNovo() {
     : 0;
   const rtValor = roundHalfUp(totalComRt - totalBase);
 
+  // Markup próprio da revenda: totalGeral já é o custo dela (com desconto embutido);
+  // o preço sugerido é só uma referência exibida, nunca enviado ao GestãoClick.
+  const markupNum = ehRevenda ? Math.max(0, Number(usuario?.markup_percentual) || 0) : 0;
+  const precoSugerido = markupNum > 0 ? roundHalfUp(totalGeral * (1 + markupNum / 100)) : 0;
+
   // Persiana (se houver) precisa estar completa; cortina (se houver) idem.
   const persianaOk = !temPersiana || !persianaIncompleto;
   const cortinaOk = !temCortina || cortinaCompletas;
@@ -411,7 +416,12 @@ export function OrcamentoNovo() {
         };
       }
       const r = await api.post<{ orcamento: OrcamentoSalvo }>(endpoint, body);
-      showToast('success', apenasSalvar ? 'Orçamento salvo (rascunho)' : `Orçamento #${r.orcamento.gc_orcamento_id} criado no GestãoClick`, cliente?.nome);
+      const mensagemSucesso = apenasSalvar
+        ? 'Orçamento salvo (rascunho)'
+        : ehRevenda
+          ? `Venda #${r.orcamento.gc_pedido_codigo ?? r.orcamento.gc_pedido_id} fechada no GestãoClick`
+          : `Orçamento #${r.orcamento.gc_orcamento_id} criado no GestãoClick`;
+      showToast('success', mensagemSucesso, cliente?.nome);
       aoEnviado(r.orcamento);
     } catch (e) {
       const erro = e instanceof ApiError ? (e.data as { erro?: { codigo?: string; message?: string } } | null)?.erro : null;
@@ -659,9 +669,17 @@ export function OrcamentoNovo() {
             )}
             {!(rtNum > 0 && algoPreenchido) && <div className="mb-3" />}
 
-            <label className="form-label" htmlFor="total-misto">Valor total</label>
+            <label className="form-label" htmlFor="total-misto">{ehRevenda ? 'Seu custo' : 'Valor total'}</label>
             <input id="total-misto" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}
               value={calculandoOrcamento ? 'Calculando...' : formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
+
+            {markupNum > 0 && algoPreenchido && !calculandoOrcamento && (
+              <div className="mb-4">
+                <label className="form-label">Preço sugerido ao seu cliente</label>
+                <input className="input input-mono" style={{ fontSize: 16 }}
+                  value={formatBRL(precoSugerido)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
+              </div>
+            )}
 
             {!algoPreenchido && <div className="alert alert-info mb-3 text-xs-ui"><span>Preencha ao menos um item das seções selecionadas.</span></div>}
             {algoPreenchido && usuario?.perfil === 'admin' && !lojaId && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione a <strong>Loja / Filial</strong> no topo.</span></div>}
@@ -682,7 +700,7 @@ export function OrcamentoNovo() {
                 <FontAwesomeIcon icon={faXmark} /> Cancelar
               </button>
               <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={() => { if (podeEnviar) setEnviarAberto(true); }}>
-                {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> Enviar</>}
+                {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> {ehRevenda ? 'Fechar venda' : 'Enviar'}</>}
               </button>
             </div>
           </div>
@@ -700,9 +718,11 @@ export function OrcamentoNovo() {
       />
       <ConfirmModal
         aberto={enviarAberto}
-        titulo="Enviar ao GestãoClick"
-        mensagem={<>Deseja enviar este orçamento de <strong>{formatBRL(totalGeral)}</strong> para o GestãoClick{cliente ? <> (cliente <strong>{cliente.nome}</strong>)</> : null}?</>}
-        confirmarLabel="Enviar"
+        titulo={ehRevenda ? 'Fechar venda' : 'Enviar ao GestãoClick'}
+        mensagem={ehRevenda
+          ? <>Deseja fechar esta venda de <strong>{formatBRL(totalGeral)}</strong>{cliente ? <> (cliente <strong>{cliente.nome}</strong>)</> : null}? Isso já gera a venda no GestãoClick.</>
+          : <>Deseja enviar este orçamento de <strong>{formatBRL(totalGeral)}</strong> para o GestãoClick{cliente ? <> (cliente <strong>{cliente.nome}</strong>)</> : null}?</>}
+        confirmarLabel={ehRevenda ? 'Fechar venda' : 'Enviar'}
         cancelarLabel="Voltar"
         onConfirmar={() => { setEnviarAberto(false); void doSubmit(false); }}
         onCancelar={() => setEnviarAberto(false)}

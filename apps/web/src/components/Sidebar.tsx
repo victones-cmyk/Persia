@@ -14,6 +14,7 @@ import {
   faSliders,
   faCalculator,
   faDatabase,
+  faPercent,
 } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { useAuth } from '../hooks/useAuth';
@@ -42,6 +43,10 @@ const ITENS_ADMIN: Item[] = [
   { to: '/admin/calculadoras', label: 'Calculadoras', icon: faCalculator },
   { to: '/admin/materias-primas', label: 'Matérias-primas', icon: faDatabase },
   { to: '/admin/log-acoes', label: 'Log de Ações', icon: faClockRotateLeft },
+];
+
+const ITENS_REVENDA: Item[] = [
+  { to: '/markup', label: 'Markup', icon: faPercent },
 ];
 
 
@@ -95,6 +100,7 @@ function Link({ item, onAvisoNaoSalvo }: { item: Item; onAvisoNaoSalvo: () => vo
 export function Sidebar() {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin';
+  const isRevenda = usuario?.perfil === 'revenda';
   const [avisoAberto, setAvisoAberto] = useState(false);
   const aprovacoesPendentes = useAprovacoesPendentes(isAdmin);
 
@@ -124,6 +130,14 @@ export function Sidebar() {
               <Link key={item.to} item={item} onAvisoNaoSalvo={() => setAvisoAberto(true)} />
             ))}
           </div>
+        </div>
+      )}
+
+      {isRevenda && (
+        <div className="flex lg:flex-col min-w-max lg:min-w-0">
+          {ITENS_REVENDA.map((item) => (
+            <Link key={item.to} item={item} onAvisoNaoSalvo={() => setAvisoAberto(true)} />
+          ))}
         </div>
       )}
 

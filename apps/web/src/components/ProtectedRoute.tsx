@@ -29,6 +29,14 @@ export function AdminRoute() {
   return <Outlet />;
 }
 
+export function RevendaRoute() {
+  const { usuario, carregando } = useAuth();
+  if (carregando) return <TelaCarregando />;
+  if (!usuario) return <Navigate to="/login" replace />;
+  if (usuario.perfil !== 'revenda') return <Navigate to="/orcamentos" replace />;
+  return <Outlet />;
+}
+
 /** Força a troca de senha provisória antes de liberar o restante do app. */
 export function SenhaDefinitivaRoute() {
   const { usuario, carregando } = useAuth();

@@ -17,8 +17,9 @@ import { valorComRt } from '../services/calc/rtCalc';
 import { valorComDesconto } from '../services/calc/descontoCalc';
 import { verificarAcessoCalculadora, clienteGcDaRevenda } from '../lib/permissaoRevenda';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
-import { respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
-import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
+import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
+import { criarOrcamento as gcCriarOrcamento, montarPayload, type LinhaProdutoGc, type NovoOrcamentoGc } from '../services/gc/orcamentos';
+import { criarVendaDePayload } from '../services/gc/vendas';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
@@ -310,8 +311,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     }
 
     // Instalação embutida no valor de cada cortina (Victor 26/06/2026) — sem serviço.
-    // Sem número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
-    const orc = await gcCriarOrcamento({
+    const dadosGc: NovoOrcamentoGc = {
       cliente_id: gcClienteId!,
       produtos: linhas,
       servicos: [],
@@ -319,7 +319,18 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
       vendedor_id: sessao.gc_usuario_id,
       loja_id: loja.gc_loja_id,
-    });
+    };
+    // Revenda: sem orçamento no GC — a venda já é fechada direto (Victor 31/07/2026).
+    const vendaDireta = sessao.perfil === 'revenda';
+    let orc: { gc_orcamento_id: string | null; gc_codigo: string | null; gc_pedido_id: string | null; gc_pedido_codigo: string | null; payload: object; resposta: unknown };
+    if (vendaDireta) {
+      const venda = await criarVendaDePayload(montarPayload(dadosGc));
+      orc = { gc_orcamento_id: null, gc_codigo: null, gc_pedido_id: venda.gc_pedido_id, gc_pedido_codigo: venda.gc_pedido_codigo, payload: venda.payload, resposta: venda.resposta };
+    } else {
+      // Sem número: o GestãoClick gera o sequencial e devolve em orcGc.gc_codigo.
+      const orcGc = await gcCriarOrcamento(dadosGc);
+      orc = { gc_orcamento_id: orcGc.gc_orcamento_id, gc_codigo: orcGc.gc_codigo, gc_pedido_id: null, gc_pedido_codigo: null, payload: orcGc.payload, resposta: orcGc.resposta };
+    }
 
     const orcamento = await persistir({
       ...baseDados,
@@ -327,10 +338,16 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       gc_produto_id: usados[0] ?? null,
       gc_orcamento_id: orc.gc_orcamento_id,
       gc_codigo: orc.gc_codigo,
+      gc_pedido_id: orc.gc_pedido_id,
+      gc_pedido_codigo: orc.gc_pedido_codigo,
+      ...(orc.gc_pedido_id ? { pedido_confirmado_em: new Date() } : {}),
       payload_gc_enviado: orc.payload as Prisma.InputJsonValue,
       resposta_gc: respostaComProdutosCriados(orc.resposta, criados) as Prisma.InputJsonValue,
     });
-    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_enviado_gc', detalhe: { orcamento_id: orcamento.id, tipo: 'cortina', gc_orcamento_id: orc.gc_orcamento_id, cortinas: preparadas.length, valor_final: valorTotal } } });
+    if (orc.gc_pedido_id) {
+      await inativarProdutosSinteticosDoOrcamento(prisma, orcamento, sessao.id, 'venda_gerada');
+    }
+    await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: vendaDireta ? 'venda_fechada_gc' : 'orcamento_enviado_gc', detalhe: { orcamento_id: orcamento.id, tipo: 'cortina', gc_orcamento_id: orc.gc_orcamento_id, gc_pedido_id: orc.gc_pedido_id, cortinas: preparadas.length, valor_final: valorTotal } } });
     res.status(201).json({ orcamento });
   } catch (err) {
     // Limpa os produtos já criados no GC (best-effort).
@@ -377,7 +394,7 @@ export async function recalcularCortinasDeEntrada(cortinas: CortinaEntrada[], rt
 }
 
 /** Reenvia um rascunho/erro de CORTINA ao GestãoClick (recalcula da entrada; snapshot é fallback legado). */
-export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
+export async function reenviarCortina(orc: Orcamento, sessao: { id: string; perfil: string; gc_usuario_id: string | null }, res: Response): Promise<void> {
   const entrada = orc.entrada_json as { cortinas?: CortinaEntrada[]; rt_pct?: number; desconto_pct?: number } | null;
   const recalcular = Array.isArray(entrada?.cortinas) && entrada!.cortinas!.length > 0;
   const snapCortinas = (orc.itens_json as { cortinas?: CortinaSnapshot[] } | null)?.cortinas ?? [];
@@ -403,7 +420,7 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
       linhas.push({ gc_produto_id: produto.gc_produto_id, valor_venda: f.valor_total, valor_custo: f.valor_custo });
     }
     // Instalação embutida no valor de cada cortina (Victor 26/06/2026) — sem serviço.
-    const gcOrc = await gcCriarOrcamento({
+    const dadosGc: NovoOrcamentoGc = {
       cliente_id: orc.gc_cliente_id!,
       produtos: linhas,
       servicos: [],
@@ -411,7 +428,17 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
       usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
       vendedor_id: sessao.gc_usuario_id,
       loja_id: loja.gc_loja_id,
-    });
+    };
+    // Revenda: sem orçamento no GC — a venda já é fechada direto (Victor 31/07/2026).
+    const vendaDireta = sessao.perfil === 'revenda';
+    let gcOrc: { gc_orcamento_id: string | null; gc_codigo: string | null; gc_pedido_id: string | null; gc_pedido_codigo: string | null; payload: object; resposta: unknown };
+    if (vendaDireta) {
+      const venda = await criarVendaDePayload(montarPayload(dadosGc));
+      gcOrc = { gc_orcamento_id: null, gc_codigo: null, gc_pedido_id: venda.gc_pedido_id, gc_pedido_codigo: venda.gc_pedido_codigo, payload: venda.payload, resposta: venda.resposta };
+    } else {
+      const orcGc = await gcCriarOrcamento(dadosGc);
+      gcOrc = { gc_orcamento_id: orcGc.gc_orcamento_id, gc_codigo: orcGc.gc_codigo, gc_pedido_id: null, gc_pedido_codigo: null, payload: orcGc.payload, resposta: orcGc.resposta };
+    }
     const novoTotal = preparadas ? roundHalfUp(preparadas.reduce((s, p) => s + p.valor_total, 0)) : null;
     const atualizado = await prisma.orcamento.update({
       where: { id: orc.id },
@@ -420,6 +447,9 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
         gc_produto_id: usados[0] ?? null,
         gc_orcamento_id: gcOrc.gc_orcamento_id,
         gc_codigo: gcOrc.gc_codigo,
+        gc_pedido_id: gcOrc.gc_pedido_id,
+        gc_pedido_codigo: gcOrc.gc_pedido_codigo,
+        ...(gcOrc.gc_pedido_id ? { pedido_confirmado_em: new Date() } : {}),
         payload_gc_enviado: gcOrc.payload as Prisma.InputJsonValue,
         resposta_gc: respostaComProdutosCriados(gcOrc.resposta, criados) as Prisma.InputJsonValue,
         erro_gc: null,
@@ -427,6 +457,9 @@ export async function reenviarCortina(orc: Orcamento, sessao: { id: string; gc_u
         ...(novoTotal !== null ? { valor_bruto: novoTotal, valor_final: novoTotal } : {}),
       },
     });
+    if (gcOrc.gc_pedido_id) {
+      await inativarProdutosSinteticosDoOrcamento(prisma, atualizado, sessao.id, 'venda_gerada');
+    }
     await prisma.logAcao.create({ data: { usuario_id: sessao.id, acao: 'orcamento_reenviado', detalhe: { orcamento_id: orc.id, tipo: 'cortina' } } });
     res.json({ orcamento: atualizado });
   } catch (err) {

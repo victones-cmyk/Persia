@@ -28,7 +28,7 @@ import { descricaoProdutoPersiana, nomeProdutoPersiana } from '../services/calc/
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
-import { criarOrcamento as gcCriarOrcamento, type LinhaProdutoGc } from '../services/gc/orcamentos';
+import { criarOrcamento as gcCriarOrcamento, montarPayload, type LinhaProdutoGc, type NovoOrcamentoGc } from '../services/gc/orcamentos';
 import { criarVendaDePayload } from '../services/gc/vendas';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
@@ -252,7 +252,18 @@ export async function executarEnvioGc(args: {
   gc_cliente_id: string;
   gcVendedorId: string | null;
   gcLojaId: string | null;
-}): Promise<{ gc_orcamento_id: string; gc_codigo: string | null; gc_produto_ids: string[]; gc_produto_ids_criados: string[]; payload: object; resposta: unknown }> {
+  /** true p/ revenda: pula o orçamento no GC — fecha a venda direto (Victor 31/07/2026). */
+  vendaDireta?: boolean;
+}): Promise<{
+  gc_orcamento_id: string | null;
+  gc_codigo: string | null;
+  gc_pedido_id: string | null;
+  gc_pedido_codigo: string | null;
+  gc_produto_ids: string[];
+  gc_produto_ids_criados: string[];
+  payload: object;
+  resposta: unknown;
+}> {
   const usados: string[] = [];
   const criados: string[] = [];
   try {
@@ -283,8 +294,7 @@ export async function executarEnvioGc(args: {
 
     // Instalação (Victor 26/06/2026): NÃO é mais linha de serviço — já está embutida no
     // valor de cada produto (componente). Por isso o envio não tem mais `servicos`.
-    // Não enviamos número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
-    const orc = await gcCriarOrcamento({
+    const dadosGc: NovoOrcamentoGc = {
       cliente_id: args.gc_cliente_id,
       produtos: linhas,
       servicos: [],
@@ -292,11 +302,30 @@ export async function executarEnvioGc(args: {
       usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
       vendedor_id: args.gcVendedorId,
       loja_id: args.gcLojaId,
-    });
+    };
 
+    // Revenda: sem orçamento no GC — a venda já é fechada direto (Victor 31/07/2026).
+    if (args.vendaDireta) {
+      const venda = await criarVendaDePayload(montarPayload(dadosGc));
+      return {
+        gc_orcamento_id: null,
+        gc_codigo: null,
+        gc_pedido_id: venda.gc_pedido_id,
+        gc_pedido_codigo: venda.gc_pedido_codigo,
+        gc_produto_ids: usados,
+        gc_produto_ids_criados: criados,
+        payload: venda.payload,
+        resposta: venda.resposta,
+      };
+    }
+
+    // Não enviamos número: o GestãoClick gera o sequencial e devolve em orc.gc_codigo.
+    const orc = await gcCriarOrcamento(dadosGc);
     return {
       gc_orcamento_id: orc.gc_orcamento_id,
       gc_codigo: orc.gc_codigo,
+      gc_pedido_id: null,
+      gc_pedido_codigo: null,
       gc_produto_ids: usados,
       gc_produto_ids_criados: criados,
       payload: orc.payload,
@@ -473,11 +502,13 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   }
 
   try {
+    const vendaDireta = sessao.perfil === 'revenda';
     const envio = await executarEnvioGc({
       itens: preparados.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
       gc_cliente_id: gcClienteId!,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
+      vendaDireta,
     });
 
     const snapshots = snapshotsDe(preparados, envio.gc_produto_ids);
@@ -487,16 +518,26 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
       gc_produto_id: envio.gc_produto_ids[0] ?? null,
       gc_orcamento_id: envio.gc_orcamento_id,
       gc_codigo: envio.gc_codigo,
+      gc_pedido_id: envio.gc_pedido_id,
+      gc_pedido_codigo: envio.gc_pedido_codigo,
+      ...(envio.gc_pedido_id ? { pedido_confirmado_em: new Date() } : {}),
       itens_json: snapshots as unknown as Prisma.InputJsonValue,
       payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
       resposta_gc: respostaComProdutosCriados(envio.resposta, envio.gc_produto_ids_criados) as Prisma.InputJsonValue,
     });
 
+    // Revenda: a venda já foi fechada — os produtos sintéticos cumpriram o papel,
+    // inativa no GC (best-effort) pra não poluir a busca do PDV (mesmo tratamento
+    // que gerarVendaOrcamento já dá quando a venda é gerada a partir de um orçamento).
+    if (envio.gc_pedido_id) {
+      await inativarProdutosSinteticosDoOrcamento(prisma, orcamento, sessao.id, 'venda_gerada');
+    }
+
     await prisma.logAcao.create({
       data: {
         usuario_id: sessao.id,
-        acao: 'orcamento_enviado_gc',
-        detalhe: { orcamento_id: orcamento.id, gc_orcamento_id: envio.gc_orcamento_id, itens: preparados.length, valor_final: valorBrutoTotal },
+        acao: vendaDireta ? 'venda_fechada_gc' : 'orcamento_enviado_gc',
+        detalhe: { orcamento_id: orcamento.id, gc_orcamento_id: envio.gc_orcamento_id, gc_pedido_id: envio.gc_pedido_id, itens: preparados.length, valor_final: valorBrutoTotal },
       },
     });
     res.status(201).json({ orcamento });
@@ -597,6 +638,7 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
         )
       : null;
 
+    const vendaDireta = sessao.perfil === 'revenda';
     const envio = await executarEnvioGc({
       itens: preparados
         ? preparados.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo }))
@@ -604,6 +646,7 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
       gc_cliente_id: orc.gc_cliente_id,
       gcVendedorId: sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
+      vendaDireta,
     });
 
     const novosSnaps = preparados
@@ -618,6 +661,9 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
         gc_produto_id: envio.gc_produto_ids[0] ?? null,
         gc_orcamento_id: envio.gc_orcamento_id,
         gc_codigo: envio.gc_codigo,
+        gc_pedido_id: envio.gc_pedido_id,
+        gc_pedido_codigo: envio.gc_pedido_codigo,
+        ...(envio.gc_pedido_id ? { pedido_confirmado_em: new Date() } : {}),
         itens_json: novosSnaps as unknown as Prisma.InputJsonValue,
         payload_gc_enviado: envio.payload as Prisma.InputJsonValue,
         resposta_gc: respostaComProdutosCriados(envio.resposta, envio.gc_produto_ids_criados) as Prisma.InputJsonValue,
@@ -625,6 +671,9 @@ export async function reenviarOrcamento(req: Request, res: Response): Promise<vo
         ...(novoTotal !== null ? { valor_bruto: novoTotal, valor_final: novoTotal } : {}),
       },
     });
+    if (envio.gc_pedido_id) {
+      await inativarProdutosSinteticosDoOrcamento(prisma, atualizado, sessao.id, 'venda_gerada');
+    }
     await prisma.logAcao.create({
       data: { usuario_id: sessao.id, acao: 'orcamento_reenviado', detalhe: { orcamento_id: orc.id } },
     });
