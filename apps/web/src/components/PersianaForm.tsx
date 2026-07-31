@@ -152,6 +152,7 @@ export function PersianaForm({
   onSnapshot,
   onCalculandoChange,
   permitirInstalacao = true,
+  descontoPct = 0,
 }: {
   onResult: (dados: OrcamentoCalculado | null) => void;
   inicial?: { tipo: TipoPersiana; itens: ItemInput[] };
@@ -161,7 +162,10 @@ export function PersianaForm({
   onCalculandoChange?: (calculando: boolean) => void;
   /** false p/ revenda: sem serviço de instalação — o seletor some e o item conta como "sem instalação". */
   permitirInstalacao?: boolean;
+  /** % de desconto da revenda (0 p/ vendedor/admin) — só afeta o "Subtotal do item" exibido aqui. */
+  descontoPct?: number;
 }) {
+  const fatorDescontoItem = descontoPct > 0 ? 1 - Math.max(0, Math.min(99, descontoPct)) / 100 : 1;
   const tipoFallback: TipoPersiana | '' = (restauro?.tipo as TipoPersiana | '') || inicial?.tipo || '';
   // Sem instalação (revenda): força a escolha explícita "sem instalação" em todo item,
   // novo ou restaurado, para o seletor oculto não bloquear a validação de completo.
@@ -461,7 +465,7 @@ export function PersianaForm({
               <div className="flex shrink-0 items-center gap-3">
                 {minimizado && resultPorIdx[idx]?.valor_bruto != null && (
                   <span className="font-mono tabular-nums text-xs-ui font-semibold text-neutral-800">
-                    {formatBRL(resultPorIdx[idx].valor_bruto)}
+                    {formatBRL(roundHalfUp(resultPorIdx[idx].valor_bruto * fatorDescontoItem))}
                   </span>
                 )}
                 {minimizado && (
@@ -650,9 +654,10 @@ export function PersianaForm({
               <div className="mt-3 pt-2 border-t border-neutral-200">
                 <div className="flex justify-between items-center">
                   <span className="text-xs-ui text-neutral-500">Subtotal do item</span>
-                  <span className="font-mono font-semibold tabular-nums text-sm-ui">{formatBRL(resultPorIdx[idx].valor_bruto)}</span>
+                  <span className="font-mono font-semibold tabular-nums text-sm-ui">{formatBRL(roundHalfUp(resultPorIdx[idx].valor_bruto * fatorDescontoItem))}</span>
                 </div>
-                {resultPorIdx[idx].itens && resultPorIdx[idx].itens!.length > 0 && (
+                {/* Revenda não vê o detalhamento de componentes (estrutura de custo interna). */}
+                {permitirInstalacao && resultPorIdx[idx].itens && resultPorIdx[idx].itens!.length > 0 && (
                   <details className="mt-1">
                     <summary className="text-2xs-ui text-neutral-500 cursor-pointer select-none hover:text-neutral-700">Ver componentes</summary>
                     <table className="w-full text-2xs-ui mt-1 tabular-nums">

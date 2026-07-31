@@ -567,7 +567,7 @@ export function OrcamentoNovo() {
               <section key="persiana">
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
                 {prontoEdicao && (
-                  <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} onCalculandoChange={setPersianaCalculando} permitirInstalacao={!ehRevenda} />
+                  <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} onCalculandoChange={setPersianaCalculando} permitirInstalacao={!ehRevenda} descontoPct={descontoNum} />
                 )}
               </section>
             );
@@ -588,6 +588,7 @@ export function OrcamentoNovo() {
                     onEnviado={() => {}}
                     onEstado={setCortinaEstado}
                     permitirInstalacao={!ehRevenda}
+                    descontoPct={descontoNum}
                   />
                 )}
               </section>
@@ -620,22 +621,22 @@ export function OrcamentoNovo() {
               <div className="flex justify-between text-xs-ui">
                 <span className="text-neutral-600">Persianas {temPersiana ? `(${persianaItens.length})` : ''}{temPersiana && persianaIncompleto ? <span className="text-warning"> (incompleto)</span> : null}</span>
                 <span className="font-mono tabular-nums text-neutral-800">
-                  {persianaCalculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(persianaTotal)}
+                  {persianaCalculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(ehRevenda ? persianaTotalRt : persianaTotal)}
                 </span>
               </div>
               <div className="flex justify-between text-xs-ui">
                 <span className="text-neutral-600">Cortinas {temCortina ? `(${cortinaEstado.count})` : ''}{temCortina && !cortinaCompletas ? <span className="text-warning"> (incompleto)</span> : null}</span>
                 <span className="font-mono tabular-nums text-neutral-800">
-                  {cortinaEstado.calculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(cortinaTotal)}
+                  {cortinaEstado.calculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(ehRevenda ? cortinaTotalRt : cortinaTotal)}
                 </span>
               </div>
               <div className="flex justify-between text-xs-ui">
                 <span className="text-neutral-600">Trilhos especiais {temTrilho ? `(${trilhoEstado.count})` : ''}{incluiTrilho && !trilhoEstado.completos ? <span className="text-warning"> (incompleto)</span> : null}</span>
-                <span className="font-mono tabular-nums text-neutral-800">{formatBRL(trilhoTotal)}</span>
+                <span className="font-mono tabular-nums text-neutral-800">{formatBRL(ehRevenda ? trilhoTotalRt : trilhoTotal)}</span>
               </div>
               <div className="flex justify-between text-xs-ui">
                 <span className="text-neutral-600">Produtos avulsos {temAvulso ? `(${avulsoEstado.count})` : ''}{incluiAvulso && !avulsoEstado.completos ? <span className="text-warning"> (incompleto)</span> : null}</span>
-                <span className="font-mono tabular-nums text-neutral-800">{formatBRL(avulsoTotal)}</span>
+                <span className="font-mono tabular-nums text-neutral-800">{formatBRL(ehRevenda ? avulsoTotalRt : avulsoTotal)}</span>
               </div>
             </div>
 

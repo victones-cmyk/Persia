@@ -12,7 +12,7 @@ import { getCacheado } from '../lib/dadosCache';
 import { TecidoSearch } from './TecidoSearch';
 import { BuscaSelect } from './BuscaSelect';
 import { MedidaInput } from './MedidaInput';
-import { formatBRL, formatNum } from '../lib/formatacao';
+import { formatBRL, formatNum, roundHalfUp } from '../lib/formatacao';
 import type { TecidoOpcao, TipoInstalacao, CalculadoraCortina } from '../lib/calcTypes';
 import type { CortinaCardSnap } from '../lib/rascunhoLocal';
 import {
@@ -100,7 +100,7 @@ function modeloCamadaPayload(modelo: ModeloCortinaOpcao | ''): ModeloCortinaOpca
 
 export function CortinaCard({
   indice, tecidos, opcoes, instalacoes, instalacaoFaixaM, inicial, restauro, onChange, onRemover, podeRemover, onPreenchidoChange, onSnapshot, onDuplicar,
-  onCalculandoChange, permitirInstalacao = true,
+  onCalculandoChange, permitirInstalacao = true, descontoPct = 0,
 }: {
   indice: number;
   tecidos: TecidoOpcao[];
@@ -119,7 +119,10 @@ export function CortinaCard({
   onCalculandoChange?: (calculando: boolean) => void;
   /** false p/ revenda: sem serviço de instalação — o seletor some. */
   permitirInstalacao?: boolean;
+  /** % de desconto da revenda (0 p/ vendedor/admin) — só afeta o total exibido aqui (minimizado). */
+  descontoPct?: number;
 }) {
+  const fatorDescontoCard = descontoPct > 0 ? 1 - Math.max(0, Math.min(99, descontoPct)) / 100 : 1;
   // Modelo da camada: restauro/inicial por camada; fallback ao modelo único antigo (compat).
   const modeloCamadaInicial = (i: number): ModeloCortinaOpcao | '' =>
     modeloCortinaParaOpcao(
@@ -485,7 +488,7 @@ export function CortinaCard({
         <div className="flex shrink-0 items-center gap-3">
           {minimizado && (
             <span className="font-mono tabular-nums text-xs-ui font-semibold text-neutral-800">
-              {calculando ? 'Calculando...' : formatBRL(resumo.total)}
+              {calculando ? 'Calculando...' : formatBRL(roundHalfUp(resumo.total * fatorDescontoCard))}
             </span>
           )}
           {minimizado && onDuplicar && (

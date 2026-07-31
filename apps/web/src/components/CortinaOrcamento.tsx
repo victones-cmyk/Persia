@@ -34,7 +34,7 @@ export interface CortinaOrcamentoEstado {
 
 export function CortinaOrcamento({
   cliente, gcStatus, gcUsuarioId, inicial, restauro, editarId, onDirtyChange, onSnapshot, onEnviado,
-  embutido = false, onEstado, onCarregar, permitirInstalacao = true,
+  embutido = false, onEstado, onCarregar, permitirInstalacao = true, descontoPct = 0,
 }: {
   cliente: ClienteResumo | null;
   gcStatus: GcStatus;
@@ -50,6 +50,8 @@ export function CortinaOrcamento({
   onCarregar?: (pronto: boolean) => void; // avisa o pai quando tecidos/opções carregaram
   /** false p/ revenda: sem serviço de instalação — o seletor some em cada cortina. */
   permitirInstalacao?: boolean;
+  /** % de desconto da revenda (0 p/ vendedor/admin) — repassado ao badge minimizado do card. */
+  descontoPct?: number;
 }) {
   const { showToast } = useToast();
   const [tecidos, setTecidos] = useState<TecidoOpcao[]>([]);
@@ -216,6 +218,7 @@ export function CortinaOrcamento({
           podeRemover={ids.length > 1}
           onDuplicar={() => duplicarCortina(id, i)}
           permitirInstalacao={permitirInstalacao}
+          descontoPct={descontoPct}
         />
       ))}
       <button type="button" className="btn btn-default w-full" onClick={() => setIds((xs) => [...xs, crypto.randomUUID()])}>
