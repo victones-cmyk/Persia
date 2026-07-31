@@ -696,7 +696,7 @@ export function CortinaCard({
                   </div>
                 )}
                 {cam.costurado_junto && (
-                  <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-2 border-l-2 border-primary flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
+                  <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-1.5 flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
                     <FontAwesomeIcon icon={faCircleInfo} className="text-primary" style={{ fontSize: 10 }} />
                     <span>
                       Costurado junto: calcula somente o tecido, sem acessórios. Quantidade: <strong>{cam.costurado_quantidade === 'proporcao_franzido' ? 'proporção do franzido' : 'mesma quantidade da frente'}</strong>.
@@ -704,7 +704,7 @@ export function CortinaCard({
                   </div>
                 )}
                 {!cam.costurado_junto && cam.metodo === 'emenda' && cam.tiras && (
-                  <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-2 border-l-2 border-primary flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
+                  <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-1.5 flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
                     <FontAwesomeIcon icon={faCircleInfo} className="text-primary" style={{ fontSize: 10 }} />
                     <span>
                       Cálculo de Emenda: <strong>{cam.tiras} faixas</strong> de <strong>{(Number(altura) + cam.barra_consumo).toFixed(2).replace('.', ',')} m</strong> (altura {Number(altura).toFixed(2).replace('.', ',')} m + {cam.barra_consumo.toFixed(2).replace('.', ',')} m folga/barra)
@@ -712,7 +712,7 @@ export function CortinaCard({
                   </div>
                 )}
                 {!cam.costurado_junto && cam.metodo === 'barra_postica' && cam.barra_postica_base !== null && cam.barra_postica_acrescimo !== null && (
-                  <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-2 border-l-2 border-primary flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
+                  <div className="col-span-12 text-neutral-500 text-2xs-ui mt-1 pl-1.5 flex items-center gap-1.5 bg-neutral-100 p-1 rounded-sm">
                     <FontAwesomeIcon icon={faCircleInfo} className="text-primary" style={{ fontSize: 10 }} />
                     <span>
                       Barra postiça: <strong>{formatNum(cam.barra_postica_base, 2)} m</strong> + <strong>{formatNum(cam.barra_postica_acrescimo, 2)} m</strong> = <strong>{formatNum(cam.metragem, 2)} m</strong>
