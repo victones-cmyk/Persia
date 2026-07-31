@@ -745,9 +745,9 @@ export function OrcamentoNovo() {
       />
       <ConfirmModal
         aberto={enviarAberto}
-        titulo={ehRevenda ? 'Fechar venda' : 'Enviar ao GestãoClick'}
+        titulo={ehRevenda ? 'Enviar pedido para a fábrica' : 'Enviar ao GestãoClick'}
         mensagem={ehRevenda
-          ? <>Deseja fechar esta venda de <strong>{formatBRL(totalGeral)}</strong>{cliente ? <> (cliente <strong>{cliente.nome}</strong>)</> : null}? Isso já gera a venda no GestãoClick.</>
+          ? <>Deseja realmente enviar este pedido de <strong>{formatBRL(totalGeral)}</strong>{cliente ? <> (cliente <strong>{cliente.nome}</strong>)</> : null} para a fábrica? Uma vez enviado, o pedido entrará em produção.</>
           : <>Deseja enviar este orçamento de <strong>{formatBRL(totalGeral)}</strong> para o GestãoClick{cliente ? <> (cliente <strong>{cliente.nome}</strong>)</> : null}?</>}
         confirmarLabel={ehRevenda ? 'Fechar venda' : 'Enviar'}
         cancelarLabel="Voltar"
