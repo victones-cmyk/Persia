@@ -459,7 +459,7 @@ export function OrcamentoNovo() {
   }
 
   return (
-    <div>
+    <div className="pb-24 lg:pb-0">
       <h1 className="text-2xl-ui font-bold text-neutral-800 mb-4">{editarId ? 'Editar Orçamento' : 'Novo Orçamento'}</h1>
 
       {editarId && (
@@ -624,7 +624,7 @@ export function OrcamentoNovo() {
 
         {/* Painel unificado */}
         <div className="lg:col-span-1">
-          <div className="card sticky p-4" style={{ top: 'calc(50px + 16px)' }}>
+          <div className="card lg:sticky p-4" style={{ top: 'calc(50px + 16px)' }}>
             <h4 className="text-lg-ui font-medium mb-3">Orçamento</h4>
 
             <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3 mb-3 space-y-1">
@@ -692,7 +692,9 @@ export function OrcamentoNovo() {
             {algoPreenchido && gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong>.</span></div>}
             {algoPreenchido && !gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor.</span></div>}
 
-            <div className="flex gap-2">
+            {/* No mobile os botões vivem na barra fixa no rodapé (abaixo); aqui só do lg pra cima,
+                onde o painel já fica sempre visível ao lado do formulário (sticky). */}
+            <div className="hidden lg:flex gap-2">
               <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={() => setSalvarAberto(true)} title="Salva sem enviar ao GestãoClick">
                 {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
               </button>
@@ -704,6 +706,31 @@ export function OrcamentoNovo() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Barra fixa no rodapé (só mobile/tablet): total + ações sempre alcançáveis,
+          sem precisar rolar até o fim do formulário pra ver o valor ou enviar. */}
+      <div
+        className="lg:hidden fixed left-0 right-0 bottom-0 z-40 bg-surface-card border-t border-neutral-300 p-3"
+        style={{ boxShadow: '0 -4px 6px -1px rgba(0,0,0,0.10), 0 -2px 4px -2px rgba(0,0,0,0.10)', paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+      >
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs-ui text-neutral-600">{ehRevenda ? 'Seu custo' : 'Valor total'}</span>
+          <span className="font-mono tabular-nums font-semibold text-lg-ui" style={{ color: 'var(--color-success)' }}>
+            {calculandoOrcamento ? 'Calculando...' : formatBRL(totalGeral)}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={() => setSalvarAberto(true)} title="Salva sem enviar ao GestãoClick">
+            {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faFloppyDisk} />}
+          </button>
+          <button type="button" className="btn btn-danger" disabled={ocupado} aria-disabled={ocupado} onClick={() => { if (algoPreenchido) setCancelarAberto(true); else doCancelar(); }} title="Descarta o que está preenchido e sai">
+            <FontAwesomeIcon icon={faXmark} />
+          </button>
+          <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={() => { if (podeEnviar) setEnviarAberto(true); }}>
+            {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> {ehRevenda ? 'Fechar venda' : 'Enviar'}</>}
+          </button>
         </div>
       </div>
 

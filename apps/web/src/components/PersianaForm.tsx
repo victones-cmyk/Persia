@@ -494,7 +494,7 @@ export function PersianaForm({
             {minimizado ? null : (
               <>
             {/* Ambiente + Produto Sob Medida */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="form-label" htmlFor={`ambiente-persiana-${idx}`}>Ambiente</label>
                 <input id={`ambiente-persiana-${idx}`} className="input" value={it.ambiente} onChange={(e) => atualizar(idx, { ambiente: e.target.value })} placeholder="Ex.: Sala, Quarto 1…" />
@@ -509,8 +509,8 @@ export function PersianaForm({
             </div>
 
             {/* Linha 1: Coleção (Tecido) · Cor · Acionamento */}
-            <div className={`grid ${vertical ? 'grid-cols-3' : 'grid-cols-4'} gap-3 mb-3`}>
-              <div className="col-span-2">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${vertical ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-3 mb-3`}>
+              <div className="col-span-1 sm:col-span-2">
                 <label className="form-label" htmlFor={`tecido-persiana-${idx}`}>Coleção (Tecido)<span className="label-required">*</span></label>
                 {carregandoTecidos ? (
                   <div className="skeleton" style={{ height: 38 }} />
@@ -566,7 +566,7 @@ export function PersianaForm({
             )}
 
             {/* Linha 2: Largura · Altura · TC · Rolamento · Base */}
-            <div className={`grid ${vertical ? 'grid-cols-3' : 'grid-cols-5'} gap-3 mb-3`}>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${vertical ? 'lg:grid-cols-3' : 'lg:grid-cols-5'} gap-3 mb-3`}>
               <div>
                 <label className="form-label" htmlFor={`largura-persiana-${idx}`}>Largura (m)<span className="label-required">*</span></label>
                 <MedidaInput id={`largura-persiana-${idx}`} className={erros[idx] ? 'input input-error' : 'input'}
@@ -602,7 +602,7 @@ export function PersianaForm({
             </div>
 
             {/* Instalação (embutida no preço) — escolha obrigatória do vendedor */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="form-label" htmlFor={`comando-persiana-${idx}`}>Comando<span className="label-required">*</span></label>
                 <select id={`comando-persiana-${idx}`} className="input" value={it.comando} onChange={(e) => atualizar(idx, { comando: e.target.value })}>

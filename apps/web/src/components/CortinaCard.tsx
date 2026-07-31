@@ -623,8 +623,8 @@ export function CortinaCard({
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-12 gap-2">
-                  <div className="col-span-4">
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                  <div className="col-span-1 sm:col-span-4">
                     <span className="text-2xs-ui text-neutral-500">Tipo de Confecção<span className="label-required">*</span></span>
                     <select
                       className="input"
@@ -641,12 +641,12 @@ export function CortinaCard({
                       {(i === 0 ? MODELOS_CORTINA : MODELOS_CAMADA_SECUNDARIA).map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                     </select>
                   </div>
-                  <div className={isWaveCamada(c) ? 'col-span-8' : 'col-span-5'}>
+                  <div className={`col-span-1 ${isWaveCamada(c) ? 'sm:col-span-8' : 'sm:col-span-5'}`}>
                     <span className="text-2xs-ui text-neutral-500">Tecido<span className="label-required">*</span></span>
                     <TecidoSearch tecidos={tecidos} value={c.tecidoId} onChange={(v) => setCamada(c.id, { tecidoId: v })} placeholder="Buscar tecido…" />
                   </div>
                   {!isWaveCamada(c) && !(c.modelo === 'costurado_junto' && c.costuradoQuantidade === 'mesma_quantidade') && (
-                    <div className="col-span-3">
+                    <div className="col-span-1 sm:col-span-3">
                       <span className="text-2xs-ui text-neutral-500">Franzido</span>
                       <input type="number" className="input" min={1} step={0.1} value={c.franzido} placeholder="" onChange={(e) => setCamada(c.id, { franzido: e.target.value })} />
                     </div>
@@ -684,12 +684,12 @@ export function CortinaCard({
           <div className="text-xs-ui font-bold text-neutral-600 mb-2">Tecido (cálculo)</div>
           <div className="space-y-1">
             {calc.camadas.map((cam, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center text-xs-ui border-b border-neutral-100 py-1 last:border-b-0">
-                <div className="col-span-6 text-neutral-700">{camadas[i]?.nome.trim() || nomePadraoCamada(i)}: {cam.tecido.nome}</div>
-                <div className="col-span-3 font-mono tabular-nums text-right text-neutral-600">
+              <div key={i} className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center text-xs-ui border-b border-neutral-100 py-1 last:border-b-0">
+                <div className="col-span-2 sm:col-span-6 text-neutral-700">{camadas[i]?.nome.trim() || nomePadraoCamada(i)}: {cam.tecido.nome}</div>
+                <div className="col-span-1 sm:col-span-3 font-mono tabular-nums text-right text-neutral-600">
                   {formatNum(cam.metragem, 2)} m{cam.costurado_junto ? ' (costurado junto)' : cam.metodo === 'emenda' ? ' (emenda)' : cam.metodo === 'barra_postica' ? ' (barra postiça)' : ''}
                 </div>
-                <div className="col-span-3 font-mono tabular-nums text-right text-neutral-800">{formatBRL(cam.valor_tecido)}</div>
+                <div className="col-span-1 sm:col-span-3 font-mono tabular-nums text-right text-neutral-800">{formatBRL(cam.valor_tecido)}</div>
                 {cam.bainhas_laterais_acrescimo > 0 && (
                   <div className="col-span-12 text-neutral-600 text-2xs-ui mt-1 bg-neutral-100 border border-neutral-200 rounded-sm px-2 py-1">
                     Bainhas laterais: <strong>+{formatNum(cam.bainhas_laterais_acrescimo, 2)} m</strong> de tecido nesta camada.
@@ -733,9 +733,9 @@ export function CortinaCard({
             {calc.acessorios.map((a) => {
               if (jaPossuiVarao && ehBarra(a.item)) {
                 return (
-                  <div key={a.item} className="grid grid-cols-12 gap-2 items-center text-xs-ui text-neutral-500 py-1 border-b border-neutral-100 last:border-0">
-                    <div className="col-span-5">{a.item}</div>
-                    <div className="col-span-7 text-right italic">Cliente já possui — não incluído</div>
+                  <div key={a.item} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs-ui text-neutral-500 py-1 border-b border-neutral-100 last:border-0">
+                    <div className="col-span-1 sm:col-span-5">{a.item}</div>
+                    <div className="col-span-1 sm:col-span-7 sm:text-right italic">Cliente já possui — não incluído</div>
                   </div>
                 );
               }
@@ -749,11 +749,11 @@ export function CortinaCard({
                 const precoW = a.preco ?? prodW?.preco ?? 0;
                 return (
                   <div key={a.item} className="border-b border-neutral-100 py-1.5 last:border-0">
-                    <div className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-4 text-xs-ui text-neutral-700">{a.item}</div>
-                      <div className="col-span-2 text-xs-ui font-mono tabular-nums text-neutral-600 text-right pr-1">{formatNum(qtd, a.unidade === 'un' ? 0 : 2)} {a.unidade}</div>
-                      <div className="col-span-4 text-xs-ui text-neutral-500 italic truncate" title={nomeW}>{nomeW || 'automático'}</div>
-                      <div className="col-span-2 text-xs-ui font-mono tabular-nums text-right text-neutral-800">{formatBRL(precoW * qtd)}</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
+                      <div className="col-span-2 sm:col-span-4 text-xs-ui text-neutral-700">{a.item}</div>
+                      <div className="col-span-1 sm:col-span-2 text-xs-ui font-mono tabular-nums text-neutral-600 text-right pr-1">{formatNum(qtd, a.unidade === 'un' ? 0 : 2)} {a.unidade}</div>
+                      <div className="col-span-1 sm:col-span-4 text-xs-ui text-neutral-500 italic truncate" title={nomeW}>{nomeW || 'automático'}</div>
+                      <div className="col-span-2 sm:col-span-2 text-xs-ui font-mono tabular-nums text-right text-neutral-800">{formatBRL(precoW * qtd)}</div>
                     </div>
                     {formulaText && (
                       <div className="text-neutral-500 text-3xs-ui pl-4 mt-0.5 border-l border-neutral-200">
@@ -768,20 +768,9 @@ export function CortinaCard({
               const preco = precoSelecionado(a.categoria, sel);
               return (
                 <div key={a.item} className="border-b border-neutral-100 py-1.5 last:border-0">
-                  <div className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-4 text-xs-ui text-neutral-700">{a.item}</div>
-                    <div className="col-span-2">
-                      {a.auto ? (
-                        <div className="text-xs-ui font-mono tabular-nums text-neutral-600 text-right pr-1">
-                          {formatNum(qtd, a.unidade === 'un' ? 0 : 2)} {a.unidade}
-                        </div>
-                      ) : (
-                        <input type="number" className="input" style={{ height: 30, fontSize: 12 }} min={0} step={1}
-                          value={qtdManual[a.item] ?? ''} placeholder="qtd"
-                          onChange={(e) => setQtdManual((m) => ({ ...m, [a.item]: e.target.value }))} />
-                      )}
-                    </div>
-                    <div className="col-span-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-center">
+                    <div className="col-span-2 sm:col-span-4 text-xs-ui text-neutral-700">{a.item}</div>
+                    <div className="col-span-2 sm:col-span-4 order-3 sm:order-none">
                       <BuscaSelect
                         options={opts}
                         value={sel}
@@ -792,7 +781,18 @@ export function CortinaCard({
                         compact
                       />
                     </div>
-                    <div className="col-span-2 text-xs-ui font-mono tabular-nums text-right text-neutral-800">
+                    <div className="col-span-1 sm:col-span-2 order-2 sm:order-none">
+                      {a.auto ? (
+                        <div className="text-xs-ui font-mono tabular-nums text-neutral-600 text-right pr-1">
+                          {formatNum(qtd, a.unidade === 'un' ? 0 : 2)} {a.unidade}
+                        </div>
+                      ) : (
+                        <input type="number" className="input" style={{ height: 30, fontSize: 12 }} min={0} step={1}
+                          value={qtdManual[a.item] ?? ''} placeholder="qtd"
+                          onChange={(e) => setQtdManual((m) => ({ ...m, [a.item]: e.target.value }))} />
+                      )}
+                    </div>
+                    <div className="col-span-1 sm:col-span-2 order-4 sm:order-none text-xs-ui font-mono tabular-nums text-right text-neutral-800">
                       {formatBRL(preco * qtd)}
                     </div>
                   </div>
