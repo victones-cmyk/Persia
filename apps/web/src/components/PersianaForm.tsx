@@ -19,6 +19,7 @@ import {
   ACIONAMENTOS,
   ROLAMENTOS,
   COMANDOS,
+  CANAIS_EMISSOR,
   type TipoPersiana,
   type Cor,
   type Acionamento,
@@ -50,6 +51,10 @@ interface ItemForm {
   comando: string;
   bando_codigo: string;
   bando_nome: string;
+  emissor: string;
+  emissor_codigo: string;
+  emissor_nome: string;
+  canal: string;
   fixacao_instalacao: string;
   instalacao_id: string;
 }
@@ -67,11 +72,12 @@ interface ComponenteOpcao {
 }
 
 function itemVazio(): ItemForm {
-  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', comando: '', bando_codigo: '', bando_nome: '', fixacao_instalacao: '', instalacao_id: '' };
+  return { id: crypto.randomUUID(), ambiente: '', tipo: '', tecido_id: '', cor: '', acionamento: '', largura: '', altura: '', tc: '', tcManual: false, rolamento: '', base: '', comando: '', bando_codigo: '', bando_nome: '', emissor: '', emissor_codigo: '', emissor_nome: '', canal: '', fixacao_instalacao: '', instalacao_id: '' };
 }
 
 const COMANDOS_VERTICAL = ['Lateral', 'Lateral invertido', 'Central', 'Central com junção'] as const;
 const GRUPO_BANDO_VERTICAL = '5969405';
+const GRUPO_EMISSOR_PERSIANA = '6006913';
 const ACIONAMENTOS_POR_VARIANTE: Array<{ receita: keyof CalculadoraPersiana['receitas']; value: Acionamento; label: string }> = [
   { receita: 'com_bando', value: 'com_bando', label: 'Com Bandô' },
   { receita: 'sem_bando', value: 'com_barra', label: 'Sem Bandô' },
@@ -106,6 +112,10 @@ function inputParaForm(it: ItemInput, tipoFallback: TipoPersiana | ''): ItemForm
     comando: it.comando ?? '',
     bando_codigo: it.bando_codigo ?? '',
     bando_nome: it.bando_nome ?? '',
+    emissor: it.emissor === true ? 'sim' : it.emissor === false ? 'nao' : '',
+    emissor_codigo: it.emissor_codigo ?? '',
+    emissor_nome: it.emissor_nome ?? '',
+    canal: it.canal ?? '',
     fixacao_instalacao: it.fixacao_instalacao ?? '',
     // Orçamento salvo SEM instalação volta como escolha explícita: antes o
     // formulário reinseria a instalação sugerida ao editar/duplicar.
@@ -131,6 +141,10 @@ function snapParaForm(s: PersianaItemSnap, tipoFallback: TipoPersiana | ''): Ite
     comando: s.comando ?? '',
     bando_codigo: s.bando_codigo ?? '',
     bando_nome: s.bando_nome ?? '',
+    emissor: s.emissor ?? '',
+    emissor_codigo: s.emissor_codigo ?? '',
+    emissor_nome: s.emissor_nome ?? '',
+    canal: s.canal ?? '',
     fixacao_instalacao: s.fixacao_instalacao ?? '',
     instalacao_id: s.instalacao_id ?? '',
   };
@@ -140,7 +154,9 @@ function formParaSnap(it: ItemForm): PersianaItemSnap {
   return {
     ambiente: it.ambiente, tipo: it.tipo, tecido_id: it.tecido_id, cor: it.cor, acionamento: it.acionamento,
     largura: it.largura, altura: it.altura, tc: it.tc, tcManual: it.tcManual,
-    rolamento: it.rolamento, base: it.base, comando: it.comando, bando_codigo: it.bando_codigo, bando_nome: it.bando_nome, fixacao_instalacao: it.fixacao_instalacao, instalacao_id: it.instalacao_id,
+    rolamento: it.rolamento, base: it.base, comando: it.comando, bando_codigo: it.bando_codigo, bando_nome: it.bando_nome,
+    emissor: it.emissor, emissor_codigo: it.emissor_codigo, emissor_nome: it.emissor_nome, canal: it.canal,
+    fixacao_instalacao: it.fixacao_instalacao, instalacao_id: it.instalacao_id,
   };
 }
 
@@ -189,6 +205,7 @@ export function PersianaForm({
   // Tipos de instalação (grupo INSTALAÇÃO do GestãoClick).
   const [instalacoes, setInstalacoes] = useState<TipoInstalacao[]>([]);
   const [bandosVertical, setBandosVertical] = useState<ComponenteOpcao[]>([]);
+  const [emissores, setEmissores] = useState<ComponenteOpcao[]>([]);
 
   const [calculando, setCalculando] = useState(false);
   const [erros, setErros] = useState<Record<number, ItemErro>>({});
@@ -227,6 +244,9 @@ export function PersianaForm({
     getCacheado<{ componentes: ComponenteOpcao[] }>(`componentes:${GRUPO_BANDO_VERTICAL}`, `/calcular/componentes?grupo_id=${GRUPO_BANDO_VERTICAL}`)
       .then((r) => setBandosVertical(r.componentes.filter((c) => c.codigo_interno)))
       .catch(() => setBandosVertical([]));
+    getCacheado<{ componentes: ComponenteOpcao[] }>(`componentes:${GRUPO_EMISSOR_PERSIANA}`, `/calcular/componentes?grupo_id=${GRUPO_EMISSOR_PERSIANA}`)
+      .then((r) => setEmissores(r.componentes.filter((c) => c.codigo_interno)))
+      .catch(() => setEmissores([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -264,6 +284,12 @@ export function PersianaForm({
     if (ac !== 'com_bando') {
       patch.bando_codigo = '';
       patch.bando_nome = '';
+    }
+    if (ac !== 'motorizado_com_bando' && ac !== 'motorizado_sem_bando') {
+      patch.emissor = '';
+      patch.emissor_codigo = '';
+      patch.emissor_nome = '';
+      patch.canal = '';
     }
     // Sugere a instalação pelo acionamento, a menos que o vendedor já tenha escolhido manualmente.
     atualizar(idx, patch);
@@ -325,6 +351,16 @@ export function PersianaForm({
     return assinatura.includes('vertical');
   }
 
+  function ehMotorizado(ac: string): boolean {
+    return ac === 'motorizado_com_bando' || ac === 'motorizado_sem_bando';
+  }
+
+  /** Emissor/Tipo de emissor/Canal: só para calculadoras marcadas no Admin (rolô/double
+   * vision/tela solar motorizados) — ver `suporta_emissor` em CalculadoraPersiana. */
+  function suportaEmissor(it: ItemForm): boolean {
+    return Boolean(calculadoraDoItem(it)?.suporta_emissor) && ehMotorizado(it.acionamento);
+  }
+
   const itemValido = (it: ItemForm) =>
     it.tipo !== ''
     && it.tecido_id !== ''
@@ -332,6 +368,7 @@ export function PersianaForm({
     && it.acionamento !== ''
     && opcoesAcionamentoDaCalculadora(calculadoraDoItem(it)).some((op) => op.value === it.acionamento)
     && (!ehVertical(it) || it.acionamento !== 'com_bando' || it.bando_codigo !== '')
+    && (!suportaEmissor(it) || (it.emissor !== '' && (it.emissor !== 'sim' || it.emissor_codigo !== '') && it.canal !== ''))
     && Number(it.largura) > 0
     && Number(it.altura) > 0
     // Escolhas de configuração/instalação: obrigatórias, e cobradas só quando o
@@ -366,6 +403,10 @@ export function PersianaForm({
       comando: it.comando || null,
       bando_codigo: ehVertical(it) && it.acionamento === 'com_bando' ? it.bando_codigo || null : null,
       bando_nome: ehVertical(it) && it.acionamento === 'com_bando' ? it.bando_nome || null : null,
+      emissor: suportaEmissor(it) ? it.emissor === 'sim' : null,
+      emissor_codigo: suportaEmissor(it) && it.emissor === 'sim' ? it.emissor_codigo || null : null,
+      emissor_nome: suportaEmissor(it) && it.emissor === 'sim' ? it.emissor_nome || null : null,
+      canal: suportaEmissor(it) ? it.canal || null : null,
       fixacao_instalacao: it.fixacao_instalacao === 'teto' || it.fixacao_instalacao === 'parede' ? it.fixacao_instalacao : null,
       instalacao_id: it.instalacao_id && it.instalacao_id !== SEM_INSTALACAO ? it.instalacao_id : null,
     };
@@ -374,7 +415,7 @@ export function PersianaForm({
   // Cálculo automático (tempo real): recalcula com debounce a cada mudança. Calcula
   // só os itens completos; itens incompletos não somem o resultado, mas bloqueiam o envio.
   const calcSig = JSON.stringify({
-    itens: itens.map((it) => ({ tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, r: it.rolamento, b: it.base, co: it.comando, fx: it.fixacao_instalacao, in: it.instalacao_id })),
+    itens: itens.map((it) => ({ tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, r: it.rolamento, b: it.base, co: it.comando, bc: it.bando_codigo, em: it.emissor, ec: it.emissor_codigo, ca: it.canal, fx: it.fixacao_instalacao, in: it.instalacao_id })),
   });
   const seqCalc = useRef(0);
   useEffect(() => {
@@ -560,6 +601,53 @@ export function PersianaForm({
                     {bandosVertical.map((b) => (
                       <option key={`${b.id}-${b.codigo_interno}`} value={b.codigo_interno}>{b.nome} — {formatBRL(b.preco_venda)}</option>
                     ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {suportaEmissor(it) && (
+              <div className={`grid grid-cols-1 sm:grid-cols-2 ${it.emissor === 'sim' ? 'lg:grid-cols-3' : ''} gap-3 mb-3`}>
+                <div>
+                  <label className="form-label" htmlFor={`emissor-persiana-${idx}`}>Emissor<span className="label-required">*</span></label>
+                  <select
+                    id={`emissor-persiana-${idx}`}
+                    className="input"
+                    value={it.emissor}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      atualizar(idx, v === 'sim' ? { emissor: v } : { emissor: v, emissor_codigo: '', emissor_nome: '' });
+                    }}
+                  >
+                    <option value="">Selecione…</option>
+                    <option value="sim">Sim</option>
+                    <option value="nao">Não</option>
+                  </select>
+                </div>
+                {it.emissor === 'sim' && (
+                  <div>
+                    <label className="form-label" htmlFor={`tipo-emissor-persiana-${idx}`}>Tipo de emissor<span className="label-required">*</span></label>
+                    <select
+                      id={`tipo-emissor-persiana-${idx}`}
+                      className="input"
+                      value={it.emissor_codigo}
+                      onChange={(e) => {
+                        const escolhido = emissores.find((em) => em.codigo_interno === e.target.value);
+                        atualizar(idx, { emissor_codigo: escolhido?.codigo_interno ?? '', emissor_nome: escolhido?.nome ?? '' });
+                      }}
+                    >
+                      <option value="">Selecione o tipo de emissor…</option>
+                      {emissores.map((em) => (
+                        <option key={`${em.id}-${em.codigo_interno}`} value={em.codigo_interno}>{em.nome} — {formatBRL(em.preco_venda)}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="form-label" htmlFor={`canal-persiana-${idx}`}>Canal<span className="label-required">*</span></label>
+                  <select id={`canal-persiana-${idx}`} className="input" value={it.canal} onChange={(e) => atualizar(idx, { canal: e.target.value })}>
+                    <option value="">Selecione…</option>
+                    {CANAIS_EMISSOR.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>

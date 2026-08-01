@@ -8,6 +8,11 @@
 import { listarProdutos, listarProdutosRemoto, type GcProduto } from './catalogos';
 
 const GRUPOS_COMPONENTES = ['190128', '76945', '5969405']; // ACESSÓRIOS DE PERSIANAS + ACESSÓRIOS + BANDÔ DE VERTICAL
+
+/** Grupo EMISSOR do GestãoClick (subgrupo de ACESSÓRIOS DE PERSIANAS/190128, já coberto
+ * acima) — vendedor escolhe o produto no item motorizado (rolô/double vision/tela
+ * solar) quando "Emissor: Sim" (Victor 01/08/2026). */
+export const GRUPO_EMISSOR_PERSIANA = '6006913';
 const VAREJO_TIPO_ID = '10969';
 const TTL_MS = 5 * 60 * 1000; // 5 min — preço de componente muda raramente
 

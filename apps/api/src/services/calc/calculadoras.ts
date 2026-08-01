@@ -31,6 +31,10 @@ export interface CalculadoraPersiana {
   tecido_grupo_ids?: string[];
   /** Quando falso, permite tecidos/produtos do GC sem o campo LARGURA cadastrado. */
   largura_tecido_obrigatoria?: boolean;
+  /** Mostra os campos Emissor/Tipo de emissor/Canal no item quando motorizado (Victor
+   * 01/08/2026). O vendedor escolhe o produto entre os itens ativos do grupo EMISSOR
+   * (6006913) do GestãoClick — ver GRUPO_EMISSOR_PERSIANA em gc/componentesPersiana.ts. */
+  suporta_emissor?: boolean;
   margem: number;
   dobrar_altura: boolean;
   base_venda: 'dimensao' | 'largura';
@@ -60,6 +64,7 @@ export const CALCULADORAS_DEFAULT: CalculadoraPersiana[] = [
     base_venda: 'dimensao',
     fator_venda: 1.0,
     mao_de_obra: 'MÃO DE OBRA PERSIANA',
+    suporta_emissor: true,
     receitas: {
       com_bando: RECEITAS_PERSIANA.rolo_bk_translucido?.com_bando,
       sem_bando: RECEITAS_PERSIANA.rolo_bk_translucido?.sem_bando,
@@ -78,6 +83,7 @@ export const CALCULADORAS_DEFAULT: CalculadoraPersiana[] = [
     base_venda: 'largura',
     fator_venda: 1.3,
     mao_de_obra: 'MÃO DE OBRA PERSIANA',
+    suporta_emissor: true,
     receitas: {
       com_bando: RECEITAS_PERSIANA.tela_solar?.com_bando,
       sem_bando: RECEITAS_PERSIANA.tela_solar?.sem_bando,
@@ -96,6 +102,7 @@ export const CALCULADORAS_DEFAULT: CalculadoraPersiana[] = [
     base_venda: 'dimensao',
     fator_venda: 1.0,
     mao_de_obra: 'MÃO DE OBRA PERSIANA ROMANA',
+    suporta_emissor: true,
     receitas: {
       com_bando: RECEITAS_PERSIANA.rolo_bk_translucido?.com_bando,
       sem_bando: RECEITAS_PERSIANA.rolo_bk_translucido?.sem_bando,
@@ -114,6 +121,7 @@ export const CALCULADORAS_DEFAULT: CalculadoraPersiana[] = [
     base_venda: 'dimensao',
     fator_venda: 1.0,
     mao_de_obra: 'MÃO DE OBRA PERSIANA',
+    suporta_emissor: true,
     receitas: {
       com_bando: RECEITAS_PERSIANA.double_vision?.com_bando,
       sem_bando: RECEITAS_PERSIANA.double_vision?.sem_bando,

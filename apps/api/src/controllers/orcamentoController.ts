@@ -52,6 +52,10 @@ export interface ItemEntrada {
   comando?: string | null;
   bando_codigo?: string | null;
   bando_nome?: string | null;
+  emissor?: boolean | null;
+  emissor_codigo?: string | null;
+  emissor_nome?: string | null;
+  canal?: string | null;
   fixacao_instalacao?: string | null;
   instalacao_id?: string | null; // tipo de instalação (grupo INSTALAÇÃO) embutido no produto
 }
@@ -71,6 +75,10 @@ interface ItemPreparado {
   comando: string | null;
   bando_codigo: string | null;
   bando_nome: string | null;
+  emissor: boolean;
+  emissor_codigo: string | null;
+  emissor_nome: string | null;
+  canal: string | null;
   fixacao_instalacao: string | null;
   qtd_venda: number;
   qtd_producao: number;
@@ -101,6 +109,10 @@ export interface ItemSnapshot {
   comando: string | null;
   bando_codigo?: string | null;
   bando_nome?: string | null;
+  emissor?: boolean | null;
+  emissor_codigo?: string | null;
+  emissor_nome?: string | null;
+  canal?: string | null;
   fixacao_instalacao?: string | null;
   qtd_venda: number;
   qtd_producao: number;
@@ -181,6 +193,8 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
         componente_bando: it.bando_codigo ? { codigo_interno: String(it.bando_codigo), descricao: String(it.bando_nome || 'Bando') } : null,
         cor_acessorio: it.cor_acessorio,
         cor_base: (it.base || it.cor_acessorio) as Cor,
+        emissor: Boolean(it.emissor),
+        componente_emissor: it.emissor && it.emissor_codigo ? { codigo_interno: String(it.emissor_codigo), descricao: String(it.emissor_nome || 'Emissor') } : null,
       });
     } catch (err) {
       if (err instanceof ReceitaPendenteError) throw new AppError(400, 'RECEITA_PENDENTE', err.message);
@@ -210,6 +224,9 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
       rolamento: it.rolamento,
       comando: it.comando,
       tc: item.tc,
+      emissor: it.emissor,
+      emissor_nome: it.emissor_nome,
+      canal: it.canal,
     });
     preparados.push({
       ambiente,
@@ -225,6 +242,10 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
       comando: it.comando ?? null,
       bando_codigo: it.bando_codigo ?? null,
       bando_nome: it.bando_nome ?? null,
+      emissor: Boolean(it.emissor),
+      emissor_codigo: it.emissor ? (it.emissor_codigo ?? null) : null,
+      emissor_nome: it.emissor ? (it.emissor_nome ?? null) : null,
+      canal: it.canal ?? null,
       fixacao_instalacao: it.fixacao_instalacao === 'teto' || it.fixacao_instalacao === 'parede' ? it.fixacao_instalacao : null,
       qtd_venda: item.venda.tecido.quantidade,
       qtd_producao: item.venda.tecido.quantidade,
@@ -360,6 +381,10 @@ export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[])
     comando: p.comando,
     bando_codigo: p.bando_codigo,
     bando_nome: p.bando_nome,
+    emissor: p.emissor,
+    emissor_codigo: p.emissor_codigo,
+    emissor_nome: p.emissor_nome,
+    canal: p.canal,
     fixacao_instalacao: p.fixacao_instalacao,
     qtd_venda: p.qtd_venda,
     qtd_producao: p.qtd_producao,

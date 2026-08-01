@@ -278,6 +278,8 @@ export async function calcularPersianaLoteController(req: Request, res: Response
         componente_bando: it.bando_codigo ? { codigo_interno: String(it.bando_codigo), descricao: String(it.bando_nome || 'Bando') } : null,
         cor_acessorio: it.cor_acessorio,
         cor_base: it.base || it.cor_acessorio,
+        emissor: Boolean(it.emissor),
+        componente_emissor: it.emissor && it.emissor_codigo ? { codigo_interno: String(it.emissor_codigo), descricao: String(it.emissor_nome || 'Emissor') } : null,
       });
       const resultado = montarResultado(item, tecido, larguraN, alturaN, inst);
       totalBruto = roundHalfUp(totalBruto + resultado.valor);

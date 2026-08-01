@@ -19,6 +19,10 @@ export interface PersianaItemSnap {
   comando?: string;
   bando_codigo?: string;
   bando_nome?: string;
+  emissor?: string;
+  emissor_codigo?: string;
+  emissor_nome?: string;
+  canal?: string;
   fixacao_instalacao?: string;
   instalacao_id: string;
 }

@@ -20,6 +20,7 @@ import { encontrarCalculadora } from './calculadoras';
 import { calcularCortinaMultiCamada, type ModeloCortina } from './cortina';
 import { categoriaDoItem, GRUPOS_ACESSORIO_CORTINA, type CategoriaAcessorio } from '../gc/acessorios';
 import { SUBGRUPO_PERSIANA, GRUPO_TECIDO_CORTINA } from '../gc/tecidos';
+import { GRUPO_EMISSOR_PERSIANA } from '../gc/componentesPersiana';
 
 export interface ItemComposicao {
   rotulo: string; // nome amigável do produto/grupo
@@ -80,6 +81,18 @@ function composicaoPersiana(tipo: TipoPersiana): ComposicaoTipo {
     if (vistos.has(c.descricao)) continue;
     vistos.add(c.descricao);
     afeta_preco.push({ rotulo: c.descricao, obs: 'componente — preço VAREJO do GestãoClick' });
+  }
+
+  // EMISSOR (RF): NÃO faz parte da receita — é uma linha condicional somada só quando o
+  // vendedor escolhe "Emissor: Sim" no item motorizado (Victor 01/08/2026). O "Canal"
+  // (01–15) é só documentação/produção, não afeta o preço.
+  if (calc?.suporta_emissor) {
+    afeta_preco.push({
+      rotulo: 'Emissor (RF) — condicional',
+      grupo_gc: 'EMISSOR',
+      grupo_gc_id: GRUPO_EMISSOR_PERSIANA,
+      obs: 'Só entra no preço quando o vendedor escolhe "Emissor: Sim" no item motorizado; produto escolhido no orçamento.',
+    });
   }
 
   return { afeta_preco, lista_tecnica: [] };

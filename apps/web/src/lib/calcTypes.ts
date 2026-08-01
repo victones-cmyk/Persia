@@ -24,6 +24,9 @@ export interface CalculadoraPersiana {
   familia: FamiliaPersiana;
   tecido_grupo_ids?: string[];
   largura_tecido_obrigatoria?: boolean;
+  /** Mostra Emissor/Tipo de emissor/Canal no item quando motorizado (grupo EMISSOR
+   * 6006913 do GestãoClick — o vendedor escolhe o produto). Victor 01/08/2026. */
+  suporta_emissor?: boolean;
   margem: number;
   dobrar_altura: boolean;
   base_venda: 'dimensao' | 'largura';
@@ -166,6 +169,10 @@ export interface ItemInput {
   comando?: string | null;
   bando_codigo?: string | null;
   bando_nome?: string | null;
+  emissor?: boolean | null;
+  emissor_codigo?: string | null;
+  emissor_nome?: string | null;
+  canal?: string | null;
   fixacao_instalacao?: 'teto' | 'parede' | null;
   instalacao_id?: string | null; // tipo de instalação embutido no produto
 }
@@ -248,3 +255,4 @@ export const ACIONAMENTOS: { value: Acionamento; label: string }[] = [
 
 export const ROLAMENTOS = ['Normal', 'Invertido'] as const;
 export const COMANDOS = ['Direito', 'Esquerdo', 'Duplex'] as const;
+export const CANAIS_EMISSOR: string[] = Array.from({ length: 15 }, (_, i) => `Canal ${String(i + 1).padStart(2, '0')}`);

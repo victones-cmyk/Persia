@@ -38,6 +38,9 @@ export function descricaoProdutoPersiana(params: {
   rolamento?: string | null;
   comando?: string | null;
   tc: number;
+  emissor?: boolean | null;
+  emissor_nome?: string | null;
+  canal?: string | null;
 }): string {
   const partes = [
     `Acionamento: ${ACIONAMENTO_LABEL[params.acionamento] ?? params.acionamento}`,
@@ -53,5 +56,10 @@ export function descricaoProdutoPersiana(params: {
   if (comando) partes.push(`Comando: ${comando}`);
 
   partes.push(`Tamanho Comando: ${numeroBR(params.tc)}m`);
+
+  if (params.emissor) partes.push(`Emissor: ${textoLimpo(params.emissor_nome) || 'Sim'}`);
+  const canal = textoLimpo(params.canal);
+  if (canal) partes.push(canal);
+
   return descricaoInline(partes);
 }

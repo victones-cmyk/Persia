@@ -317,6 +317,7 @@ export function AdminCalculadoras() {
       familia: 'rolo_bk_translucido',
       tecido_grupo_ids: [],
       largura_tecido_obrigatoria: true,
+      suporta_emissor: false,
       margem: 0.15,
       dobrar_altura: false,
       base_venda: 'dimensao',
@@ -783,6 +784,7 @@ export function AdminCalculadoras() {
                       <p><strong>Tipo-base BD:</strong> {DB_TIPOS_PRODUTO.find((d) => d.value === c.db_tipo_produto)?.label ?? c.db_tipo_produto}</p>
                       <p><strong>Grupos tecido GC:</strong> {c.tecido_grupo_ids?.length ? c.tecido_grupo_ids.join(', ') : 'Padrão'}</p>
                       <p><strong>Largura do tecido:</strong> {c.largura_tecido_obrigatoria === false ? 'Não obrigatória' : 'Obrigatória'}</p>
+                      <p><strong>Emissor (motorizado):</strong> {c.suporta_emissor ? 'Sim — grupo EMISSOR (6006913)' : 'Não'}</p>
                       <p><strong>Variantes Ativas:</strong> {VARIANTES.filter((v) => c.receitas[v.key] !== undefined).map((v) => v.label).join(', ')}</p>
                     </div>
                   </div>
@@ -1056,6 +1058,26 @@ export function AdminCalculadoras() {
                       Exigir largura cadastrada no tecido do GestãoClick
                     </label>
                   </div>
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <input
+                      id="suporta-emissor"
+                      type="checkbox"
+                      checked={editandoCalc.suporta_emissor === true}
+                      onChange={(e) => setEditandoCalc({ ...editandoCalc, suporta_emissor: e.target.checked })}
+                      style={{ accentColor: 'var(--action-add)', width: 18, height: 18 }}
+                    />
+                    <label htmlFor="suporta-emissor" className="text-sm-ui font-semibold text-neutral-700 cursor-pointer">
+                      Suporta Emissor (motorizado)
+                    </label>
+                  </div>
+                  {editandoCalc.suporta_emissor === true && (
+                    <div className="helper-text">
+                      Mostra Emissor / Tipo de emissor / Canal no item quando motorizado. O vendedor escolhe o
+                      produto entre os itens ativos do grupo <strong>EMISSOR</strong> (id 6006913) do GestãoClick —
+                      essa linha só entra no preço quando "Emissor: Sim". Canal é só documentação/produção.
+                    </div>
+                  )}
                 </div>
 
                 {/* Configuração de Receitas e Componentes (Direita/Centro) */}

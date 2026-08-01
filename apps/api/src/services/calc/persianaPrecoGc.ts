@@ -69,6 +69,8 @@ export function precoPersianaItem(args: {
   componente_bando?: { codigo_interno: string; descricao: string } | null;
   cor_acessorio?: Cor | null;
   cor_base?: Cor | null;
+  emissor?: boolean;
+  componente_emissor?: { codigo_interno: string; descricao: string } | null;
 }): PrecoPersianaItem {
   const tc = tcPadrao(args.altura, args.tc);
   const base = {
@@ -81,6 +83,8 @@ export function precoPersianaItem(args: {
     componente_bando: args.componente_bando,
     cor_acessorio: args.cor_acessorio,
     cor_base: args.cor_base,
+    emissor: args.emissor,
+    componente_emissor: args.componente_emissor,
   };
   const venda = calcularPrecoPersiana({ ...base, preco_tecido: args.preco_tecido, precos: args.precos });
   const custo = calcularPrecoPersiana({ ...base, preco_tecido: args.preco_tecido_custo ?? 0, precos: args.custos });

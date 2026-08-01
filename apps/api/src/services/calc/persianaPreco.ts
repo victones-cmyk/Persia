@@ -110,6 +110,11 @@ export interface EntradaPrecoPersiana {
   componente_bando?: { codigo_interno: string; descricao: string } | null;
   cor_acessorio?: Cor | null;
   cor_base?: Cor | null;
+  /** EMISSOR (RF, rolô/double vision/tela solar motorizados): opcional, Sim/Não por item.
+   * Diferente do bandô, NÃO faz parte da receita — é uma linha extra somada só quando
+   * o vendedor escolhe "Emissor: Sim" e um produto do grupo EMISSOR (6006913, Victor 01/08/2026). */
+  emissor?: boolean;
+  componente_emissor?: { codigo_interno: string; descricao: string } | null;
 }
 
 const COR_UPPER: Record<Cor, string> = {
@@ -223,6 +228,18 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
     total += q * preco;
     return { codigo_interno: componente.codigo_interno, descricao: componente.descricao, quantidade: roundHalfUp(q, 4), preco, subtotal: roundHalfUp(q * preco) };
   });
+
+  if (e.emissor && e.componente_emissor) {
+    const preco = e.precos.get(e.componente_emissor.codigo_interno) ?? 0;
+    total += preco;
+    itens.push({
+      codigo_interno: e.componente_emissor.codigo_interno,
+      descricao: e.componente_emissor.descricao,
+      quantidade: 1,
+      preco,
+      subtotal: roundHalfUp(preco),
+    });
+  }
 
   const qTec = evalQuantidade(receita.tecido_qtd, vars);
   total += qTec * e.preco_tecido;
