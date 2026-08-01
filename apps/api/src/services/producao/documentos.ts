@@ -24,6 +24,9 @@ export interface ItemProducaoSnapshot {
   rolamento?: string | null;
   base?: string | null;
   comando?: string | null;
+  emissor?: boolean | null;
+  emissor_nome?: string | null;
+  canal?: string | null;
   fixacao_instalacao?: string | null;
   instalacao_nome?: string | null;
   fixacao?: string | null;
@@ -160,6 +163,8 @@ function linhasTecnicas(item: ItemProducaoSnapshot): Array<[string, string]> {
     ['Base', texto(item.base)],
     ['Comando', texto(item.comando)],
     ['TC', item.tc_m === undefined ? '-' : `${numero(item.tc_m)} m`],
+    ['Emissor', item.emissor ? texto(item.emissor_nome, 'Sim') : '-'],
+    ['Canal', texto(item.canal)],
   ];
   return linhas.filter(([, v]) => v !== '-');
 }
@@ -363,7 +368,18 @@ function desenharPdfPersiana(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): vo
   );
   campoInstalacaoPdf(doc, ordem.codigo, left + colW + gap, y0 + rowH * 4, colW);
 
-  const compY = 424;
+  if (acionamentoMotorizado) {
+    campoPdf(
+      doc, 'Emissor', item.emissor ? texto(item.emissor_nome, 'Sim') : 'Não',
+      left, y0 + rowH * 5, (colW - gap) / 2, 30, motorFill, motorText, motorText, motorStroke,
+    );
+    campoPdf(
+      doc, 'Canal', texto(item.canal),
+      left + (colW + gap) / 2, y0 + rowH * 5, (colW - gap) / 2, 30, motorFill, motorText, motorText, motorStroke,
+    );
+  }
+
+  const compY = 424 + (acionamentoMotorizado ? rowH : 0);
   sectionTitle(doc, 'Componentes e materiais', left, compY, pageW);
   const componentes = ordem.item.componentes ?? [];
   const headerY = compY + 24;
@@ -864,6 +880,16 @@ function gerarZplEtiquetaPersiana(ordem: OrdemDocumento, width: number, height: 
   const entrada = dataCurtaBR(ordem.entradaEm ?? new Date());
   const entrega = dataCurtaBR(ordem.entregaEm);
   const tipo = tipoPersianaLabel(item.tipo || ordem.tipoProduto);
+  // Emissor/Canal (motorizado): a etiqueta já usa quase toda a altura física (35mm,
+  // a última linha existente já encosta na borda) — sem espaço pra mais uma linha.
+  // Anexa (abreviado) na linha "Tipo", que é a que sobra mais largura; ^FB garante que
+  // fica contido na caixa (nunca extrapola a área de impressão, só trunca se faltar
+  // espaço horizontal). Só entra quando motorizado, pra não competir por espaço à toa.
+  const motorizado = ehAcionamentoMotorizado(item.acionamento);
+  const canalCurto = texto(item.canal, '').replace(/^Canal\s*/i, '').trim();
+  const tipoValor = motorizado
+    ? `${tipo}  E:${item.emissor ? 'S' : 'N'}${canalCurto ? ` C:${canalCurto}` : ''}`
+    : `Tipo:${tipo}`;
 
   return [
     '^XA',
@@ -876,7 +902,7 @@ function gerarZplEtiquetaPersiana(ordem: OrdemDocumento, width: number, height: 
     zplLine(marginLeftPersiana, 66, 22, 22, textW, produto, 1, 62),
     zplLine(marginLeftPersiana, 96, 20, 20, entradaEntregaW, `Entrada:${entrada}`, 1, 22),
     zplLine(marginLeftPersiana + entradaEntregaW + 12, 96, 20, 20, textW - entradaEntregaW - 12, `Entrega:${entrega}`, 1, 22),
-    zplLine(marginLeftPersiana, 124, 20, 20, textW, `Tipo:${tipo}`, 1, 66),
+    zplLine(marginLeftPersiana, 124, 20, 20, textW, tipoValor, 1, 78),
     zplLine(marginLeftPersiana, 152, 20, 20, textW, `Tecido:${tecido}`, 2, 104),
     zplLine(marginLeftPersiana, 208, 20, 20, textW, acessorios, 1, 88),
     zplLine(marginLeftPersiana, 236, 20, 20, textW, comando, 1, 80),

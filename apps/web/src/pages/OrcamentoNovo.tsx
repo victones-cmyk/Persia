@@ -188,6 +188,7 @@ export function OrcamentoNovo() {
     if (!v) {
       setResultado(null);
       setPersianaCalculando(false);
+      setPersianaSuja(false);
       persianaSnapRef.current = null; persianaSujoRef.current = false;
       atualizarDirty(); agendarSalvar();
     }
