@@ -244,6 +244,7 @@ export function AdminCalculadoras() {
     try {
       const r = await api.put<{ calculadoras: CalculadoraPersiana[] }>('/admin/calculadoras', { calculadoras: lista });
       setCalculadorasPersiana(r.calculadoras);
+      invalidarCacheado('persiana-calculadoras');
       showToast('success', 'Calculadoras de Persiana salvas', 'As novas calculadoras e fórmulas já estão em vigor.');
       setEditandoCalc(null);
       setCriandoNova(false);
@@ -578,6 +579,7 @@ export function AdminCalculadoras() {
       if (secaoAtiva === 'persiana') {
         const r = await api.put<{ calculadoras: CalculadoraPersiana[] }>('/admin/calculadoras', { calculadoras: null });
         setCalculadorasPersiana(r.calculadoras);
+        invalidarCacheado('persiana-calculadoras');
         showToast('success', 'Padrões restaurados', 'Calculadoras de persiana redefinidas para os valores padrões.');
       } else {
         const r = await api.put<{ calculadoras: CalculadoraCortina[] }>('/admin/calculadoras-cortina', { calculadoras: null });

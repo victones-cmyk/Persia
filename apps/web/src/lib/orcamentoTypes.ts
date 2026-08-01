@@ -38,6 +38,12 @@ export interface ItemSnapshot {
   rolamento: string | null;
   base: string | null;
   comando?: string | null;
+  bando_codigo?: string | null;
+  bando_nome?: string | null;
+  emissor?: boolean | null;
+  emissor_codigo?: string | null;
+  emissor_nome?: string | null;
+  canal?: string | null;
   fixacao_instalacao?: string | null;
   desconto?: string | null;
   fixacao?: string | null;

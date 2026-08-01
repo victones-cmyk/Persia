@@ -260,9 +260,13 @@ export function OrcamentoNovo() {
             setPersianaInicial({
               tipo: o.tipo_produto as TipoPersiana,
               itens: o.itens_json.map((s: ItemSnapshot) => ({
+                ambiente: s.ambiente,
                 tecido_id: s.tecido_codigo_gc, cor_acessorio: s.cor_acessorio as Cor, acionamento: s.acionamento as Acionamento,
                 largura: Number(s.largura_m), altura: Number(s.altura_m), tc: Number(s.tc_m), rolamento: s.rolamento, base: s.base, comando: s.comando,
+                bando_codigo: s.bando_codigo ?? null, bando_nome: s.bando_nome ?? null,
+                emissor: s.emissor ?? null, emissor_codigo: s.emissor_codigo ?? null, emissor_nome: s.emissor_nome ?? null, canal: s.canal ?? null,
                 fixacao_instalacao: s.fixacao_instalacao === 'teto' || s.fixacao_instalacao === 'parede' ? s.fixacao_instalacao : null,
+                instalacao_id: s.instalacao_id ?? null,
               })),
             });
             novaOrdem.push('persiana');

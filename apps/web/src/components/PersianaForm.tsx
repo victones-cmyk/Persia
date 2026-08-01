@@ -415,7 +415,7 @@ export function PersianaForm({
   // Cálculo automático (tempo real): recalcula com debounce a cada mudança. Calcula
   // só os itens completos; itens incompletos não somem o resultado, mas bloqueiam o envio.
   const calcSig = JSON.stringify({
-    itens: itens.map((it) => ({ tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, r: it.rolamento, b: it.base, co: it.comando, bc: it.bando_codigo, em: it.emissor, ec: it.emissor_codigo, ca: it.canal, fx: it.fixacao_instalacao, in: it.instalacao_id })),
+    itens: itens.map((it) => ({ am: it.ambiente, tp: it.tipo, t: it.tecido_id, c: it.cor, a: it.acionamento, l: it.largura, h: it.altura, tc: it.tc, r: it.rolamento, b: it.base, co: it.comando, bc: it.bando_codigo, em: it.emissor, ec: it.emissor_codigo, ca: it.canal, fx: it.fixacao_instalacao, in: it.instalacao_id })),
   });
   const seqCalc = useRef(0);
   useEffect(() => {
