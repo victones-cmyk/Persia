@@ -284,8 +284,8 @@ export function ProducaoModal({
   const diferencaAutorizada = !precisaAutorizarDiferenca || diferencaAbsorvida || absorcaoAprovada || Boolean(dados?.orcamento.ajuste_medicao_gerado);
 
   const podeGerar = useMemo(() => {
-    return dados?.orcamento.status === 'enviado' && pedido.trim().length > 0 && selecionados.length > 0 && diferencaAutorizada;
-  }, [dados?.orcamento.status, pedido, selecionados.length, diferencaAutorizada]);
+    return dados?.orcamento.status === 'enviado' && pedido.trim().length > 0 && entrega.trim().length > 0 && selecionados.length > 0 && diferencaAutorizada;
+  }, [dados?.orcamento.status, pedido, entrega, selecionados.length, diferencaAutorizada]);
 
   function tipoOrdem(ordem: OrdemProducao): 'persiana' | 'cortina' {
     const item = ordem.item_snapshot_json;
@@ -374,14 +374,11 @@ export function ProducaoModal({
         await api.put(`/orcamentos/${orcamento.id}/pedido`, { gc_pedido_codigo: pedido.trim(), pedido_entrega_em: entrega || null });
       }
       const r = await api.post<{ ordens: OrdemProducao[] }>(`/orcamentos/${orcamento.id}/ordens-producao`, { itens: selecionados, medicoes, absorver_diferenca: diferencaAbsorvida });
-      for (const ordem of r.ordens) {
-        await api.post(`/orcamentos/ordens-producao/${ordem.id}/imprimir-etiqueta`);
-      }
-      setSucesso(`${r.ordens.length} ordem(ns) gerada(s) e etiqueta(s) enviada(s) para impressão.`);
+      setSucesso(`${r.ordens.length} ordem(ns) gerada(s).`);
       await carregar();
       onAtualizar();
     } catch (e) {
-      setErro(e instanceof ApiError ? e.message : 'Falha ao gerar as ordens ou imprimir as etiquetas.');
+      setErro(e instanceof ApiError ? e.message : 'Falha ao gerar as ordens.');
     } finally {
       setGerando(false);
     }
@@ -688,20 +685,21 @@ export function ProducaoModal({
               placeholder="Informe o número do pedido"
             />
           </div>
-          <button type="button" className="btn btn-default" disabled={salvando || orcamento.status !== 'enviado' || !pedido.trim()} onClick={salvarPedido}>
-            {salvando ? 'Salvando...' : 'Salvar Pedido'}
-          </button>
           <div style={{ minWidth: 180, flex: '1 1 180px', maxWidth: 220 }}>
-            <label className="form-label" htmlFor="entrega-producao">Data de entrega</label>
+            <label className="form-label" htmlFor="entrega-producao">Data de entrega *</label>
             <input
               id="entrega-producao"
               type="date"
               className="input"
               value={entrega}
+              required
               disabled={orcamento.status !== 'enviado'}
               onChange={(e) => setEntrega(e.target.value)}
             />
           </div>
+          <button type="button" className="btn btn-default" disabled={salvando || orcamento.status !== 'enviado' || !pedido.trim() || !entrega} onClick={salvarPedido}>
+            {salvando ? 'Salvando...' : 'Salvar Pedido'}
+          </button>
         </div>
 
         <AgendaVinculo orcamentoId={orcamento.id} nomeCliente={orcamento.nome_cliente} />
@@ -902,7 +900,7 @@ export function ProducaoModal({
             </button>
             <button type="button" className="btn btn-default" onClick={onFechar}>Cancelar</button>
             <button type="button" className="btn btn-success" disabled={!podeGerar || gerando} onClick={gerarOrdens}>
-              {gerando ? 'Gerando e imprimindo...' : 'Gerar OS e imprimir etiquetas'}
+              {gerando ? 'Gerando...' : 'Gerar OS'}
             </button>
           </div>
         </div>
