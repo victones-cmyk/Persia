@@ -32,6 +32,7 @@ import {
   agregarMateriais,
   classificarOrdensParaBaixa,
   textoDestinoBaixa,
+  type OrdemComItem,
 } from '../services/producao/materiaisEstoque';
 import { darSaidaEstoqueProduto, EstoqueVariacaoError, type BaixaEstoqueResultado } from '../services/gc/estoque';
 
@@ -892,10 +893,36 @@ function ordensPendentesDeBaixa(orc: Orcamento & { ordens_producao: OrdemProduca
   return orc.ordens_producao.filter((op) => op.status !== 'cancelada' && !op.baixado_estoque_em);
 }
 
+/**
+ * O produto_id de cada material já é salvo no orçamento desde o envio ao GC
+ * (Orcamento.itens_json) — independente de OS. Só passou a ser copiado pro
+ * item_snapshot_json da OS a partir desta feature; OS geradas antes disso
+ * ficaram com um snapshot congelado sem produto_id. Em vez de exigir OS nova,
+ * completamos aqui com o produto_id do item atual do orçamento (casando pela
+ * descrição, que é o texto literal do nome do produto no GC) — mantendo as
+ * quantidades da OS (medida final de produção), só suprindo o id que faltou.
+ */
+function enriquecerComProdutoIdAtual(ordens: OrdemProducao[], itensAtuais: ItemProducaoSnapshot[]): OrdemComItem[] {
+  return ordens.map((ordem) => {
+    const item = itemSnapshotDaOrdem(ordem);
+    const atual = itensAtuais[ordem.item_index];
+    const idsPorDescricao = new Map(
+      (atual?.componentes ?? [])
+        .filter((c) => c.produto_id && c.descricao)
+        .map((c) => [c.descricao as string, c.produto_id as string]),
+    );
+    const componentes = (item.componentes ?? []).map((c) => (
+      c.produto_id || !c.descricao ? c : { ...c, produto_id: idsPorDescricao.get(c.descricao) ?? null }
+    ));
+    return { id: ordem.id, codigo: ordem.codigo, item_snapshot_json: { ...item, componentes } };
+  });
+}
+
 export async function preverSaidaEstoque(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   const pendentes = ordensPendentesDeBaixa(orc);
-  const { elegiveis, excluidas } = classificarOrdensParaBaixa(pendentes);
+  const enriquecidas = enriquecerComProdutoIdAtual(pendentes, itensDoOrcamento(orc));
+  const { elegiveis, excluidas } = classificarOrdensParaBaixa(enriquecidas);
   const materiais = agregarMateriais(elegiveis);
   const observacao = textoDestinoBaixa(pedidoCodigo(orc), orc.nome_cliente, elegiveis);
 
@@ -912,7 +939,8 @@ export async function preverSaidaEstoque(req: Request, res: Response): Promise<v
 export async function confirmarSaidaEstoque(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   const pendentes = ordensPendentesDeBaixa(orc);
-  const { elegiveis, excluidas } = classificarOrdensParaBaixa(pendentes);
+  const enriquecidas = enriquecerComProdutoIdAtual(pendentes, itensDoOrcamento(orc));
+  const { elegiveis, excluidas } = classificarOrdensParaBaixa(enriquecidas);
   if (elegiveis.length === 0) {
     throw new AppError(409, 'SEM_MATERIAIS', 'Não há ordens de produção prontas para dar saída no estoque (falta OS gerada ou o mapeamento de produtos ainda não cobre os itens pendentes).');
   }
