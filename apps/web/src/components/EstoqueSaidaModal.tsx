@@ -75,6 +75,9 @@ export function EstoqueSaidaModal({
 
   if (!aberto || !orcamentoId) return null;
 
+  // eslint-disable-next-line no-console
+  console.log('[EstoqueSaidaModal] DEBUG renderizando', { aberto, orcamentoId, carregando, previa, erro });
+
   // No primeiro render após abrir, o efeito acima ainda não rodou — "carregando"
   // (estado) ainda está no valor de antes. Sem isso, essa primeira renderização
   // mostra a área de conteúdo vazia (nem spinner nem dados) até o próximo commit.
