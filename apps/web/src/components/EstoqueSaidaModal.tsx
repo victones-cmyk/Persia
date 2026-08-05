@@ -56,17 +56,29 @@ export function EstoqueSaidaModal({
     if (!aberto || !orcamentoId) {
       setPrevia(null);
       setErro(null);
+      setCarregando(false);
       return;
     }
+    setPrevia(null);
     setCarregando(true);
     setErro(null);
     api.get<PreviaSaidaEstoque>(`/orcamentos/${orcamentoId}/estoque-saida/preview`)
-      .then(setPrevia)
+      .then((r) => setPrevia({
+        ...r,
+        materiais: r.materiais ?? [],
+        ordens_excluidas: r.ordens_excluidas ?? [],
+        observacao: r.observacao ?? '',
+      }))
       .catch((e) => setErro(e instanceof ApiError ? e.message : 'Falha ao montar a lista de materiais.'))
       .finally(() => setCarregando(false));
   }, [aberto, orcamentoId]);
 
   if (!aberto || !orcamentoId) return null;
+
+  // No primeiro render após abrir, o efeito acima ainda não rodou — "carregando"
+  // (estado) ainda está no valor de antes. Sem isso, essa primeira renderização
+  // mostra a área de conteúdo vazia (nem spinner nem dados) até o próximo commit.
+  const mostrandoCarregamento = carregando || (!previa && !erro);
 
   async function confirmar() {
     if (!orcamentoId) return;
@@ -104,7 +116,7 @@ export function EstoqueSaidaModal({
 
         {erro && <div className="alert alert-danger mb-3">{erro}</div>}
 
-        {carregando ? (
+        {mostrandoCarregamento ? (
           <div style={{ padding: 16 }}><FontAwesomeIcon icon={faSpinner} spin /> Calculando materiais...</div>
         ) : previa ? (
           <>
