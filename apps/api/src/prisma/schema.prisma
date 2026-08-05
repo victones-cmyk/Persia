@@ -167,6 +167,9 @@ model OrdemProducao {
   item_snapshot_json Json
   criado_em          DateTime            @default(now()) @db.Timestamptz
   impresso_em        DateTime?           @db.Timestamptz
+  // Marca que os materiais desta OS já baixaram do estoque no GestãoClick —
+  // evita decrementar duas vezes se o botão for clicado de novo.
+  baixado_estoque_em DateTime?           @db.Timestamptz
 
   @@unique([orcamento_id, item_index])
   @@index([orcamento_id])

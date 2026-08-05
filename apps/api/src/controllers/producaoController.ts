@@ -28,6 +28,12 @@ import {
   type ItemProducaoSnapshot,
   type OrdemDocumento,
 } from '../services/producao/documentos';
+import {
+  agregarMateriais,
+  classificarOrdensParaBaixa,
+  textoDestinoBaixa,
+} from '../services/producao/materiaisEstoque';
+import { darSaidaEstoqueProduto, EstoqueVariacaoError, type BaixaEstoqueResultado } from '../services/gc/estoque';
 
 function temAcesso(orc: Pick<Orcamento, 'usuario_id'>, sessao: Express.Request['session']['usuario']): boolean {
   return Boolean(sessao && (sessao.perfil === 'admin' || orc.usuario_id === sessao.id));
@@ -47,6 +53,7 @@ interface CortinaSnapshotProducao {
   n_camadas?: number;
   camadas?: Array<{
     nome?: string;
+    tecido_id?: string;
     tecido_nome?: string;
     modelo?: string | null;
     metodo?: string | null;
@@ -56,7 +63,7 @@ interface CortinaSnapshotProducao {
     barra_postica_acrescimo?: number | null;
     valor_tecido?: number;
   }>;
-  acessorios?: Array<{ item?: string; produto_nome?: string; quantidade?: number; preco?: number; subtotal?: number; medida_real?: number }>;
+  acessorios?: Array<{ item?: string; produto_id?: string; produto_nome?: string; quantidade?: number; preco?: number; subtotal?: number; medida_real?: number }>;
   valor_total?: number;
   nome_produto?: string;
 }
@@ -182,6 +189,7 @@ function componenteTecidoCortina(cam: NonNullable<CortinaSnapshotProducao['camad
       quantidade: tiras,
       quantidade_label: `${tiras} x ${numeroProducao(faixa)} m`,
       unidade: 'm',
+      produto_id: cam.tecido_id ?? null,
     };
   }
 
@@ -196,6 +204,7 @@ function componenteTecidoCortina(cam: NonNullable<CortinaSnapshotProducao['camad
         ? `${numeroProducao(base)} + ${numeroProducao(acrescimo)} m`
         : (metragem > 0 ? `${numeroProducao(metragem)} m` : '-'),
       unidade: 'm',
+      produto_id: cam.tecido_id ?? null,
     };
   }
 
@@ -205,6 +214,7 @@ function componenteTecidoCortina(cam: NonNullable<CortinaSnapshotProducao['camad
     quantidade: metragem,
     quantidade_label: metragem > 0 ? `${numeroProducao(metragem)} m` : '-',
     unidade: 'm',
+    produto_id: cam.tecido_id ?? null,
   };
 }
 
@@ -255,6 +265,7 @@ function cortinaParaItem(c: CortinaSnapshotProducao): ItemProducaoSnapshot {
         descricao: a.produto_nome || a.item || '-',
         quantidade: Number(a.medida_real ?? a.quantidade ?? 0),
         unidade: 'un',
+        produto_id: a.produto_id ?? null,
       })),
     ],
   } as ItemProducaoSnapshotTecnico;
@@ -875,6 +886,86 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
     }
     throw err;
   }
+}
+
+function ordensPendentesDeBaixa(orc: Orcamento & { ordens_producao: OrdemProducao[] }): OrdemProducao[] {
+  return orc.ordens_producao.filter((op) => op.status !== 'cancelada' && !op.baixado_estoque_em);
+}
+
+export async function preverSaidaEstoque(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  const pendentes = ordensPendentesDeBaixa(orc);
+  const { elegiveis, excluidas } = classificarOrdensParaBaixa(pendentes);
+  const materiais = agregarMateriais(elegiveis);
+  const observacao = textoDestinoBaixa(pedidoCodigo(orc), orc.nome_cliente, elegiveis);
+
+  res.json({
+    pedido: pedidoCodigo(orc),
+    cliente: orc.nome_cliente,
+    materiais,
+    ordens_incluidas: elegiveis.map((o) => ({ id: o.id, codigo: o.codigo, produto: o.produto, ambiente: o.ambiente })),
+    ordens_excluidas: excluidas,
+    observacao,
+  });
+}
+
+export async function confirmarSaidaEstoque(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  const pendentes = ordensPendentesDeBaixa(orc);
+  const { elegiveis, excluidas } = classificarOrdensParaBaixa(pendentes);
+  if (elegiveis.length === 0) {
+    throw new AppError(409, 'SEM_MATERIAIS', 'Não há ordens de produção prontas para dar saída no estoque (falta OS gerada ou o mapeamento de produtos ainda não cobre os itens pendentes).');
+  }
+  const materiais = agregarMateriais(elegiveis);
+  const observacao = textoDestinoBaixa(pedidoCodigo(orc), orc.nome_cliente, elegiveis);
+
+  const sucesso: BaixaEstoqueResultado[] = [];
+  const falhas: { produto_id: string; nome: string; erro: string }[] = [];
+  for (const material of materiais) {
+    try {
+      sucesso.push(await darSaidaEstoqueProduto(material.produto_id, material.quantidade));
+    } catch (err) {
+      const erro = err instanceof EstoqueVariacaoError ? err.message : err instanceof Error ? err.message : String(err);
+      falhas.push({ produto_id: material.produto_id, nome: material.nome, erro });
+      break; // Para no primeiro erro — não adianta seguir se um produto já falhou.
+    }
+  }
+
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: req.session.usuario!.id,
+      acao: falhas.length > 0 ? 'saida_estoque_falha_parcial' : 'saida_estoque_gerada',
+      detalhe: {
+        orcamento_id: orc.id,
+        pedido: pedidoCodigo(orc),
+        observacao,
+        ordens: elegiveis.map((o) => o.codigo),
+        sucesso,
+        falhas,
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  if (falhas.length > 0) {
+    const jaBaixados = sucesso.map((s) => `${s.nome} (${s.estoque_antes} → ${s.estoque_depois})`).join(', ');
+    throw new AppError(
+      502,
+      'FALHA_BAIXA_ESTOQUE',
+      `Falha ao baixar "${falhas[0].nome}" no GestãoClick: ${falhas[0].erro}. ${sucesso.length > 0 ? `Estes produtos JÁ foram baixados antes do erro — confira o estoque no GestãoClick antes de tentar de novo, para não baixar duas vezes: ${jaBaixados}.` : 'Nenhum produto foi alterado ainda.'}`,
+    );
+  }
+
+  await prisma.ordemProducao.updateMany({
+    where: { id: { in: elegiveis.map((o) => o.id) } },
+    data: { baixado_estoque_em: new Date() },
+  });
+
+  res.json({
+    resultado: sucesso,
+    ordens_baixadas: elegiveis.map((o) => o.codigo),
+    ordens_excluidas: excluidas,
+    observacao,
+  });
 }
 
 async function carregarOrdemAutorizada(req: Request) {

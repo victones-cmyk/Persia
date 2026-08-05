@@ -18,6 +18,7 @@ import {
   baixarPdfOrdem,
   baixarPdfOrdensOrcamento,
   baixarZplEtiqueta,
+  confirmarSaidaEstoque,
   criarOrdensProducao,
   decidirAbsorcaoMedicao,
   gerarVendaAjusteMedicao,
@@ -27,6 +28,7 @@ import {
   listarAprovacoesPendentesMedicao,
   listarOrdensProducao,
   preverMedicaoProducao,
+  preverSaidaEstoque,
   solicitarAbsorcaoMedicao,
 } from '../controllers/producaoController';
 import {
@@ -54,6 +56,8 @@ router.get('/agenda/vinculos', listarVinculosAgendaEmLote);
 router.get('/:id/producao', getProducaoOrcamento);
 router.get('/:id/ordens-producao/pdf', baixarPdfOrdensOrcamento);
 router.post('/:id/ordens-producao/imprimir-etiquetas', imprimirEtiquetasOrcamento);
+router.get('/:id/estoque-saida/preview', preverSaidaEstoque);
+router.post('/:id/estoque-saida', confirmarSaidaEstoque);
 router.get('/:id/agenda', listarVinculosAgenda);
 router.get('/:id/agenda/buscar', buscarEventosAgenda);
 router.post('/:id/agenda', vincularEventosAgenda);

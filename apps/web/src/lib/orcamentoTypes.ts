@@ -56,7 +56,7 @@ export interface ItemSnapshot {
   valor_custo: number;
   gc_produto_id: string | null;
   nome_produto: string;
-  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
+  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id?: string | null }[];
 }
 
 export interface OrcamentoDetalhe extends OrcamentoListItem {

@@ -8,6 +8,9 @@ export interface ComponenteSnapshot {
   quantidade?: number;
   quantidade_label?: string;
   unidade?: string;
+  // ID do produto no GestãoClick — presente quando o componente tem
+  // mapeamento direto (hoje: cortina). Usado pra dar saída no estoque.
+  produto_id?: string | null;
 }
 
 export interface ItemProducaoSnapshot {

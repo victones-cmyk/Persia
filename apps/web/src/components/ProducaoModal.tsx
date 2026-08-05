@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEye, faFilePdf, faTag } from '@fortawesome/free-solid-svg-icons';
+import { faBoxOpen, faEye, faFilePdf, faTag } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import type { ItemSnapshot, OrcamentoListItem } from '../lib/orcamentoTypes';
 import { useAuth } from '../hooks/useAuth';
 import { EtiquetaPreviewModal, type EtiquetaPreviewOrdem } from './EtiquetaPreviewModal';
+import { EstoqueSaidaModal } from './EstoqueSaidaModal';
 import { AgendaVinculo } from './AgendaVinculo';
 import { DESCONTOS_CORTINA, type DescontoCortina, type FixacaoCortina } from '../lib/cortinaTypes';
 
@@ -16,6 +17,7 @@ interface OrdemProducao {
   tipo_produto?: 'persiana' | 'cortina' | 'misto';
   status: 'criada' | 'impressa' | 'cancelada';
   item_snapshot_json?: ItemSnapshot;
+  baixado_estoque_em?: string | null;
 }
 
 interface ItemProducao {
@@ -189,6 +191,7 @@ export function ProducaoModal({
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | null>(null);
   const [previaEtiqueta, setPreviaEtiqueta] = useState<EtiquetaPreviewOrdem | null>(null);
+  const [estoqueModalAberto, setEstoqueModalAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
@@ -330,6 +333,10 @@ export function ProducaoModal({
       pendentes[tipoOrdem(ordem)] += 1;
     });
     return pendentes;
+  }, [dados?.itens]);
+
+  const pendentesEstoque = useMemo(() => {
+    return dados?.itens.filter(({ ordem }) => ordem && ordem.status !== 'cancelada' && !ordem.baixado_estoque_em).length ?? 0;
   }, [dados?.itens]);
 
   function ordemParaPrevia(ordem: OrdemProducao): EtiquetaPreviewOrdem {
@@ -772,6 +779,24 @@ export function ProducaoModal({
           </div>
         </div>
 
+        <div className="mb-4" style={{ border: '1px solid #dee2e6', borderRadius: 3, padding: 12, background: '#f8f9fa' }}>
+          <div className="text-sm-ui font-bold mb-2">Baixa de estoque</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-warning btn-sm"
+              disabled={pendentesEstoque === 0}
+              onClick={() => setEstoqueModalAberto(true)}
+              title="Baixar no GestãoClick os materiais usados nas OS deste pedido"
+            >
+              <FontAwesomeIcon icon={faBoxOpen} /> Dar saída no estoque ({pendentesEstoque})
+            </button>
+            {pendentesEstoque === 0 && (dados?.itens.some(({ ordem }) => ordem) ?? false) && (
+              <span className="text-xs-ui text-neutral-500">Nenhuma OS pendente de baixa.</span>
+            )}
+          </div>
+        </div>
+
         <div className="table-scroll hidden lg:block" style={{ border: '1px solid #dee2e6', borderRadius: 3, maxWidth: '100%' }}>
           <table className="data-table" style={{ minWidth: 0, width: '100%', tableLayout: 'fixed' }}>
             <colgroup>
@@ -1078,6 +1103,15 @@ export function ProducaoModal({
           if (origem) void imprimirEtiqueta(origem);
         }}
         onFechar={() => setPreviaEtiqueta(null)}
+      />
+      <EstoqueSaidaModal
+        aberto={estoqueModalAberto}
+        orcamentoId={orcamento.id}
+        onFechar={() => setEstoqueModalAberto(false)}
+        onConfirmado={() => {
+          setSucesso('Saída de estoque registrada no GestãoClick.');
+          void carregar();
+        }}
       />
     </div>
   );
