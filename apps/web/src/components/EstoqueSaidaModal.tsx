@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBoxOpen, faSpinner, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
@@ -75,9 +76,6 @@ export function EstoqueSaidaModal({
 
   if (!aberto || !orcamentoId) return null;
 
-  // eslint-disable-next-line no-console
-  console.log('[EstoqueSaidaModal] DEBUG renderizando', { aberto, orcamentoId, carregando, previa, erro });
-
   // No primeiro render após abrir, o efeito acima ainda não rodou — "carregando"
   // (estado) ainda está no valor de antes. Sem isso, essa primeira renderização
   // mostra a área de conteúdo vazia (nem spinner nem dados) até o próximo commit.
@@ -98,14 +96,18 @@ export function EstoqueSaidaModal({
     }
   }
 
-  return (
+  // Portal pro <body>: este modal abre por cima de outro modal já aberto
+  // (ProducaoModal). Renderizado como filho dele, position:fixed ainda fica
+  // preso ao contexto de empilhamento do pai — o overlay nunca pinta por
+  // cima. O portal escapa desse aninhamento e desenha direto na raiz do body.
+  return createPortal((
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'hidden' }}
       onClick={onFechar}
     >
       <div
         className="card"
-        style={{ background: '#fff', borderRadius: 3, padding: 20, maxWidth: 640, width: 'calc(100vw - 32px)', maxHeight: '85vh', overflow: 'auto', boxShadow: 'var(--shadow-modal)', zIndex: 210, boxSizing: 'border-box' }}
+        style={{ background: '#fff', borderRadius: 3, padding: 20, maxWidth: 640, width: 'calc(100vw - 32px)', maxHeight: '85vh', overflow: 'auto', boxShadow: 'var(--shadow-modal)', zIndex: 1001, boxSizing: 'border-box' }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -177,5 +179,5 @@ export function EstoqueSaidaModal({
         ) : null}
       </div>
     </div>
-  );
+  ), document.body);
 }

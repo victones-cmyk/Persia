@@ -673,11 +673,6 @@ export function ProducaoModal({
 
         {erro && <div className="alert alert-danger mb-3">{erro}</div>}
         {sucesso && <div className="alert alert-success mb-3">{sucesso}</div>}
-        {estoqueModalAberto && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, background: 'red', color: '#fff', padding: 16, zIndex: 9999, fontWeight: 700 }}>
-            DEBUG: estoqueModalAberto=true (isso é temporário, remover depois)
-          </div>
-        )}
 
         {orcamento.status !== 'enviado' && (
           <div className="alert alert-warning mb-3">
