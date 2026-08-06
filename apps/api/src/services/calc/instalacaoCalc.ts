@@ -32,6 +32,6 @@ export function linhaInstalacaoBreakdown(inst: TipoInstalacao): LinhaCustoPersia
 }
 
 /** Linha da instalação no snapshot do item (formato {grupo, descricao, quantidade, unidade}). */
-export function componenteInstalacao(inst: TipoInstalacao): { grupo: string; descricao: string; quantidade: number; unidade: string } {
-  return { grupo: 'instalacao', descricao: `INSTALAÇÃO — ${inst.nome}`, quantidade: 1, unidade: 'un' };
+export function componenteInstalacao(inst: TipoInstalacao): { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id: string } {
+  return { grupo: 'instalacao', descricao: `INSTALAÇÃO — ${inst.nome}`, quantidade: 1, unidade: 'un', produto_id: inst.id };
 }

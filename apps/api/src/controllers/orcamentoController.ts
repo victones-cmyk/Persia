@@ -87,7 +87,7 @@ interface ItemPreparado {
   valor_custo: number;
   instalacao_id: string | null;
   instalacao_nome: string | null;
-  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
+  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id?: string | null }[];
   nome_produto: string;
   descricao_produto: string;
 }
@@ -124,7 +124,7 @@ export interface ItemSnapshot {
   gc_produto_id: string | null;
   nome_produto: string;
   descricao_produto?: string;
-  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string }[];
+  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id?: string | null }[];
 }
 
 function erroGcLegivel(erro: string | null | undefined): string | null {
@@ -157,7 +157,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
   preparados: ItemPreparado[];
   valorBrutoTotal: number;
 }> {
-  const { precos, custos, componentesPorNome } = await mapasDePrecoComponentes();
+  const { precos, custos, componentesPorNome, produtoIds } = await mapasDePrecoComponentes();
   const idxInst = await indiceInstalacoes();
   const preparados: ItemPreparado[] = [];
   let valorBrutoTotal = 0;
@@ -190,6 +190,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
         precos,
         custos,
         componentesPorNome,
+        produtoIds,
         componente_bando: it.bando_codigo ? { codigo_interno: String(it.bando_codigo), descricao: String(it.bando_nome || 'Bando') } : null,
         cor_acessorio: it.cor_acessorio,
         cor_base: (it.base || it.cor_acessorio) as Cor,
@@ -207,7 +208,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
     const valorCusto = roundHalfUp(item.valor_custo + (inst?.custo ?? 0));
     valorBrutoTotal = roundHalfUp(valorBrutoTotal + valorBruto);
 
-    const componentes = [...componentesSnapshot(item.venda), ...(inst ? [componenteInstalacao(inst)] : [])];
+    const componentes = [...componentesSnapshot(item.venda, tecido.id), ...(inst ? [componenteInstalacao(inst)] : [])];
 
     const ambiente = it.ambiente?.trim() || '';
     const produtoSobMedida = produtoSobMedidaLabel(tipo);

@@ -1,10 +1,14 @@
 // apps/api/src/services/producao/materiaisEstoque.ts
 // Agrega os componentes (materiais) das OS de um pedido em uma lista única
 // pra dar saída no estoque do GestãoClick. Só entram OS cujos componentes
-// TODOS tenham produto_id (hoje: cortina — persiana ainda não tem esse
-// mapeamento, RN pendente). Uma OS com qualquer componente sem produto_id
-// fica de fora inteira, não parcialmente, pra não deixar a peça com baixa
-// incompleta.
+// de material FÍSICO todos tenham produto_id. Uma OS com qualquer componente
+// físico sem produto_id fica de fora inteira, não parcialmente, pra não
+// deixar a peça com baixa incompleta.
+
+// Grupos que não representam produto físico no GC (linhas de ajuste de preço
+// da persiana, ex.: RT/desconto da revenda) — nunca vão ter produto_id e não
+// devem contar como "componente sem mapeamento" nem entrar na baixa.
+const GRUPOS_NAO_FISICOS = new Set(['rt', 'desconto']);
 
 import { roundHalfUp } from '../calc/arredondamento';
 import type { ComponenteSnapshot, ItemProducaoSnapshot } from './documentos';
@@ -41,7 +45,7 @@ function nomeItem(item: ItemProducaoSnapshot): string {
 }
 
 function componentesComQuantidade(item: ItemProducaoSnapshot): ComponenteSnapshot[] {
-  return (item.componentes ?? []).filter((c) => Number(c.quantidade ?? 0) > 0);
+  return (item.componentes ?? []).filter((c) => Number(c.quantidade ?? 0) > 0 && !GRUPOS_NAO_FISICOS.has(c.grupo ?? ''));
 }
 
 /** Separa as OS de um pedido entre as que podem entrar na baixa (todo

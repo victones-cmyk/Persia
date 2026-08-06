@@ -45,11 +45,14 @@ async function listarProdutosComponentes(grupo: string): Promise<GcProduto[]> {
   }
 }
 
-export interface PrecoComponente { codigo_interno: string; nome: string; preco: number; custo: number }
+// "id" é o ID do produto no GestãoClick (chave do PUT /produtos/{id} — usado
+// na saída de estoque). "codigo_interno" é a chave de negócio que o resto do
+// motor de preço usa pra casar componente da receita ↔ produto do catálogo.
+export interface PrecoComponente { id: string; codigo_interno: string; nome: string; preco: number; custo: number }
 
 let cache: { idx: Map<string, PrecoComponente>; expira: number } | null = null;
 
-/** Índice codigo_interno → { nome, preço e custo VAREJO } dos componentes de persiana (cacheado). */
+/** Índice codigo_interno → { id, nome, preço e custo VAREJO } dos componentes de persiana (cacheado). */
 export async function indicePrecosComponentes(): Promise<Map<string, PrecoComponente>> {
   if (cache && cache.expira > Date.now()) return cache.idx;
   const idx = new Map<string, PrecoComponente>();
@@ -61,9 +64,9 @@ export async function indicePrecosComponentes(): Promise<Map<string, PrecoCompon
         const { preco, custo } = precoCustoVarejo(p);
         const atual = idx.get(ci);
         if (!atual || (atual.preco <= 0 && preco > 0)) {
-          idx.set(ci, { codigo_interno: ci, nome: p.nome, preco, custo });
+          idx.set(ci, { id: String(p.id), codigo_interno: ci, nome: p.nome, preco, custo });
         }
-        idx.set(String(p.id), { codigo_interno: ci, nome: p.nome, preco, custo });
+        idx.set(String(p.id), { id: String(p.id), codigo_interno: ci, nome: p.nome, preco, custo });
       }
     }
   }

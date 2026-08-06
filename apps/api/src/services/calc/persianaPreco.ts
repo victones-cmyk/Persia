@@ -73,8 +73,12 @@ export interface LinhaCustoPersiana {
   quantidade: number;
   preco: number;
   subtotal: number;
+  /** ID do produto no GestãoClick (chave do PUT /produtos/{id} — saída de estoque).
+   * null quando o componente não foi encontrado no catálogo do GC. */
+  produto_id?: string | null;
 }
 export interface ComponentePrecoLookup {
+  id: string;
   codigo_interno: string;
   nome: string;
   preco: number;
@@ -107,6 +111,10 @@ export interface EntradaPrecoPersiana {
   preco_tecido: number; // R$ por unidade conforme a fórmula da família (altura ou m²)
   precos: Map<string, number>; // codigo_interno → preço VAREJO do componente
   componentesPorNome?: Map<string, ComponentePrecoLookup>;
+  /** codigo_interno → ID do produto no GestãoClick — fallback quando o componente
+   * não passa pelo casamento por nome (ex.: bandô/emissor escolhidos pelo vendedor,
+   * ou o componente original da receita sem troca de cor). */
+  produtoIds?: Map<string, string>;
   componente_bando?: { codigo_interno: string; descricao: string } | null;
   cor_acessorio?: Cor | null;
   cor_base?: Cor | null;
@@ -148,12 +156,13 @@ function trocarCorDescricao(descricao: string, cor: Cor | null | undefined): str
 function resolverComponenteColoridoDetalhado(
   componente: { codigo_interno: string; descricao: string },
   e: EntradaPrecoPersiana,
-): { codigo_interno: string; descricao: string; preco: number; descricao_original: string; descricao_alvo: string; codigo_original: string; origem: 'original' | 'cor' | 'fallback'; alerta?: string } {
+): { codigo_interno: string; descricao: string; preco: number; produto_id: string | null; descricao_original: string; descricao_alvo: string; codigo_original: string; origem: 'original' | 'cor' | 'fallback'; alerta?: string } {
   if (e.componente_bando && /\bBANDO\b/i.test(componente.descricao)) {
     return {
       codigo_interno: e.componente_bando.codigo_interno,
       descricao: e.componente_bando.descricao,
       preco: e.precos.get(e.componente_bando.codigo_interno) ?? 0,
+      produto_id: e.produtoIds?.get(e.componente_bando.codigo_interno) ?? null,
       descricao_original: componente.descricao,
       descricao_alvo: e.componente_bando.descricao,
       codigo_original: componente.codigo_interno,
@@ -169,6 +178,7 @@ function resolverComponenteColoridoDetalhado(
       codigo_interno: encontrado.codigo_interno,
       descricao: encontrado.nome,
       preco: encontrado.preco,
+      produto_id: encontrado.id,
       descricao_original: componente.descricao,
       descricao_alvo: descricaoAlvo,
       codigo_original: componente.codigo_interno,
@@ -180,6 +190,7 @@ function resolverComponenteColoridoDetalhado(
     codigo_interno: componente.codigo_interno,
     descricao: componente.descricao,
     preco: e.precos.get(componente.codigo_interno) ?? 0,
+    produto_id: e.produtoIds?.get(componente.codigo_interno) ?? null,
     descricao_original: componente.descricao,
     descricao_alvo: descricaoAlvo,
     codigo_original: componente.codigo_interno,
@@ -191,9 +202,9 @@ function resolverComponenteColoridoDetalhado(
 function resolverComponenteColorido(
   componente: { codigo_interno: string; descricao: string },
   e: EntradaPrecoPersiana,
-): { codigo_interno: string; descricao: string; preco: number } {
+): { codigo_interno: string; descricao: string; preco: number; produto_id: string | null } {
   const r = resolverComponenteColoridoDetalhado(componente, e);
-  return { codigo_interno: r.codigo_interno, descricao: r.descricao, preco: r.preco };
+  return { codigo_interno: r.codigo_interno, descricao: r.descricao, preco: r.preco, produto_id: r.produto_id };
 }
 
 function variaveisDaFamilia(familia: FamiliaPersiana, largura: number, altura: number, tc: number): VarsQtd {
@@ -226,7 +237,7 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
     const componente = resolverComponenteColorido(c, e);
     const preco = componente.preco;
     total += q * preco;
-    return { codigo_interno: componente.codigo_interno, descricao: componente.descricao, quantidade: roundHalfUp(q, 4), preco, subtotal: roundHalfUp(q * preco) };
+    return { codigo_interno: componente.codigo_interno, descricao: componente.descricao, quantidade: roundHalfUp(q, 4), preco, subtotal: roundHalfUp(q * preco), produto_id: componente.produto_id };
   });
 
   if (e.emissor && e.componente_emissor) {
@@ -238,6 +249,7 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
       quantidade: 1,
       preco,
       subtotal: roundHalfUp(preco),
+      produto_id: e.produtoIds?.get(e.componente_emissor.codigo_interno) ?? null,
     });
   }
 
@@ -273,6 +285,7 @@ export function auditarPrecoPersiana(e: EntradaPrecoPersiana & {
       quantidade: roundHalfUp(q, 4),
       preco,
       subtotal,
+      produto_id: componente.produto_id,
       descricao_original: componente.descricao_original,
       descricao_alvo: componente.descricao_alvo,
       codigo_original: componente.codigo_original,

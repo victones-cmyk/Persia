@@ -23,18 +23,22 @@ function chaveNome(nome: string): string {
 export async function mapasDePrecoComponentes(): Promise<{
   precos: Map<string, number>;
   custos: Map<string, number>;
-  componentesPorNome: Map<string, { codigo_interno: string; nome: string; preco: number; custo: number }>;
+  componentesPorNome: Map<string, { id: string; codigo_interno: string; nome: string; preco: number; custo: number }>;
+  /** codigo_interno → ID do produto no GestãoClick (saída de estoque). */
+  produtoIds: Map<string, string>;
 }> {
   const idx = await indicePrecosComponentes();
   const precos = new Map<string, number>();
   const custos = new Map<string, number>();
-  const componentesPorNome = new Map<string, { codigo_interno: string; nome: string; preco: number; custo: number }>();
+  const componentesPorNome = new Map<string, { id: string; codigo_interno: string; nome: string; preco: number; custo: number }>();
+  const produtoIds = new Map<string, string>();
   for (const [k, v] of idx) {
     precos.set(k, v.preco);
     custos.set(k, v.custo);
     componentesPorNome.set(chaveNome(v.nome), v);
+    produtoIds.set(v.codigo_interno, v.id);
   }
-  return { precos, custos, componentesPorNome };
+  return { precos, custos, componentesPorNome, produtoIds };
 }
 
 /** TC padrão (RN-04): usa o valor informado ou altura × tc_fator (regra parametrizável). */
@@ -65,7 +69,8 @@ export function precoPersianaItem(args: {
   preco_tecido_custo?: number;
   precos: Map<string, number>;
   custos: Map<string, number>;
-  componentesPorNome?: Map<string, { codigo_interno: string; nome: string; preco: number; custo: number }>;
+  componentesPorNome?: Map<string, { id: string; codigo_interno: string; nome: string; preco: number; custo: number }>;
+  produtoIds?: Map<string, string>;
   componente_bando?: { codigo_interno: string; descricao: string } | null;
   cor_acessorio?: Cor | null;
   cor_base?: Cor | null;
@@ -80,6 +85,7 @@ export function precoPersianaItem(args: {
     altura: args.altura,
     tc,
     componentesPorNome: args.componentesPorNome,
+    produtoIds: args.produtoIds,
     componente_bando: args.componente_bando,
     cor_acessorio: args.cor_acessorio,
     cor_base: args.cor_base,
@@ -91,9 +97,11 @@ export function precoPersianaItem(args: {
   return { venda, tc, valor: venda.valor, valor_custo: custo.valor };
 }
 
-/** Breakdown no formato antigo {grupo, descricao, quantidade, unidade} (compat com o snapshot/UI). */
-export function componentesSnapshot(r: ResultadoPrecoPersiana): { grupo: string; descricao: string; quantidade: number; unidade: string }[] {
-  const linhas = r.itens.map((i) => ({ grupo: 'componente', descricao: i.descricao, quantidade: i.quantidade, unidade: 'un' }));
-  linhas.push({ grupo: 'tecido', descricao: 'TECIDO', quantidade: r.tecido.quantidade, unidade: 'm' });
+/** Breakdown no formato antigo {grupo, descricao, quantidade, unidade} (compat com o snapshot/UI).
+ * `tecidoProdutoId`: ID do produto de tecido no GC (Orcamento/TecidoGc.id) — a linha de
+ * TECIDO não passa pelo casamento por codigo_interno dos demais componentes. */
+export function componentesSnapshot(r: ResultadoPrecoPersiana, tecidoProdutoId?: string | null): { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id: string | null }[] {
+  const linhas = r.itens.map((i) => ({ grupo: 'componente', descricao: i.descricao, quantidade: i.quantidade, unidade: 'un', produto_id: i.produto_id ?? null }));
+  linhas.push({ grupo: 'tecido', descricao: 'TECIDO', quantidade: r.tecido.quantidade, unidade: 'm', produto_id: tecidoProdutoId ?? null });
   return linhas;
 }

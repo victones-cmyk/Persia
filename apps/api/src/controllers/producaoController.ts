@@ -894,6 +894,39 @@ function ordensPendentesDeBaixa(orc: Orcamento & { ordens_producao: OrdemProduca
 }
 
 /**
+ * Itens de persiana em itens_json são gravados prontos (sem reshaping — ver
+ * itensDoOrcamento), então não têm como "atualizar sozinhos" com produto_id
+ * quando a OS é de antes desse campo existir: o próprio itens_json já nasceu
+ * sem ele. Diferente de cortina (onde o produto_id sempre viveu no snapshot
+ * bruto, só não era copiado pra OS), aqui só dá pra recuperar recalculando a
+ * partir da ENTRADA original (entrada_json) com o motor de preço atual —
+ * mesma lógica usada no reenvio/medição técnica. Falha (ex.: receita não
+ * encontrada) não deve quebrar a prévia/baixa: cai pro que já tinha.
+ */
+async function itensAtuaisParaEnriquecimento(orc: Orcamento): Promise<ItemProducaoSnapshot[]> {
+  const base = itensDoOrcamento(orc);
+  if (orc.tipo_produto === 'cortina') return base;
+
+  const entrada = orc.entrada_json as { tipo?: string; itens?: ItemEntrada[]; rt_pct?: number; desconto_pct?: number } | null;
+  const itensPersiana = entrada?.itens ?? [];
+  if (itensPersiana.length === 0) return base;
+
+  try {
+    const tipoFallback = isTipoPersiana(entrada?.tipo ?? '') ? (entrada?.tipo as TipoPersiana) : null;
+    const preparados = await recalcularPersianasDeEntrada(
+      tipoFallback,
+      itensPersiana,
+      Number(entrada?.rt_pct) || 0,
+      Number(entrada?.desconto_pct) || 0,
+    );
+    const persianaAtual = snapshotsDe(preparados, []) as unknown as ItemProducaoSnapshot[];
+    return base.map((item, index) => persianaAtual[index] ?? item);
+  } catch {
+    return base;
+  }
+}
+
+/**
  * O produto_id de cada material já é salvo no orçamento desde o envio ao GC
  * (Orcamento.itens_json) — independente de OS. Só passou a ser copiado pro
  * item_snapshot_json da OS a partir desta feature; OS geradas antes disso
@@ -921,7 +954,7 @@ function enriquecerComProdutoIdAtual(ordens: OrdemProducao[], itensAtuais: ItemP
 export async function preverSaidaEstoque(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   const pendentes = ordensPendentesDeBaixa(orc);
-  const enriquecidas = enriquecerComProdutoIdAtual(pendentes, itensDoOrcamento(orc));
+  const enriquecidas = enriquecerComProdutoIdAtual(pendentes, await itensAtuaisParaEnriquecimento(orc));
   const { elegiveis, excluidas } = classificarOrdensParaBaixa(enriquecidas);
   const materiais = agregarMateriais(elegiveis);
   const observacao = textoDestinoBaixa(pedidoCodigo(orc), orc.nome_cliente, elegiveis);
@@ -939,7 +972,7 @@ export async function preverSaidaEstoque(req: Request, res: Response): Promise<v
 export async function confirmarSaidaEstoque(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   const pendentes = ordensPendentesDeBaixa(orc);
-  const enriquecidas = enriquecerComProdutoIdAtual(pendentes, itensDoOrcamento(orc));
+  const enriquecidas = enriquecerComProdutoIdAtual(pendentes, await itensAtuaisParaEnriquecimento(orc));
   const { elegiveis, excluidas } = classificarOrdensParaBaixa(enriquecidas);
   if (elegiveis.length === 0) {
     throw new AppError(409, 'SEM_MATERIAIS', 'Não há ordens de produção prontas para dar saída no estoque (falta OS gerada ou o mapeamento de produtos ainda não cobre os itens pendentes).');

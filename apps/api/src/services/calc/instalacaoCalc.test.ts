@@ -11,7 +11,7 @@ describe('instalacaoCalc', () => {
 
   it('componente do snapshot: grupo instalacao, unidade un, qtd 1', () => {
     const c = componenteInstalacao(INST);
-    expect(c).toEqual({ grupo: 'instalacao', descricao: 'INSTALAÇÃO — INSTALAÇÃO MANUAL', quantidade: 1, unidade: 'un' });
+    expect(c).toEqual({ grupo: 'instalacao', descricao: 'INSTALAÇÃO — INSTALAÇÃO MANUAL', quantidade: 1, unidade: 'un', produto_id: '94575642' });
   });
 
   // Faixa padrão de 4 m: o preço do GestãoClick vale por faixa, então uma cortina
