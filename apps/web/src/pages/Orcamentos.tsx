@@ -1,6 +1,6 @@
 // apps/web/src/pages/Orcamentos.tsx
-// Listagem de orçamentos (SRD §8): filtros de status, busca por cliente (debounced),
-// tabela paginada (20/pág), ações ver/reenviar/cancelar.
+// Listagem de orçamentos (SRD §8): filtros de status, busca por cliente/pedido/
+// orçamento (debounced), tabela paginada (20/pág), ações ver/reenviar/cancelar.
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -399,7 +399,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
             <input
               className="input"
               style={{ width: 260, flexShrink: 0 }}
-              placeholder="Buscar por cliente…"
+              placeholder="Buscar por cliente, pedido ou orçamento…"
               value={cliente}
               onChange={(e) => {
                 setCliente(e.target.value);

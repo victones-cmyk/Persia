@@ -871,13 +871,29 @@ export async function listarOrcamentos(req: Request, res: Response): Promise<voi
   if (['rascunho', 'enviado', 'erro', 'cancelado'].includes(status)) {
     where.status = status as Prisma.EnumStatusOrcamentoFilter['equals'];
   }
+  // "vendas" (só confirmados) e "cliente" (busca por cliente/pedido/orçamento)
+  // são dois filtros OR independentes — combinados em AND pra não se pisarem
+  // quando os dois estão ativos ao mesmo tempo.
+  const condicoes: Prisma.OrcamentoWhereInput[] = [];
   if (req.query.vendas === '1' || req.query.vendas === 'true') {
-    where.OR = [
-      { gc_pedido_id: { not: null } },
-      { gc_pedido_codigo: { not: null } },
-    ];
+    condicoes.push({
+      OR: [
+        { gc_pedido_id: { not: null } },
+        { gc_pedido_codigo: { not: null } },
+      ],
+    });
   }
-  if (cliente) where.nome_cliente = { contains: cliente, mode: 'insensitive' };
+  if (cliente) {
+    condicoes.push({
+      OR: [
+        { nome_cliente: { contains: cliente, mode: 'insensitive' } },
+        { gc_pedido_codigo: { contains: cliente, mode: 'insensitive' } },
+        { gc_codigo: { contains: cliente, mode: 'insensitive' } },
+        { gc_orcamento_id: { contains: cliente, mode: 'insensitive' } },
+      ],
+    });
+  }
+  if (condicoes.length > 0) where.AND = condicoes;
 
   // Filtro por data de criação. O frontend manda instantes ISO já calculados no
   // fuso do usuário (início/fim do período), então aqui só aplicamos gte/lte.
