@@ -14,7 +14,6 @@ import {
 import { criarOrcamentoCortina } from '../controllers/orcamentoCortinaController';
 import { criarOrcamentoMisto } from '../controllers/orcamentoMistoController';
 import {
-  atualizarPedidoOrcamento,
   baixarPdfOrdem,
   baixarPdfOrdensOrcamento,
   baixarZplEtiqueta,
@@ -68,7 +67,6 @@ router.post('/:id/producao/medicao/preview', preverMedicaoProducao);
 router.post('/:id/producao/medicao/venda-ajuste', gerarVendaAjusteMedicao);
 router.post('/:id/producao/medicao/solicitar-absorcao', solicitarAbsorcaoMedicao);
 router.post('/:id/producao/medicao/decidir-absorcao', decidirAbsorcaoMedicao);
-router.put('/:id/pedido', atualizarPedidoOrcamento);
 router.post('/:id/gerar-venda', gerarVendaOrcamento);
 router.post('/:id/ordens-producao', criarOrdensProducao);
 router.post('/:id/reenviar', reenviarOrcamento);

@@ -525,26 +525,6 @@ function pedidoCodigo(orc: Pick<Orcamento, 'gc_pedido_codigo'>): string {
   return (orc.gc_pedido_codigo ?? '').trim();
 }
 
-function validarPedido(v: unknown): string {
-  const s = typeof v === 'string' || typeof v === 'number' ? String(v).trim() : '';
-  if (!s) throw new AppError(400, 'PEDIDO_OBRIGATORIO', 'Informe o número do pedido antes de gerar a ordem.');
-  if (s.length > 50) throw new AppError(400, 'PEDIDO_INVALIDO', 'O número do pedido deve ter no máximo 50 caracteres.');
-  return s;
-}
-
-function validarDataEntrega(v: unknown): Date | null {
-  if (v === null || v === undefined || v === '') return null;
-  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) {
-    throw new AppError(400, 'DATA_ENTREGA_INVALIDA', 'Informe a data de entrega no formato AAAA-MM-DD.');
-  }
-  const [ano, mes, dia] = v.split('-').map(Number);
-  const data = new Date(Date.UTC(ano, mes - 1, dia));
-  if (data.getUTCFullYear() !== ano || data.getUTCMonth() !== mes - 1 || data.getUTCDate() !== dia) {
-    throw new AppError(400, 'DATA_ENTREGA_INVALIDA', 'Informe uma data de entrega válida.');
-  }
-  return data;
-}
-
 function validarOrcamentoParaProducao(orc: Pick<Orcamento, 'status' | 'gc_pedido_codigo'>): void {
   if (orc.status !== 'enviado') {
     throw new AppError(409, 'ORCAMENTO_NAO_ENVIADO', 'A ordem de produção só pode ser gerada para orçamentos enviados.');
@@ -641,28 +621,6 @@ export async function getProducaoOrcamento(req: Request, res: Response): Promise
       ordem: ordensPorItem.get(index) ?? null,
     })),
   });
-}
-
-export async function atualizarPedidoOrcamento(req: Request, res: Response): Promise<void> {
-  const orc = await carregarOrcamentoAutorizado(req);
-  if (orc.status !== 'enviado') {
-    throw new AppError(409, 'ORCAMENTO_NAO_ENVIADO', 'Informe pedido apenas em orçamentos enviados.');
-  }
-  const codigo = validarPedido((req.body as { gc_pedido_codigo?: unknown } | null)?.gc_pedido_codigo);
-  const entrega = validarDataEntrega((req.body as { pedido_entrega_em?: unknown } | null)?.pedido_entrega_em);
-  const atualizado = await prisma.orcamento.update({
-    where: { id: orc.id },
-    data: {
-      gc_pedido_codigo: codigo,
-      gc_pedido_id: typeof req.body?.gc_pedido_id === 'string' && req.body.gc_pedido_id.trim() ? req.body.gc_pedido_id.trim() : null,
-      pedido_confirmado_em: new Date(),
-      pedido_entrega_em: entrega,
-    },
-  });
-  await prisma.logAcao.create({
-    data: { usuario_id: req.session.usuario!.id, acao: 'pedido_orcamento_atualizado', detalhe: { orcamento_id: orc.id, gc_pedido_codigo: codigo, pedido_entrega_em: entrega?.toISOString().slice(0, 10) ?? null } },
-  });
-  res.json({ orcamento: atualizado });
 }
 
 export async function criarOrdensProducao(req: Request, res: Response): Promise<void> {

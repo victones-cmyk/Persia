@@ -34,6 +34,7 @@ import { roundHalfUp } from '../services/calc/arredondamento';
 import { GcError } from '../services/gc/client';
 import { AppError } from '../middleware/errorHandler';
 import { resolverLoja } from '../lib/resolverLoja';
+import { validarDataEntrega } from '../lib/validarPedido';
 import { reenviarCortina } from './orcamentoCortinaController';
 import { reenviarMisto } from './orcamentoMistoController';
 
@@ -729,29 +730,44 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
   if (!orc.gc_orcamento_id) {
     throw new AppError(409, 'SEM_ORCAMENTO_GC', 'Este orçamento ainda não possui número no GestãoClick.');
   }
-  if (orc.gc_pedido_id || orc.gc_pedido_codigo) {
+
+  // Único caminho de confirmação de pedido (SRD): antes existia um endpoint
+  // paralelo (PUT /:id/pedido) que só gravava o texto digitado, sem checar
+  // duplicidade nem tocar a API do GC — foi assim que um pedido chegou a ficar
+  // salvo como "123456" (valor de teste nunca corrigido). Agora tanto a tela
+  // de Orçamentos quanto o modal de produção chamam esta mesma rota.
+  const corpo = (req.body ?? {}) as { gc_pedido_codigo?: unknown; pedido_entrega_em?: unknown };
+  const entregaInformada = Object.prototype.hasOwnProperty.call(corpo, 'pedido_entrega_em');
+  const entrega = entregaInformada ? validarDataEntrega(corpo.pedido_entrega_em) : undefined;
+  const pedidoInformado = typeof corpo.gc_pedido_codigo === 'string' || typeof corpo.gc_pedido_codigo === 'number'
+    ? String(corpo.gc_pedido_codigo).trim()
+    : '';
+  const pedidoAtual = (orc.gc_pedido_codigo ?? '').trim();
+  const jaTemPedido = Boolean(orc.gc_pedido_id || orc.gc_pedido_codigo);
+  const trocandoPedido = jaTemPedido && Boolean(pedidoInformado) && pedidoInformado !== pedidoAtual;
+
+  // Pedido já confirmado e o número não está mudando: no máximo atualiza a
+  // data de entrega — é o caso normal de reabrir o modal só pra ajustar a data.
+  if (jaTemPedido && !trocandoPedido) {
+    const atualizado = entregaInformada
+      ? await prisma.orcamento.update({ where: { id: orc.id }, data: { pedido_entrega_em: entrega } })
+      : orc;
     res.json({
-      orcamento: orc,
-      venda: {
-        gc_pedido_id: orc.gc_pedido_id,
-        gc_pedido_codigo: orc.gc_pedido_codigo,
-      },
+      orcamento: atualizado,
+      venda: { gc_pedido_id: orc.gc_pedido_id, gc_pedido_codigo: orc.gc_pedido_codigo },
       ja_existia: true,
     });
     return;
   }
 
-  const pedidoExistente = typeof req.body?.gc_pedido_codigo === 'string' || typeof req.body?.gc_pedido_codigo === 'number'
-    ? String(req.body.gc_pedido_codigo).trim()
-    : '';
-  if (pedidoExistente) {
-    if (pedidoExistente.length > 50) {
+  if (pedidoInformado) {
+    if (pedidoInformado.length > 50) {
       throw new AppError(400, 'PEDIDO_INVALIDO', 'O número do pedido deve ter no máximo 50 caracteres.');
     }
     const duplicado = await prisma.orcamento.findFirst({
       where: {
         id: { not: orc.id },
-        gc_pedido_codigo: pedidoExistente,
+        gc_pedido_codigo: pedidoInformado,
       },
       select: { id: true, gc_codigo: true, gc_orcamento_id: true, nome_cliente: true },
     });
@@ -759,7 +775,7 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
       throw new AppError(
         409,
         'PEDIDO_JA_VINCULADO',
-        `O pedido ${pedidoExistente} já está vinculado ao orçamento ${duplicado.gc_codigo ?? duplicado.gc_orcamento_id ?? duplicado.id} (${duplicado.nome_cliente}).`,
+        `O pedido ${pedidoInformado} já está vinculado ao orçamento ${duplicado.gc_codigo ?? duplicado.gc_orcamento_id ?? duplicado.id} (${duplicado.nome_cliente}).`,
       );
     }
 
@@ -769,14 +785,20 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
     const atualizado = await prisma.orcamento.update({
       where: { id: orc.id },
       data: {
-        gc_pedido_codigo: pedidoExistente,
+        gc_pedido_codigo: pedidoInformado,
+        // Zera o id interno da venda do GC: se estava trocando o código de um
+        // pedido que tinha vindo da criação automática, o id antigo não
+        // corresponde mais ao código digitado agora.
+        gc_pedido_id: null,
         pedido_confirmado_em: new Date(),
+        ...(entregaInformada ? { pedido_entrega_em: entrega } : {}),
         resposta_gc: {
           ...respostaAnterior,
           venda_vinculada_manual: {
-            gc_pedido_codigo: pedidoExistente,
+            gc_pedido_codigo: pedidoInformado,
             vinculado_em: new Date().toISOString(),
             usuario_id: sessao.id,
+            ...(trocandoPedido ? { pedido_anterior: pedidoAtual } : {}),
           },
         } as Prisma.InputJsonValue,
         erro_gc: null,
@@ -785,20 +807,23 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
     await prisma.logAcao.create({
       data: {
         usuario_id: sessao.id,
-        acao: 'venda_vinculada_manual',
+        acao: trocandoPedido ? 'pedido_orcamento_corrigido' : 'venda_vinculada_manual',
         detalhe: {
           orcamento_id: orc.id,
           gc_orcamento_id: orc.gc_orcamento_id,
-          gc_pedido_codigo: pedidoExistente,
+          gc_pedido_codigo: pedidoInformado,
+          ...(trocandoPedido ? { pedido_anterior: pedidoAtual } : {}),
         },
       },
     });
-    // Venda existe: os produtos sintéticos deste orçamento cumpriram o papel —
-    // inativa no GC para não poluírem a busca do PDV (best-effort).
-    await inativarProdutosSinteticosDoOrcamento(prisma, orc, sessao.id, 'venda_vinculada');
+    if (!jaTemPedido) {
+      // Venda existe: os produtos sintéticos deste orçamento cumpriram o papel —
+      // inativa no GC para não poluírem a busca do PDV (best-effort).
+      await inativarProdutosSinteticosDoOrcamento(prisma, orc, sessao.id, 'venda_vinculada');
+    }
     res.json({
       orcamento: atualizado,
-      venda: { gc_pedido_id: null, gc_pedido_codigo: pedidoExistente },
+      venda: { gc_pedido_id: null, gc_pedido_codigo: pedidoInformado },
       vinculada_manual: true,
     });
     return;
@@ -819,6 +844,7 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
         gc_pedido_id: venda.gc_pedido_id,
         gc_pedido_codigo: venda.gc_pedido_codigo,
         pedido_confirmado_em: new Date(),
+        ...(entregaInformada ? { pedido_entrega_em: entrega } : {}),
         resposta_gc: {
           ...respostaAnterior,
           venda: venda.resposta,

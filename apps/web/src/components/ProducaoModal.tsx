@@ -356,16 +356,25 @@ export function ProducaoModal({
 
   if (!aberto || !orcamento) return null;
 
+  // Mesma rota protegida usada no botão "Gerar venda" da listagem de Orçamentos
+  // (checa duplicidade de pedido) — antes este modal salvava o texto digitado
+  // direto, sem validar nada.
+  function mensagemErroPedido(e: unknown): string {
+    if (!(e instanceof ApiError)) return 'Falha ao salvar o pedido.';
+    const data = e.data as { erro?: { message?: string }; message?: string } | null;
+    return data?.erro?.message ?? data?.message ?? e.message;
+  }
+
   async function salvarPedido() {
     if (!orcamento) return;
     setSalvando(true);
     setErro(null);
     try {
-      await api.put(`/orcamentos/${orcamento.id}/pedido`, { gc_pedido_codigo: pedido.trim(), pedido_entrega_em: entrega || null });
+      await api.post(`/orcamentos/${orcamento.id}/gerar-venda`, { gc_pedido_codigo: pedido.trim(), pedido_entrega_em: entrega || null });
       await carregar();
       onAtualizar();
     } catch (e) {
-      setErro(e instanceof ApiError ? e.message : 'Falha ao salvar o pedido.');
+      setErro(mensagemErroPedido(e));
     } finally {
       setSalvando(false);
     }
@@ -378,7 +387,7 @@ export function ProducaoModal({
     setSucesso(null);
     try {
       if (pedido.trim() !== dados?.orcamento.gc_pedido_codigo || entrega !== (dados?.orcamento.pedido_entrega_em?.slice(0, 10) ?? '')) {
-        await api.put(`/orcamentos/${orcamento.id}/pedido`, { gc_pedido_codigo: pedido.trim(), pedido_entrega_em: entrega || null });
+        await api.post(`/orcamentos/${orcamento.id}/gerar-venda`, { gc_pedido_codigo: pedido.trim(), pedido_entrega_em: entrega || null });
       }
       const r = await api.post<{ ordens: OrdemProducao[] }>(`/orcamentos/${orcamento.id}/ordens-producao`, { itens: selecionados, medicoes, absorver_diferenca: diferencaAbsorvida });
       setSucesso(`${r.ordens.length} ordem(ns) gerada(s).`);
