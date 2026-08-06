@@ -27,6 +27,7 @@ import {
   imprimirEtiquetasOrcamento,
   listarAprovacoesPendentesMedicao,
   listarOrdensProducao,
+  listarPedidosSemOs,
   preverMedicaoProducao,
   preverSaidaEstoque,
   solicitarAbsorcaoMedicao,
@@ -50,6 +51,7 @@ router.get('/ordens-producao/:id/pdf', baixarPdfOrdem);
 router.get('/ordens-producao/:id/etiqueta.zpl', baixarZplEtiqueta);
 router.post('/ordens-producao/:id/imprimir-etiqueta', imprimirEtiquetaOrdem);
 router.get('/ordens-producao', listarOrdensProducao);
+router.get('/pedidos-sem-os', listarPedidosSemOs);
 router.get('/producao/aprovacoes-pendentes', listarAprovacoesPendentesMedicao);
 // Antes das rotas /:id/* — "agenda" aqui é literal, não um id de orçamento.
 router.get('/agenda/vinculos', listarVinculosAgendaEmLote);

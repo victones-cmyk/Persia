@@ -130,6 +130,19 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
   const [agendaBaseUrl, setAgendaBaseUrl] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Vindo da Central de Produção ("Sem OS gerada" → "Gerar OS"): abre direto o
+  // modal de produção do pedido, sem o vendedor precisar achá-lo na listagem.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const abrirOS = params.get('abrirOS');
+    if (!abrirOS) return;
+    navigate('/orcamentos', { replace: true });
+    api.get<{ orcamento: OrcamentoListItem }>(`/orcamentos/${abrirOS}`)
+      .then((r) => setProducaoOrc(r.orcamento))
+      .catch((e) => showToast('error', 'Falha ao abrir o pedido', e instanceof ApiError ? e.message : ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {

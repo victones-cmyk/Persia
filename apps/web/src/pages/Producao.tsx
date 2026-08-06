@@ -7,7 +7,30 @@ import { api, ApiError } from '../lib/api';
 import { EtiquetaPreviewModal, type EtiquetaPreviewOrdem } from '../components/EtiquetaPreviewModal';
 
 type StatusOrdem = 'criada' | 'impressa' | 'cancelada';
+type FiltroStatus = StatusOrdem | 'sem_os';
 type TipoDocumento = 'persiana' | 'cortina';
+
+interface PedidoSemOs {
+  id: string;
+  tipo_produto: string;
+  nome_cliente: string;
+  gc_codigo: string | null;
+  gc_orcamento_id: string | null;
+  gc_pedido_codigo: string | null;
+  pedido_confirmado_em: string | null;
+  pedido_entrega_em: string | null;
+  valor_final: string;
+  loja_nome: string | null;
+  vendedor_nome: string | null;
+  total_itens: number;
+  itens_pendentes: number;
+}
+
+function tipoProdutoLabel(t: string): string {
+  if (t === 'cortina') return 'Cortina';
+  if (t === 'misto') return 'Misto';
+  return 'Persiana';
+}
 
 interface OrdemCentral extends EtiquetaPreviewOrdem {
   item_index: number;
@@ -38,11 +61,12 @@ interface ResumoProducao {
   entregaHoje: number;
 }
 
-const STATUS: Array<{ valor: '' | StatusOrdem; label: string }> = [
+const STATUS: Array<{ valor: '' | FiltroStatus; label: string }> = [
   { valor: '', label: 'Todas' },
   { valor: 'criada', label: 'Pendentes' },
   { valor: 'impressa', label: 'Impressas' },
   { valor: 'cancelada', label: 'Canceladas' },
+  { valor: 'sem_os', label: 'Sem OS gerada' },
 ];
 
 const TIPOS: Array<{ valor: '' | TipoDocumento; label: string }> = [
@@ -97,13 +121,14 @@ function ResumoCard({ label, valor }: { label: string; valor: number }) {
 }
 
 export function Producao() {
-  const [status, setStatus] = useState<'' | StatusOrdem>('criada');
+  const [status, setStatus] = useState<'' | FiltroStatus>('criada');
   const [tipo, setTipo] = useState<'' | TipoDocumento>('');
   const [busca, setBusca] = useState('');
   const [entregaDe, setEntregaDe] = useState('');
   const [entregaAte, setEntregaAte] = useState('');
   const [ordens, setOrdens] = useState<OrdemCentral[]>([]);
   const [resumo, setResumo] = useState<ResumoProducao | null>(null);
+  const [pedidosSemOs, setPedidosSemOs] = useState<PedidoSemOs[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
@@ -111,27 +136,38 @@ export function Producao() {
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const modoSemOs = status === 'sem_os';
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro(null);
     try {
       const params = new URLSearchParams();
-      if (status) params.set('status', status);
-      if (tipo) params.set('tipo', tipo);
       if (busca.trim()) params.set('q', busca.trim());
       if (entregaDe) params.set('entrega_de', entregaDe);
       if (entregaAte) params.set('entrega_ate', entregaAte);
-      const r = await api.get<{ resumo: ResumoProducao; ordens: OrdemCentral[] }>(`/orcamentos/ordens-producao?${params.toString()}`);
-      setResumo(r.resumo);
-      setOrdens(r.ordens);
+      if (modoSemOs) {
+        const r = await api.get<{ total: number; pedidos: PedidoSemOs[] }>(`/orcamentos/pedidos-sem-os?${params.toString()}`);
+        setPedidosSemOs(r.pedidos);
+        setOrdens([]);
+        setResumo(null);
+      } else {
+        if (status) params.set('status', status);
+        if (tipo) params.set('tipo', tipo);
+        const r = await api.get<{ resumo: ResumoProducao; ordens: OrdemCentral[] }>(`/orcamentos/ordens-producao?${params.toString()}`);
+        setResumo(r.resumo);
+        setOrdens(r.ordens);
+        setPedidosSemOs([]);
+      }
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao carregar a produção.');
       setOrdens([]);
       setResumo(null);
+      setPedidosSemOs([]);
     } finally {
       setCarregando(false);
     }
-  }, [status, tipo, busca, entregaDe, entregaAte]);
+  }, [status, tipo, busca, entregaDe, entregaAte, modoSemOs]);
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -184,29 +220,37 @@ export function Producao() {
       {sucesso && <div className="alert alert-success mb-3">{sucesso}</div>}
 
       <div className="flex flex-wrap gap-2 mb-4">
-        <ResumoCard label="Total" valor={resumo?.total ?? 0} />
-        <ResumoCard label="Pendentes" valor={resumo?.criadas ?? 0} />
-        <ResumoCard label="Impressas" valor={resumo?.impressas ?? 0} />
-        <ResumoCard label="Atrasadas" valor={resumo?.atrasadas ?? 0} />
-        <ResumoCard label="Hoje" valor={resumo?.entregaHoje ?? 0} />
-        <ResumoCard label="Persianas" valor={resumo?.persianas ?? 0} />
-        <ResumoCard label="Cortinas" valor={resumo?.cortinas ?? 0} />
+        {modoSemOs ? (
+          <ResumoCard label="Pedidos sem OS" valor={pedidosSemOs.length} />
+        ) : (
+          <>
+            <ResumoCard label="Total" valor={resumo?.total ?? 0} />
+            <ResumoCard label="Pendentes" valor={resumo?.criadas ?? 0} />
+            <ResumoCard label="Impressas" valor={resumo?.impressas ?? 0} />
+            <ResumoCard label="Atrasadas" valor={resumo?.atrasadas ?? 0} />
+            <ResumoCard label="Hoje" valor={resumo?.entregaHoje ?? 0} />
+            <ResumoCard label="Persianas" valor={resumo?.persianas ?? 0} />
+            <ResumoCard label="Cortinas" valor={resumo?.cortinas ?? 0} />
+          </>
+        )}
       </div>
 
       <div className="card p-4 mb-4">
         <div className="flex flex-wrap items-end gap-3">
           <div style={{ width: 170 }}>
             <label className="form-label" htmlFor="producao-status">Status</label>
-            <select id="producao-status" className="input" value={status} onChange={(e) => setStatus(e.target.value as '' | StatusOrdem)}>
+            <select id="producao-status" className="input" value={status} onChange={(e) => setStatus(e.target.value as '' | FiltroStatus)}>
               {STATUS.map((s) => <option key={s.valor || 'todos'} value={s.valor}>{s.label}</option>)}
             </select>
           </div>
-          <div style={{ width: 180 }}>
-            <label className="form-label" htmlFor="producao-tipo">Tipo</label>
-            <select id="producao-tipo" className="input" value={tipo} onChange={(e) => setTipo(e.target.value as '' | TipoDocumento)}>
-              {TIPOS.map((t) => <option key={t.valor || 'todos'} value={t.valor}>{t.label}</option>)}
-            </select>
-          </div>
+          {!modoSemOs && (
+            <div style={{ width: 180 }}>
+              <label className="form-label" htmlFor="producao-tipo">Tipo</label>
+              <select id="producao-tipo" className="input" value={tipo} onChange={(e) => setTipo(e.target.value as '' | TipoDocumento)}>
+                {TIPOS.map((t) => <option key={t.valor || 'todos'} value={t.valor}>{t.label}</option>)}
+              </select>
+            </div>
+          )}
           <div style={{ width: 150 }}>
             <label className="form-label" htmlFor="producao-de">Entrega de</label>
             <input id="producao-de" type="date" className="input" value={entregaDe} onChange={(e) => setEntregaDe(e.target.value)} />
@@ -222,6 +266,69 @@ export function Producao() {
         </div>
       </div>
 
+      {modoSemOs ? (
+        <div className="card p-0 table-scroll">
+          <table className="data-table" style={{ minWidth: 980 }}>
+            <colgroup>
+              <col style={{ width: 120 }} />
+              <col style={{ width: 120 }} />
+              <col />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 150 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 160 }} />
+            </colgroup>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #dee2e6' }}>
+                <Th>Entrega</Th>
+                <Th>Pedido</Th>
+                <Th>Cliente</Th>
+                <Th>Tipo</Th>
+                <Th>Itens pendentes</Th>
+                <Th>Confirmado em</Th>
+                <Th className="table-actions">Ações</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {carregando && pedidosSemOs.length === 0 ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid #dee2e6' }}>
+                    <td colSpan={7} style={{ padding: 12 }}><div className="skeleton" style={{ height: 18 }} /></td>
+                  </tr>
+                ))
+              ) : pedidosSemOs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: 18, color: '#6c757d' }}>
+                    Nenhum pedido confirmado com item sem OS.
+                  </td>
+                </tr>
+              ) : (
+                pedidosSemOs.map((p) => (
+                  <tr key={p.id} style={{ borderTop: '1px solid #dee2e6' }}>
+                    <Td className="font-mono">{dataCurta(p.pedido_entrega_em)}</Td>
+                    <Td>
+                      <div className="font-mono">{p.gc_pedido_codigo}</div>
+                      <div className="text-xs-ui text-neutral-500">Orç. {p.gc_codigo ?? p.gc_orcamento_id ?? '-'}</div>
+                    </Td>
+                    <Td>
+                      <div className="td-strong" style={{ overflowWrap: 'anywhere' }}>{p.nome_cliente}</div>
+                      <div className="text-xs-ui text-neutral-500">{p.loja_nome ?? '-'} · {p.vendedor_nome ?? '-'}</div>
+                    </Td>
+                    <Td><span className="badge badge-secondary">{tipoProdutoLabel(p.tipo_produto)}</span></Td>
+                    <Td className="font-mono text-sm-ui">{p.itens_pendentes} de {p.total_itens}</Td>
+                    <Td className="text-sm-ui">{dataHora(p.pedido_confirmado_em)}</Td>
+                    <Td className="table-actions">
+                      <Link className="btn btn-info btn-xs" to={`/orcamentos?abrirOS=${p.id}`} title="Abrir pedido e gerar OS">
+                        <FontAwesomeIcon icon={faIndustry} /> Gerar OS
+                      </Link>
+                    </Td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
       <div className="card p-0 table-scroll">
         <table className="data-table" style={{ minWidth: 1180 }}>
           <colgroup>
@@ -303,6 +410,7 @@ export function Producao() {
           </tbody>
         </table>
       </div>
+      )}
 
       <EtiquetaPreviewModal
         ordem={previa}

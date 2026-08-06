@@ -1503,3 +1503,86 @@ export async function listarOrdensProducao(req: Request, res: Response): Promise
     })),
   });
 }
+
+/**
+ * GET /orcamentos/pedidos-sem-os — pedidos já confirmados (venda concretizada:
+ * status enviado + pedido salvo) com pelo menos 1 item ainda sem OS gerada.
+ * A Central de Produção só lista OS existentes; sem isso, um pedido inteiro
+ * esquecido (ninguém clicou em "Gerar OS" pra nenhum item) nunca aparecia.
+ */
+export async function listarPedidosSemOs(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario;
+  if (!sessao) throw new AppError(401, 'NAO_AUTENTICADO', 'Sessão expirada.');
+
+  const entregaDe = dataFiltro(req.query.entrega_de);
+  const entregaAte = dataFiltro(req.query.entrega_ate);
+  const busca = normalizarBusca(req.query.q);
+
+  const orcamentos = await prisma.orcamento.findMany({
+    where: {
+      status: 'enviado',
+      pedido_confirmado_em: { not: null },
+      ...(sessao.perfil === 'admin' ? {} : { usuario_id: sessao.id }),
+    },
+    include: {
+      loja: { select: { nome: true } },
+      usuario: { select: { nome: true } },
+      ordens_producao: { select: { item_index: true } },
+    },
+    orderBy: { pedido_confirmado_em: 'desc' },
+    take: 500,
+  });
+
+  const pendentes = orcamentos
+    .map((orc) => {
+      const totalItens = itensDoOrcamento(orc).length;
+      const geradas = new Set(orc.ordens_producao.map((op) => op.item_index));
+      const itensPendentes = Array.from({ length: totalItens }, (_, i) => i).filter((i) => !geradas.has(i)).length;
+      return { orc, totalItens, itensPendentes };
+    })
+    .filter(({ itensPendentes }) => itensPendentes > 0)
+    .filter(({ orc }) => {
+      const entrega = orc.pedido_entrega_em;
+      if (entregaDe && (!entrega || entrega < entregaDe)) return false;
+      if (entregaAte) {
+        const fim = new Date(entregaAte);
+        fim.setUTCHours(23, 59, 59, 999);
+        if (!entrega || entrega > fim) return false;
+      }
+      if (!busca) return true;
+      const alvo = normalizarBusca([
+        orc.gc_pedido_codigo,
+        orc.gc_codigo,
+        orc.gc_orcamento_id,
+        orc.nome_cliente,
+        orc.loja?.nome,
+        orc.usuario?.nome,
+      ].filter(Boolean).join(' '));
+      return alvo.includes(busca);
+    });
+
+  pendentes.sort((a, b) => {
+    const ea = a.orc.pedido_entrega_em ? new Date(a.orc.pedido_entrega_em).getTime() : Number.MAX_SAFE_INTEGER;
+    const eb = b.orc.pedido_entrega_em ? new Date(b.orc.pedido_entrega_em).getTime() : Number.MAX_SAFE_INTEGER;
+    return ea - eb;
+  });
+
+  res.json({
+    total: pendentes.length,
+    pedidos: pendentes.map(({ orc, totalItens, itensPendentes }) => ({
+      id: orc.id,
+      tipo_produto: orc.tipo_produto,
+      nome_cliente: orc.nome_cliente,
+      gc_codigo: orc.gc_codigo,
+      gc_orcamento_id: orc.gc_orcamento_id,
+      gc_pedido_codigo: orc.gc_pedido_codigo,
+      pedido_confirmado_em: orc.pedido_confirmado_em,
+      pedido_entrega_em: orc.pedido_entrega_em,
+      valor_final: orc.valor_final,
+      loja_nome: orc.loja?.nome ?? null,
+      vendedor_nome: orc.usuario?.nome ?? null,
+      total_itens: totalItens,
+      itens_pendentes: itensPendentes,
+    })),
+  });
+}
