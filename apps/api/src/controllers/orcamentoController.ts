@@ -14,7 +14,7 @@ import { componenteInstalacao } from '../services/calc/instalacaoCalc';
 import { valorComRt, componenteRt } from '../services/calc/rtCalc';
 import { valorComDesconto, componenteDesconto } from '../services/calc/descontoCalc';
 import { encontrarCalculadora, exigeLarguraTecido } from '../services/calc/calculadoras';
-import { verificarAcessoCalculadora, clienteGcDaRevenda } from '../lib/permissaoRevenda';
+import { verificarAcessoCalculadora, clienteGcDaRevenda, resolverDescontoPct } from '../lib/permissaoRevenda';
 
 import { indiceInstalacoes } from '../services/gc/instalacao';
 import {
@@ -464,8 +464,11 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   }
   // Desconto da revenda (embutido, análogo ao RT mas reduzindo o valor): fixo por
   // usuário, salvo no orçamento para o reenvio reproduzir o mesmo % mesmo que o
-  // admin altere o desconto da revenda depois.
-  const descontoPct = sessao.perfil === 'revenda' ? Math.max(0, Math.min(99, Number(sessao.desconto_percentual) || 0)) : 0;
+  // admin altere o desconto da revenda depois. Vendedor/admin: detectado
+  // automaticamente pelo cliente escolhido (se vinculado a uma revenda), a menos
+  // que o vendedor desligue pra este orçamento (b.desconto_revenda_desativado).
+  const descontoRevendaDesativado = b.desconto_revenda_desativado === true;
+  const { pct: descontoPct } = await resolverDescontoPct(sessao, gcClienteId, descontoRevendaDesativado);
   if (descontoPct > 0) {
     for (const p of preparados) {
       p.valor_final = valorComDesconto(p.valor_final, descontoPct);
@@ -481,7 +484,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   const valorTotal = roundHalfUp(preparados.reduce((s, p) => s + p.valor_final, 0));
 
   // Entrada bruta — permite reabrir o rascunho na calculadora (tipo + instalação + RT).
-  const entradaJson = { tipo: primeiro.tipo, itens: itensEntrada, rt_pct: rtPct, desconto_pct: descontoPct } as unknown as Prisma.InputJsonValue;
+  const entradaJson = { tipo: primeiro.tipo, itens: itensEntrada, rt_pct: rtPct, desconto_pct: descontoPct, desconto_revenda_desativado: descontoRevendaDesativado } as unknown as Prisma.InputJsonValue;
 
   // Grava: cria novo ou atualiza o rascunho em edição (mesmo registro).
   const persistir = (data: Prisma.OrcamentoUncheckedCreateInput) =>

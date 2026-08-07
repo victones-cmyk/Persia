@@ -5,6 +5,7 @@ import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { buscarClientes, criarClienteRapido } from '../services/gc/clientes';
+import { buscarRevendaPorClienteGc } from '../lib/permissaoRevenda';
 import { env } from '../config/env';
 
 const router = Router();
@@ -17,6 +18,21 @@ router.get('/clientes/:id/editar', (req: Request, res: Response) => {
   }
   const url = env.GC_CLIENTE_URL_TEMPLATE.replace('{id}', encodeURIComponent(id));
   res.redirect(url);
+});
+
+// GET /api/gc/clientes/:id/revenda — cliente do GC está vinculado a uma revenda?
+// Usado pelo vendedor/admin pra detectar automaticamente o desconto ao escolher o
+// cliente no orçamento. Restrito a admin/vendedor: uma revenda logada não precisa
+// (o desconto dela já vem da própria sessão) e não deve ver o % de outra revenda.
+router.get('/clientes/:id/revenda', async (req: Request, res: Response) => {
+  const sessao = req.session.usuario!;
+  if (sessao.perfil === 'revenda') {
+    throw new AppError(403, 'ACESSO_NEGADO', 'Não disponível para o perfil revenda.');
+  }
+  const id = String(req.params.id ?? '').trim();
+  if (!id) throw new AppError(400, 'CLIENTE_INVALIDO', 'Cliente inválido.');
+  const revenda = await buscarRevendaPorClienteGc(id);
+  res.json({ revenda });
 });
 
 // GET /api/gc/clientes?q=termo — busca de clientes (frontend faz debounce 300ms).

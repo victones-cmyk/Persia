@@ -4,6 +4,7 @@
 // qual está atrelada (nunca escolhe outro cliente). admin/vendedor não são afetados.
 
 import { AppError } from '../middleware/errorHandler';
+import { prisma } from './prisma';
 
 export const SECOES_CALCULADORA = ['persiana', 'cortina', 'trilho', 'avulso'] as const;
 export type SecaoCalculadora = (typeof SECOES_CALCULADORA)[number];
@@ -31,4 +32,58 @@ export function clienteGcDaRevenda(sessao: SessaoRevenda): string {
     throw new AppError(400, 'SEM_CLIENTE_VINCULADO', 'Sua revenda ainda não tem um cliente do GestãoClick vinculado. Contate o administrador.');
   }
   return sessao.gc_cliente_vinculado_id;
+}
+
+export interface RevendaDoCliente {
+  id: string;
+  nome: string;
+  desconto_percentual: number;
+}
+
+/** Revenda (se houver) vinculada a um cliente do GC — usado pra detectar automaticamente
+ * o desconto quando um vendedor/admin monta o orçamento em nome desse cliente. */
+export async function buscarRevendaPorClienteGc(gcClienteId: string): Promise<RevendaDoCliente | null> {
+  const revenda = await prisma.usuario.findFirst({
+    where: { perfil: 'revenda', ativo: true, gc_cliente_vinculado_id: gcClienteId },
+    select: { id: true, nome: true, desconto_percentual: true },
+  });
+  if (!revenda) return null;
+  return { id: revenda.id, nome: revenda.nome, desconto_percentual: Number(revenda.desconto_percentual) || 0 };
+}
+
+export interface DescontoResolvido {
+  pct: number;
+  revenda_detectada_id: string | null;
+  revenda_detectada_nome: string | null;
+}
+
+/**
+ * Desconto embutido no orçamento (RN análoga ao RT, mas reduzindo o valor):
+ * - Revenda logada: sempre o desconto dela mesma (comportamento original).
+ * - Vendedor/admin: se o cliente escolhido está vinculado a uma revenda, aplica o
+ *   desconto dela automaticamente — a menos que `desativado` (o vendedor desligou
+ *   pra este orçamento específico, ex.: cliente também compra no varejo).
+ */
+export async function resolverDescontoPct(
+  sessao: SessaoRevenda & { desconto_percentual?: unknown },
+  gcClienteId: string | null,
+  desativado: boolean,
+): Promise<DescontoResolvido> {
+  if (sessao.perfil === 'revenda') {
+    return {
+      pct: Math.max(0, Math.min(99, Number(sessao.desconto_percentual) || 0)),
+      revenda_detectada_id: null,
+      revenda_detectada_nome: null,
+    };
+  }
+  if (desativado || !gcClienteId) {
+    return { pct: 0, revenda_detectada_id: null, revenda_detectada_nome: null };
+  }
+  const revenda = await buscarRevendaPorClienteGc(gcClienteId);
+  if (!revenda) return { pct: 0, revenda_detectada_id: null, revenda_detectada_nome: null };
+  return {
+    pct: Math.max(0, Math.min(99, revenda.desconto_percentual)),
+    revenda_detectada_id: revenda.id,
+    revenda_detectada_nome: revenda.nome,
+  };
 }

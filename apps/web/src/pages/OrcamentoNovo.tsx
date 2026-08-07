@@ -89,6 +89,18 @@ export function OrcamentoNovo() {
     return rascunhoLocal?.cliente ? { id: rascunhoLocal.cliente.id, nome: rascunhoLocal.cliente.nome, tipo_pessoa: '', documento: null } : null;
   });
   const [nomeClienteRevenda, setNomeClienteRevenda] = useState('');
+  // Cliente escolhido (por vendedor/admin) está vinculado a uma revenda? Se sim, o
+  // desconto dela é aplicado automaticamente — com opção de desligar só neste orçamento.
+  const [revendaDoCliente, setRevendaDoCliente] = useState<{ id: string; nome: string; desconto_percentual: number } | null>(null);
+  const [descontoRevendaDesativado, setDescontoRevendaDesativado] = useState(false);
+  useEffect(() => {
+    if (ehRevenda || !cliente?.id) { setRevendaDoCliente(null); return; }
+    let vivo = true;
+    api.get<{ revenda: { id: string; nome: string; desconto_percentual: number } | null }>(`/gc/clientes/${encodeURIComponent(cliente.id)}/revenda`)
+      .then((r) => { if (vivo) setRevendaDoCliente(r.revenda); })
+      .catch(() => { if (vivo) setRevendaDoCliente(null); });
+    return () => { vivo = false; };
+  }, [ehRevenda, cliente?.id]);
   const [resultado, setResultado] = useState<OrcamentoCalculado | null>(null); // persiana
   const [cortinaEstado, setCortinaEstado] = useState<CortinaOrcamentoEstado>(ESTADO_CORTINA_VAZIO);
   const [trilhoEstado, setTrilhoEstado] = useState<ItensExtrasEstado>(ESTADO_EXTRA_VAZIO);
@@ -174,7 +186,7 @@ export function OrcamentoNovo() {
   const onDirtyCortina = useCallback((sujo: boolean) => { cortinaSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
   const onDirtyTrilho = useCallback((sujo: boolean) => { trilhoSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
   const onDirtyAvulso = useCallback((sujo: boolean) => { avulsoSujoRef.current = sujo; atualizarDirty(); agendarSalvar(); }, [agendarSalvar, atualizarDirty]);
-  const onSelecionarCliente = useCallback((c: ClienteResumo | null) => { setCliente(c); agendarSalvar(); }, [agendarSalvar]);
+  const onSelecionarCliente = useCallback((c: ClienteResumo | null) => { setCliente(c); setDescontoRevendaDesativado(false); agendarSalvar(); }, [agendarSalvar]);
   const onSelecionarLoja = useCallback((id: string) => {
     lojaIdRef.current = id;
     setLojaId(id);
@@ -232,11 +244,12 @@ export function OrcamentoNovo() {
         }
         setCliente(o.gc_cliente_id ? { id: o.gc_cliente_id, nome: o.nome_cliente, tipo_pessoa: '', documento: null } : null);
         setLojaId(o.loja_id ?? '');
-        const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[]; trilhos_especiais?: ProdutoExtraSnap[]; produtos_avulsos?: ProdutoExtraSnap[]; rt_pct?: number } | null;
+        const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[]; trilhos_especiais?: ProdutoExtraSnap[]; produtos_avulsos?: ProdutoExtraSnap[]; rt_pct?: number; desconto_revenda_desativado?: boolean } | null;
         const ehMisto = o.tipo_produto === 'misto';
         const ehCortina = o.tipo_produto === 'cortina';
         const itemFoco = Number(itemFocoParam);
         setRt(entrada?.rt_pct ? String(entrada.rt_pct) : '');
+        setDescontoRevendaDesativado(Boolean(entrada?.desconto_revenda_desativado));
 
         const novaOrdem: Secao[] = [];
         let foco: FocoEdicaoItem = null;
@@ -335,7 +348,11 @@ export function OrcamentoNovo() {
   const fatorRtUi = rtNum > 0 ? 1 / (1 - rtNum / 100) : 1;
   // Desconto da revenda: espelha o cálculo do servidor (RT primeiro, desconto depois,
   // cada etapa arredondada) só pra a prévia bater com o valor que será salvo/enviado.
-  const descontoNum = ehRevenda ? Math.max(0, Math.min(99, Number(usuario?.desconto_percentual) || 0)) : 0;
+  // Vendedor/admin: aplicado automaticamente quando o cliente escolhido é vinculado a
+  // uma revenda, a menos que desligado pra este orçamento.
+  const descontoNum = ehRevenda
+    ? Math.max(0, Math.min(99, Number(usuario?.desconto_percentual) || 0))
+    : (revendaDoCliente && !descontoRevendaDesativado ? Math.max(0, Math.min(99, revendaDoCliente.desconto_percentual)) : 0);
   const fatorDescontoUi = descontoNum > 0 ? 1 - descontoNum / 100 : 1;
   const comRt = (v: number) => roundHalfUp(v * fatorRtUi);
   const grossItem = (v: number) => {
@@ -395,6 +412,7 @@ export function OrcamentoNovo() {
         rt_pct: rtNum,
         ...(usuario?.perfil === 'admin' ? { loja_id: lojaId || undefined } : {}),
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: ehRevenda ? nomeClienteRevenda : cliente.nome } : {}),
+        ...(!ehRevenda && revendaDoCliente ? { desconto_revenda_desativado: descontoRevendaDesativado } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
         ...(editarId ? { editar_id: editarId } : {}),
       };
@@ -519,6 +537,23 @@ export function OrcamentoNovo() {
               <>
                 <label className="form-label">Cliente <span className="label-optional">(obrigatório para enviar ao GestãoClick)</span></label>
                 <ClienteSearch selecionado={cliente} onSelecionar={onSelecionarCliente} />
+                {revendaDoCliente && (
+                  <div className="alert alert-info mt-2 text-sm-ui">
+                    <div>
+                      Cliente é a revenda <strong>{revendaDoCliente.nome}</strong> — desconto de{' '}
+                      <strong>{revendaDoCliente.desconto_percentual.toLocaleString('pt-BR')}%</strong>{' '}
+                      {descontoRevendaDesativado ? 'não será aplicado neste orçamento.' : 'aplicado automaticamente neste orçamento.'}
+                    </div>
+                    <label className="flex items-center gap-2 mt-2" style={{ cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={descontoRevendaDesativado}
+                        onChange={(e) => { setDescontoRevendaDesativado(e.target.checked); agendarSalvar(); }}
+                      />
+                      Não aplicar o desconto da revenda neste orçamento
+                    </label>
+                  </div>
+                )}
               </>
             )}
           </div>

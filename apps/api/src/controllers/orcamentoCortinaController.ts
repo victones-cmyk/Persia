@@ -15,7 +15,7 @@ import { indiceInstalacoes } from '../services/gc/instalacao';
 import { quantidadeInstalacaoCortina } from '../services/calc/instalacaoCalc';
 import { valorComRt } from '../services/calc/rtCalc';
 import { valorComDesconto } from '../services/calc/descontoCalc';
-import { verificarAcessoCalculadora, clienteGcDaRevenda } from '../lib/permissaoRevenda';
+import { verificarAcessoCalculadora, clienteGcDaRevenda, resolverDescontoPct } from '../lib/permissaoRevenda';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { criarOrcamento as gcCriarOrcamento, montarPayload, type LinhaProdutoGc, type NovoOrcamentoGc } from '../services/gc/orcamentos';
@@ -253,7 +253,10 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   }
   // Desconto da revenda (embutido, análogo ao RT mas reduzindo o valor). Fixo por
   // usuário; salvo no orçamento para o reenvio reproduzir o mesmo % depois.
-  const descontoPct = sessao.perfil === 'revenda' ? Math.max(0, Math.min(99, Number(sessao.desconto_percentual) || 0)) : 0;
+  // Vendedor/admin: detectado automaticamente pelo cliente escolhido, a menos que
+  // desligado pra este orçamento (b.desconto_revenda_desativado).
+  const descontoRevendaDesativado = b.desconto_revenda_desativado === true;
+  const { pct: descontoPct } = await resolverDescontoPct(sessao, gcClienteId, descontoRevendaDesativado);
   if (descontoPct > 0) {
     for (const p of preparadas) {
       p.valor_total = valorComDesconto(p.valor_total, descontoPct);
@@ -278,7 +281,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
     tipo_produto: 'cortina' as const,
     usuario_id: editarOrc?.usuario_id ?? sessao.id,
     loja_id: loja.id,
-    entrada_json: { cortinas: cortinasEntrada, rt_pct: rtPct, desconto_pct: descontoPct } as unknown as Prisma.InputJsonValue,
+    entrada_json: { cortinas: cortinasEntrada, rt_pct: rtPct, desconto_pct: descontoPct, desconto_revenda_desativado: descontoRevendaDesativado } as unknown as Prisma.InputJsonValue,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
     gc_cliente_id: gcClienteId,
     tecido_codigo_gc: primeira.tecido_id,

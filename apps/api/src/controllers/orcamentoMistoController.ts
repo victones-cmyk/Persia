@@ -21,7 +21,7 @@ import {
 import { prepararCortina, recalcularCortinasDeEntrada, type CortinaEntrada, type CortinaPreparada } from './orcamentoCortinaController';
 import { valorComRt, componenteRt } from '../services/calc/rtCalc';
 import { valorComDesconto, componenteDesconto } from '../services/calc/descontoCalc';
-import { verificarAcessoCalculadora, clienteGcDaRevenda } from '../lib/permissaoRevenda';
+import { verificarAcessoCalculadora, clienteGcDaRevenda, resolverDescontoPct } from '../lib/permissaoRevenda';
 import {
   prepararProdutosAvulsos,
   prepararTrilhosEspeciais,
@@ -132,7 +132,10 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   }
   // Desconto da revenda (embutido, análogo ao RT mas reduzindo o valor). Fixo por
   // usuário; vale para tudo que ela orçar (persiana, cortina, trilhos e avulsos).
-  const descontoPct = sessao.perfil === 'revenda' ? Math.max(0, Math.min(99, Number(sessao.desconto_percentual) || 0)) : 0;
+  // Vendedor/admin: detectado automaticamente pelo cliente escolhido, a menos que
+  // desligado pra este orçamento (b.desconto_revenda_desativado).
+  const descontoRevendaDesativado = b.desconto_revenda_desativado === true;
+  const { pct: descontoPct } = await resolverDescontoPct(sessao, gcClienteId, descontoRevendaDesativado);
   if (descontoPct > 0) {
     for (const p of persPrep) {
       p.valor_final = valorComDesconto(p.valor_final, descontoPct);
@@ -166,7 +169,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
     ...extrasPrep.map((p) => ({ gc_produto_id: p.tipo === 'produto_avulso' ? p.produto_id : null, nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, quantidade: p.tipo === 'produto_avulso' ? p.quantidade : undefined, valor_final: p.valor_final, valor_custo: p.valor_custo })),
   ];
 
-  const entradaJson = { tipo: persPrep[0]?.tipo ?? null, itens: itensEntrada, cortinas: cortinasEntrada, trilhos_especiais: trilhosEntrada, produtos_avulsos: avulsosEntrada, rt_pct: rtPct, desconto_pct: descontoPct } as unknown as Prisma.InputJsonValue;
+  const entradaJson = { tipo: persPrep[0]?.tipo ?? null, itens: itensEntrada, cortinas: cortinasEntrada, trilhos_especiais: trilhosEntrada, produtos_avulsos: avulsosEntrada, rt_pct: rtPct, desconto_pct: descontoPct, desconto_revenda_desativado: descontoRevendaDesativado } as unknown as Prisma.InputJsonValue;
   const primeiro = persPrep[0] ?? null;
   const primeiraCortina = cortPrep[0]?.snapshot as { largura_m?: number; altura_m?: number; nome_produto?: string } | undefined;
   const primeiroExtra = extrasPrep[0] ?? null;
