@@ -339,6 +339,11 @@ export function OrcamentoNovo() {
   const temAvulso = avulsoEstado.count > 0;
   const avulsoTotal = avulsoEstado.total;
   const calculandoOrcamento = persianaCalculando || cortinaEstado.calculando || trilhoEstado.calculando === true;
+  // Nenhum valor deve ser mostrado ao vendedor/cliente enquanto alguma seção incluída
+  // ainda não está completa — um total parcial (ex.: cortina sem acessório escolhido)
+  // passaria uma informação de preço errada.
+  const algumaSecaoIncompleta = (temPersiana && persianaIncompleto) || (temCortina && !cortinaCompletas)
+    || (incluiTrilho && !trilhoEstado.completos) || (incluiAvulso && !avulsoEstado.completos);
 
   const algoPreenchido = temPersiana || temCortina || temTrilho || temAvulso;
   // Instalação já está embutida no valor de cada item (Victor 26/06/2026).
@@ -677,7 +682,7 @@ export function OrcamentoNovo() {
               <div className="flex justify-between text-xs-ui">
                 <span className="text-neutral-600">Cortinas {temCortina ? `(${cortinaEstado.count})` : ''}{temCortina && !cortinaCompletas ? <span className="text-warning"> (incompleto)</span> : null}</span>
                 <span className="font-mono tabular-nums text-neutral-800">
-                  {cortinaEstado.calculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : formatBRL(ehRevenda ? cortinaTotalRt : cortinaTotal)}
+                  {cortinaEstado.calculando ? <><FontAwesomeIcon icon={faSpinner} spin /> Calculando...</> : (temCortina && !cortinaCompletas) ? '—' : formatBRL(ehRevenda ? cortinaTotalRt : cortinaTotal)}
                 </span>
               </div>
               <div className="flex justify-between text-xs-ui">
@@ -710,10 +715,10 @@ export function OrcamentoNovo() {
             {!(rtNum > 0 && algoPreenchido) && <div className="mb-3" />}
 
             <label className="form-label" htmlFor="total-misto">{ehRevenda ? 'Seu custo' : 'Valor total'}</label>
-            <input id="total-misto" className="input input-mono mb-4" style={{ color: 'var(--color-success)', fontSize: 20 }}
-              value={calculandoOrcamento ? 'Calculando...' : formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
+            <input id="total-misto" className="input input-mono mb-4" style={{ color: algumaSecaoIncompleta ? 'var(--color-warning-text)' : 'var(--color-success)', fontSize: 20 }}
+              value={calculandoOrcamento ? 'Calculando...' : algumaSecaoIncompleta ? 'Incompleto' : formatBRL(totalGeral)} readOnly tabIndex={-1} onClick={(e) => e.currentTarget.select()} />
 
-            {markupNum > 0 && algoPreenchido && !calculandoOrcamento && (
+            {markupNum > 0 && algoPreenchido && !calculandoOrcamento && !algumaSecaoIncompleta && (
               <div className="mb-4">
                 <label className="form-label">Preço sugerido ao seu cliente</label>
                 <input className="input input-mono" style={{ fontSize: 16 }}

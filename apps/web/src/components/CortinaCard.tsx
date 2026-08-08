@@ -484,11 +484,14 @@ export function CortinaCard({
           <span className="truncate text-sm-ui font-semibold text-neutral-800" title={nomeProdutoPreview}>{nomeProdutoPreview}</span>
           {calc && calc.n_camadas > 1 && <span className="badge" style={{ background: 'var(--neutral-200)' }}>{calc.n_camadas} camadas</span>}
           {calculando && <FontAwesomeIcon icon={faSpinner} spin className="text-neutral-400" />}
+          {!calculando && !resumo.completo && (
+            <span className="badge badge-warning" title="Falta preencher algum campo obrigatório ou escolher o produto de algum acessório">(incompleto)</span>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           {minimizado && (
             <span className="font-mono tabular-nums text-xs-ui font-semibold text-neutral-800">
-              {calculando ? 'Calculando...' : formatBRL(roundHalfUp(resumo.total * fatorDescontoCard))}
+              {calculando ? 'Calculando...' : resumo.completo ? formatBRL(roundHalfUp(resumo.total * fatorDescontoCard)) : '—'}
             </span>
           )}
           {minimizado && onDuplicar && (
