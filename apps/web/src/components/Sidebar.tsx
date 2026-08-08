@@ -25,6 +25,7 @@ import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { useAuth } from '../hooks/useAuth';
 import { useNavGuard } from '../hooks/useNavGuard';
 import { useAprovacoesPendentes } from '../hooks/useAprovacoesPendentes';
+import { useOsPendentesImpressao } from '../hooks/useOsPendentesImpressao';
 import { ConfirmModal } from './ConfirmModal';
 
 interface Item {
@@ -33,6 +34,7 @@ interface Item {
   icon: IconDefinition;
   end?: boolean;
   badge?: number;
+  badgeTitulo?: string;
 }
 
 const ITENS_GERAIS: Item[] = [
@@ -80,7 +82,7 @@ function LinkLateral({ item, onAvisoNaoSalvo }: { item: Item; onAvisoNaoSalvo: (
     >
       <FontAwesomeIcon icon={item.icon} fixedWidth />
       <span>{item.label}</span>
-      {Boolean(item.badge) && <BadgeContador n={item.badge!} />}
+      {Boolean(item.badge) && <BadgeContador n={item.badge!} titulo={item.badgeTitulo ?? `${item.badge} pendente(s)`} />}
     </NavLink>
   );
 }
@@ -114,7 +116,7 @@ function AbaMobile({ item, onAvisoNaoSalvo }: { item: Item; onAvisoNaoSalvo: () 
   );
 }
 
-function BadgeContador({ n }: { n: number }) {
+function BadgeContador({ n, titulo }: { n: number; titulo: string }) {
   return (
     <span
       style={{
@@ -122,7 +124,7 @@ function BadgeContador({ n }: { n: number }) {
         fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         background: 'var(--color-error)', color: '#fff',
       }}
-      title={`${n} aprovação(ões) de diferença de medição pendente(s)`}
+      title={titulo}
     >
       {n}
     </span>
@@ -187,11 +189,17 @@ export function Sidebar() {
   const [avisoAberto, setAvisoAberto] = useState(false);
   const [maisAberto, setMaisAberto] = useState(false);
   const aprovacoesPendentes = useAprovacoesPendentes(isAdmin);
+  const osPendentesImpressao = useOsPendentesImpressao(Boolean(usuario));
 
-  const itensGerais = ITENS_GERAIS.map((item) =>
-    item.to === '/vendas' && aprovacoesPendentes.length > 0
-      ? { ...item, badge: aprovacoesPendentes.length }
-      : item);
+  const itensGerais = ITENS_GERAIS.map((item) => {
+    if (item.to === '/vendas' && aprovacoesPendentes.length > 0) {
+      return { ...item, badge: aprovacoesPendentes.length, badgeTitulo: `${aprovacoesPendentes.length} aprovação(ões) de diferença de medição pendente(s)` };
+    }
+    if (item.to === '/producao' && osPendentesImpressao > 0) {
+      return { ...item, badge: osPendentesImpressao, badgeTitulo: `${osPendentesImpressao} ordem(ns) de produção pendente(s) de impressão` };
+    }
+    return item;
+  });
 
   const itensExtras = isAdmin ? ITENS_ADMIN : isRevenda ? ITENS_REVENDA : [];
   // Novo Orçamento tem sua própria barra fixa de total/ações no rodapé — a barra de
