@@ -119,6 +119,17 @@ interface AbsorcaoMedicao {
   motivo?: string;
 }
 
+/** Medidas conferidas usadas para gerar a venda complementar — guardadas para que
+ *  a tela restaure a medição ao reabrir (ver medicaoVendaAjuste). Sem isso, fechar
+ *  o modal depois de pagar a diferença perdia as medidas digitadas: reabrir voltava
+ *  a mostrar as medidas originais e a OS saía com a medida errada. */
+interface MedicaoVendaAjuste {
+  medicoes: AjusteMedida[];
+  previa: Omit<PreviaMedicao, 'itens'>;
+  gc_pedido_id: string;
+  gc_pedido_codigo: string | null;
+}
+
 type ItemProducaoSnapshotTecnico = ItemProducaoSnapshot & {
   tamanho_barra?: number | null;
   tipo_barra?: string | null;
@@ -146,6 +157,14 @@ function medicaoAbsorcao(orc: Pick<Orcamento, 'resposta_gc'>): AbsorcaoMedicao |
 
 function vendaAjusteMedicaoGerada(orc: Pick<Orcamento, 'resposta_gc'>): boolean {
   return Boolean(respostaGcObj(orc).venda_ajuste_medicao);
+}
+
+function medicaoVendaAjuste(orc: Pick<Orcamento, 'resposta_gc'>): MedicaoVendaAjuste | null {
+  const raw = respostaGcObj(orc).medicao_venda_ajuste;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  if (!Array.isArray(obj.medicoes) || !obj.previa || typeof obj.previa !== 'object') return null;
+  return obj as unknown as MedicaoVendaAjuste;
 }
 
 function assinaturaMedicoes(medicoes: AjusteMedida[]): string {
@@ -613,6 +632,7 @@ export async function getProducaoOrcamento(req: Request, res: Response): Promise
       pedido_confirmado_em: orc.pedido_confirmado_em,
       pedido_entrega_em: orc.pedido_entrega_em,
       ajuste_medicao_gerado: vendaAjusteMedicaoGerada(orc),
+      medicao_venda_ajuste: medicaoVendaAjuste(orc),
       medicao_absorcao: medicaoAbsorcao(orc),
     },
     itens: itens.map((item, index) => ({
@@ -775,7 +795,8 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
     throw new AppError(409, 'AJUSTE_JA_GERADO', 'Este orçamento já possui venda complementar de medição técnica.');
   }
 
-  const previa = await recalcularMedicao(orc, validarMedicoes(req.body));
+  const medicoes = validarMedicoes(req.body);
+  const previa = await recalcularMedicao(orc, medicoes);
   if (!(previa.diferenca > 0)) {
     throw new AppError(400, 'SEM_DIFERENCA_POSITIVA', 'A venda complementar só é gerada quando existe diferença positiva.');
   }
@@ -822,7 +843,13 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
           ...respostaAtual,
           venda_ajuste_medicao: venda.resposta,
           payload_venda_ajuste_medicao: venda.payload,
-        } as Prisma.InputJsonValue,
+          medicao_venda_ajuste: {
+            medicoes,
+            previa: previaParaAbsorcao(previa),
+            gc_pedido_id: venda.gc_pedido_id,
+            gc_pedido_codigo: venda.gc_pedido_codigo,
+          },
+        } as unknown as Prisma.InputJsonValue,
         erro_gc: null,
       },
     });

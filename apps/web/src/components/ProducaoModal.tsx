@@ -29,6 +29,7 @@ interface ItemProducao {
 interface ProducaoPayload {
   orcamento: OrcamentoListItem & {
     ajuste_medicao_gerado?: boolean;
+    medicao_venda_ajuste?: { medicoes: MedicaoItem[]; previa: PreviaMedicao; gc_pedido_id: string; gc_pedido_codigo: string | null } | null;
     medicao_absorcao?: MedicaoAbsorcao | null;
   };
   itens: ItemProducao[];
@@ -208,11 +209,15 @@ export function ProducaoModal({
         tamanhoBarra: numeroCmInput(item.tamanho_barra),
         tipoBarra: item.tipo_barra === 'simples' || item.tipo_barra === 'dupla' ? item.tipo_barra : '',
       } as MedidaFinal]));
-      const absorcao = r.orcamento.medicao_absorcao;
-      const medidasComSolicitacao = absorcao && absorcao.status !== 'reprovada'
+      // Camadas de restauração: base (medida original) -> venda complementar já paga
+      // -> solicitação de absorção (mais recente vence). Sem isso, fechar o modal
+      // depois de pagar a diferença perdia a medida conferida — reabrir mostrava a
+      // medida original de novo e a OS saía com o valor errado.
+      const vendaAjuste = r.orcamento.medicao_venda_ajuste;
+      const medidasComVendaAjuste = vendaAjuste
         ? {
           ...medidasBase,
-          ...Object.fromEntries(absorcao.medicoes.map((m) => [m.index, {
+          ...Object.fromEntries(vendaAjuste.medicoes.map((m) => [m.index, {
             largura: numeroInput(m.largura),
             altura: numeroInput(m.altura),
             desconto: m.desconto ?? medidasBase[m.index]?.desconto ?? 'sem_desconto',
@@ -221,12 +226,25 @@ export function ProducaoModal({
           }])),
         }
         : medidasBase;
+      const absorcao = r.orcamento.medicao_absorcao;
+      const medidasComSolicitacao = absorcao && absorcao.status !== 'reprovada'
+        ? {
+          ...medidasComVendaAjuste,
+          ...Object.fromEntries(absorcao.medicoes.map((m) => [m.index, {
+            largura: numeroInput(m.largura),
+            altura: numeroInput(m.altura),
+            desconto: m.desconto ?? medidasBase[m.index]?.desconto ?? 'sem_desconto',
+            tamanhoBarra: m.tamanho_barra != null ? numeroCmInput(m.tamanho_barra) : medidasBase[m.index]?.tamanhoBarra ?? '',
+            tipoBarra: m.tipo_barra ?? medidasBase[m.index]?.tipoBarra ?? '',
+          }])),
+        }
+        : medidasComVendaAjuste;
       setDados(r);
       setPedido(r.orcamento.gc_pedido_codigo ?? '');
       setEntrega(r.orcamento.pedido_entrega_em ? r.orcamento.pedido_entrega_em.slice(0, 10) : '');
       setSelecionados(r.itens.filter((it) => !it.ordem).map((it) => it.index));
       setMedidasFinais(medidasComSolicitacao);
-      setPrevia(absorcao && absorcao.status !== 'reprovada' ? absorcao.previa : null);
+      setPrevia(absorcao && absorcao.status !== 'reprovada' ? absorcao.previa : vendaAjuste ? vendaAjuste.previa : null);
       setDiferencaAbsorvida(absorcao?.status === 'aprovada');
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao carregar os itens.');
@@ -457,9 +475,16 @@ export function ProducaoModal({
     setErro(null);
     setSucesso(null);
     try {
-      const r = await api.post<{ venda: { gc_pedido_codigo: string | null } }>(`/orcamentos/${orcamento.id}/producao/medicao/venda-ajuste`, { medicoes });
+      const r = await api.post<{ venda: { gc_pedido_id: string; gc_pedido_codigo: string | null }; previa: PreviaMedicao }>(`/orcamentos/${orcamento.id}/producao/medicao/venda-ajuste`, { medicoes });
       setSucesso(`Venda complementar criada no GestãoClick${r.venda.gc_pedido_codigo ? `: ${r.venda.gc_pedido_codigo}` : '.'}`);
-      setDados((atual) => atual ? { ...atual, orcamento: { ...atual.orcamento, ajuste_medicao_gerado: true } } : atual);
+      setDados((atual) => atual ? {
+        ...atual,
+        orcamento: {
+          ...atual.orcamento,
+          ajuste_medicao_gerado: true,
+          medicao_venda_ajuste: { medicoes, previa: r.previa, gc_pedido_id: r.venda.gc_pedido_id, gc_pedido_codigo: r.venda.gc_pedido_codigo },
+        },
+      } : atual);
       onAtualizar();
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao gerar venda complementar.');
@@ -1031,7 +1056,7 @@ export function ProducaoModal({
                 </div>
               </div>
             )}
-            {previa.diferenca > 0 && (
+            {previa.diferenca > 0 && !dados?.orcamento.ajuste_medicao_gerado && (
               <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
                 <span className="text-sm-ui text-neutral-700">Para cobrar a diferença, gere uma venda complementar no GestãoClick antes ou depois de liberar a OS.</span>
                 <button type="button" className="btn btn-warning btn-sm" disabled={gerandoAjuste} onClick={() => void gerarVendaAjuste()}>
@@ -1096,7 +1121,10 @@ export function ProducaoModal({
               </div>
             )}
             {dados?.orcamento.ajuste_medicao_gerado && (
-              <div className="text-sm-ui text-neutral-700 mt-2">Diferença já cobrada em venda complementar no GestãoClick. OS liberada.</div>
+              <div className="text-sm-ui text-neutral-700 mt-2">
+                Diferença já cobrada em venda complementar no GestãoClick
+                {dados.orcamento.medicao_venda_ajuste?.gc_pedido_codigo ? ` (nº ${dados.orcamento.medicao_venda_ajuste.gc_pedido_codigo})` : ''}. OS liberada.
+              </div>
             )}
           </div>
         )}
