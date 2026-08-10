@@ -308,6 +308,18 @@ export function ProducaoModal({
     return dados?.orcamento.status === 'enviado' && pedido.trim().length > 0 && entrega.trim().length > 0 && selecionados.length > 0 && diferencaAutorizada;
   }, [dados?.orcamento.status, pedido, entrega, selecionados.length, diferencaAutorizada]);
 
+  // Explica por que o botão está bloqueado — sem isso o campo de entrega vazio (ou
+  // nenhum item selecionado) travava "Gerar OS" sem nenhuma pista visível do motivo.
+  const motivoBloqueio = useMemo(() => {
+    if (!dados || podeGerar) return null;
+    if (dados.orcamento.status !== 'enviado') return null; // já tem aviso próprio acima
+    if (!pedido.trim()) return 'Preencha o Nº do Pedido para liberar a OS.';
+    if (!entrega.trim()) return 'Preencha a Data de entrega para liberar a OS.';
+    if (selecionados.length === 0) return 'Selecione ao menos um produto para gerar a OS.';
+    if (!diferencaAutorizada) return 'Recalcule a diferença e cobre ou absorva o valor para liberar a OS.';
+    return null;
+  }, [dados, podeGerar, pedido, entrega, selecionados.length, diferencaAutorizada]);
+
   function tipoOrdem(ordem: OrdemProducao): 'persiana' | 'cortina' {
     const item = ordem.item_snapshot_json;
     if (ordem.tipo_produto === 'persiana') return 'persiana';
@@ -958,11 +970,12 @@ export function ProducaoModal({
               {recalculando ? 'Recalculando...' : 'Recalcular diferença'}
             </button>
             <button type="button" className="btn btn-default" onClick={onFechar}>Cancelar</button>
-            <button type="button" className="btn btn-success" disabled={!podeGerar || gerando} onClick={gerarOrdens}>
+            <button type="button" className="btn btn-success" disabled={!podeGerar || gerando} title={motivoBloqueio ?? undefined} onClick={gerarOrdens}>
               {gerando ? 'Gerando...' : 'Gerar OS'}
             </button>
           </div>
         </div>
+        {motivoBloqueio && <div className="text-xs-ui text-danger text-right mt-1">{motivoBloqueio}</div>}
         {previa && (
           <div className="mt-3" style={{ border: '1px solid #dee2e6', borderRadius: 3, padding: 12, background: '#f8f9fa' }}>
             <div className="flex flex-wrap justify-between gap-2">
