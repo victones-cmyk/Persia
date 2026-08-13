@@ -20,12 +20,14 @@ import {
   confirmarSaidaEstoque,
   criarOrdensProducao,
   decidirAbsorcaoMedicao,
+  desfazerOrdemProducao,
   gerarVendaAjusteMedicao,
   getProducaoOrcamento,
   imprimirEtiquetaOrdem,
   imprimirEtiquetasOrcamento,
   listarAprovacoesPendentesMedicao,
   listarOrdensProducao,
+  listarPedidosPendentesEstoque,
   listarPedidosSemOs,
   preverMedicaoProducao,
   preverSaidaEstoque,
@@ -51,6 +53,7 @@ router.get('/ordens-producao/:id/etiqueta.zpl', baixarZplEtiqueta);
 router.post('/ordens-producao/:id/imprimir-etiqueta', imprimirEtiquetaOrdem);
 router.get('/ordens-producao', listarOrdensProducao);
 router.get('/pedidos-sem-os', listarPedidosSemOs);
+router.get('/pendentes-estoque', listarPedidosPendentesEstoque);
 router.get('/producao/aprovacoes-pendentes', listarAprovacoesPendentesMedicao);
 // Antes das rotas /:id/* — "agenda" aqui é literal, não um id de orçamento.
 router.get('/agenda/vinculos', listarVinculosAgendaEmLote);
@@ -69,6 +72,7 @@ router.post('/:id/producao/medicao/solicitar-absorcao', solicitarAbsorcaoMedicao
 router.post('/:id/producao/medicao/decidir-absorcao', decidirAbsorcaoMedicao);
 router.post('/:id/gerar-venda', gerarVendaOrcamento);
 router.post('/:id/ordens-producao', criarOrdensProducao);
+router.delete('/:id/ordens-producao/:itemIndex', desfazerOrdemProducao);
 router.post('/:id/reenviar', reenviarOrcamento);
 router.post('/:id/cancelar', cancelarOrcamento);
 router.post('/:id/duplicar', duplicarOrcamento);

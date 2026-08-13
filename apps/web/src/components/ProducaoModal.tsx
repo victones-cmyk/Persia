@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBoxOpen, faEye, faFilePdf, faTag } from '@fortawesome/free-solid-svg-icons';
+import { faBoxOpen, faEye, faFilePdf, faRotateLeft, faTag } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import type { ItemSnapshot, OrcamentoListItem } from '../lib/orcamentoTypes';
 import { useAuth } from '../hooks/useAuth';
@@ -190,6 +190,7 @@ export function ProducaoModal({
   const [decidindoAbsorcao, setDecidindoAbsorcao] = useState<'aprovar' | 'reprovar' | null>(null);
   const [editandoIndex, setEditandoIndex] = useState<number | null>(null);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
+  const [desfazendoId, setDesfazendoId] = useState<string | null>(null);
   const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | null>(null);
   const [previaEtiqueta, setPreviaEtiqueta] = useState<EtiquetaPreviewOrdem | null>(null);
   const [estoqueModalAberto, setEstoqueModalAberto] = useState(false);
@@ -427,6 +428,24 @@ export function ProducaoModal({
       setErro(e instanceof ApiError ? e.message : 'Falha ao gerar as ordens.');
     } finally {
       setGerando(false);
+    }
+  }
+
+  async function desfazerOrdem(ordem: OrdemProducao) {
+    if (!orcamento) return;
+    if (!window.confirm(`Desfazer a OS ${ordem.codigo}? O item volta a ficar pendente para gerar de novo com as medidas corrigidas. Isso apaga a OS e a etiqueta já geradas para este item, se houver.`)) return;
+    setDesfazendoId(ordem.id);
+    setErro(null);
+    setSucesso(null);
+    try {
+      await api.del(`/orcamentos/${orcamento.id}/ordens-producao/${ordem.item_index}`);
+      setSucesso(`OS ${ordem.codigo} desfeita. O item está liberado para edição.`);
+      await carregar();
+      onAtualizar();
+    } catch (e) {
+      setErro(e instanceof ApiError ? e.message : 'Falha ao desfazer a ordem de produção.');
+    } finally {
+      setDesfazendoId(null);
     }
   }
 
@@ -690,6 +709,18 @@ export function ProducaoModal({
           >
             <FontAwesomeIcon icon={faTag} /> {imprimindoId === ordem.id ? '...' : 'Etiqueta'}
           </button>
+          {isAdmin && (
+            <button
+              type="button"
+              className="btn btn-danger btn-xs"
+              disabled={desfazendoId === ordem.id}
+              onClick={() => void desfazerOrdem(ordem)}
+              title="Apagar esta OS para liberar o item para edição de novo"
+              style={{ gridColumn: '1 / -1' }}
+            >
+              <FontAwesomeIcon icon={faRotateLeft} /> {desfazendoId === ordem.id ? '...' : 'Desfazer OS'}
+            </button>
+          )}
         </div>
       </div>
     );

@@ -12,6 +12,7 @@ import {
   faPlus,
   faFileInvoiceDollar,
   faIndustry,
+  faBoxOpen,
   faUsers,
   faClockRotateLeft,
   faSliders,
@@ -42,6 +43,7 @@ const ITENS_GERAIS: Item[] = [
   { to: '/orcamentos/novo', label: 'Novo Orçamento', icon: faPlus },
   { to: '/vendas', label: 'Vendas', icon: faFileInvoiceDollar, end: true },
   { to: '/producao', label: 'Produção', icon: faIndustry, end: true },
+  { to: '/baixa-estoque', label: 'Baixa de Estoque', icon: faBoxOpen, end: true },
 ];
 
 const ITENS_ADMIN: Item[] = [

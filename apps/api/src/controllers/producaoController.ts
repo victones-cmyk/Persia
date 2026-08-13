@@ -700,6 +700,38 @@ export async function criarOrdensProducao(req: Request, res: Response): Promise<
   res.status(201).json({ ordens: criadas });
 }
 
+/**
+ * Desfaz uma OS gerada por engano (ex.: vendedor clicou em "Gerar OS" sem corrigir a
+ * medida) — apaga o registro para que o item volte a ficar pendente e editável.
+ * Bloqueada se o estoque já foi baixado no GestãoClick: reverter isso exige correção
+ * manual lá, não é seguro desfazer automaticamente.
+ */
+export async function desfazerOrdemProducao(req: Request, res: Response): Promise<void> {
+  if (req.session.usuario?.perfil !== 'admin') {
+    throw new AppError(403, 'APENAS_ADMIN', 'Apenas administradores podem desfazer uma ordem de produção.');
+  }
+  const orc = await carregarOrcamentoAutorizado(req);
+  const itemIndex = Number(req.params.itemIndex);
+  if (!Number.isInteger(itemIndex) || itemIndex < 0) {
+    throw new AppError(400, 'ITEM_INVALIDO', 'Item inválido.');
+  }
+  const ordem = orc.ordens_producao.find((op) => op.item_index === itemIndex);
+  if (!ordem) throw new AppError(404, 'ORDEM_NAO_ENCONTRADA', 'Nenhuma ordem de produção encontrada para este item.');
+  if (ordem.baixado_estoque_em) {
+    throw new AppError(409, 'ESTOQUE_JA_BAIXADO', 'Esta OS já teve saída de estoque confirmada no GestãoClick. Corrija o estoque manualmente antes de desfazer.');
+  }
+
+  await prisma.ordemProducao.delete({ where: { id: ordem.id } });
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: req.session.usuario!.id,
+      acao: 'ordem_producao_desfeita',
+      detalhe: { orcamento_id: orc.id, item_index: itemIndex, ordem_id: ordem.id, codigo: ordem.codigo, status_anterior: ordem.status } as unknown as Prisma.InputJsonValue,
+    },
+  });
+  res.status(204).end();
+}
+
 export async function preverMedicaoProducao(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   validarOrcamentoParaProducao(orc);
@@ -1568,6 +1600,84 @@ export async function listarPedidosSemOs(req: Request, res: Response): Promise<v
       vendedor_nome: orc.usuario?.nome ?? null,
       total_itens: totalItens,
       itens_pendentes: itensPendentes,
+    })),
+  });
+}
+
+/** GET /api/orcamentos/pendentes-estoque — pedidos com ao menos 1 OS ainda sem
+ *  saída de estoque confirmada no GestãoClick (mesma tela usa EstoqueSaidaModal
+ *  por pedido para dar baixa). */
+export async function listarPedidosPendentesEstoque(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario;
+  if (!sessao) throw new AppError(401, 'NAO_AUTENTICADO', 'Sessão expirada.');
+
+  const entregaDe = dataFiltro(req.query.entrega_de);
+  const entregaAte = dataFiltro(req.query.entrega_ate);
+  const busca = normalizarBusca(req.query.q);
+
+  const orcamentos = await prisma.orcamento.findMany({
+    where: {
+      status: 'enviado',
+      ordens_producao: { some: { status: { not: 'cancelada' }, baixado_estoque_em: null } },
+      ...(sessao.perfil === 'admin' ? {} : { usuario_id: sessao.id }),
+    },
+    include: {
+      loja: { select: { nome: true } },
+      usuario: { select: { nome: true } },
+      ordens_producao: true,
+    },
+    orderBy: { pedido_entrega_em: 'asc' },
+    take: 500,
+  });
+
+  const pendentes = orcamentos
+    .map((orc) => ({
+      orc,
+      totalOrdens: orc.ordens_producao.filter((op) => op.status !== 'cancelada').length,
+      ordensPendentes: ordensPendentesDeBaixa(orc).length,
+    }))
+    .filter(({ ordensPendentes }) => ordensPendentes > 0)
+    .filter(({ orc }) => {
+      const entrega = orc.pedido_entrega_em;
+      if (entregaDe && (!entrega || entrega < entregaDe)) return false;
+      if (entregaAte) {
+        const fim = new Date(entregaAte);
+        fim.setUTCHours(23, 59, 59, 999);
+        if (!entrega || entrega > fim) return false;
+      }
+      if (!busca) return true;
+      const alvo = normalizarBusca([
+        orc.gc_pedido_codigo,
+        orc.gc_codigo,
+        orc.gc_orcamento_id,
+        orc.nome_cliente,
+        orc.loja?.nome,
+        orc.usuario?.nome,
+      ].filter(Boolean).join(' '));
+      return alvo.includes(busca);
+    });
+
+  pendentes.sort((a, b) => {
+    const ea = a.orc.pedido_entrega_em ? new Date(a.orc.pedido_entrega_em).getTime() : Number.MAX_SAFE_INTEGER;
+    const eb = b.orc.pedido_entrega_em ? new Date(b.orc.pedido_entrega_em).getTime() : Number.MAX_SAFE_INTEGER;
+    return ea - eb;
+  });
+
+  res.json({
+    total: pendentes.length,
+    pedidos: pendentes.map(({ orc, totalOrdens, ordensPendentes }) => ({
+      id: orc.id,
+      tipo_produto: orc.tipo_produto,
+      nome_cliente: orc.nome_cliente,
+      gc_codigo: orc.gc_codigo,
+      gc_orcamento_id: orc.gc_orcamento_id,
+      gc_pedido_codigo: orc.gc_pedido_codigo,
+      pedido_entrega_em: orc.pedido_entrega_em,
+      valor_final: orc.valor_final,
+      loja_nome: orc.loja?.nome ?? null,
+      vendedor_nome: orc.usuario?.nome ?? null,
+      total_ordens: totalOrdens,
+      ordens_pendentes: ordensPendentes,
     })),
   });
 }

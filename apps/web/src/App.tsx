@@ -11,6 +11,7 @@ import { OrcamentoNovo } from './pages/OrcamentoNovo';
 import { Orcamentos, Vendas } from './pages/Orcamentos';
 import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
 import { Producao } from './pages/Producao';
+import { BaixaEstoque } from './pages/BaixaEstoque';
 import { Markup } from './pages/Markup';
 import { AdminUsuarios } from './pages/admin/AdminUsuarios';
 import { AdminLog } from './pages/admin/AdminLog';
@@ -36,6 +37,7 @@ function App() {
             <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
             <Route path="/vendas" element={<Vendas />} />
             <Route path="/producao" element={<Producao />} />
+            <Route path="/baixa-estoque" element={<BaixaEstoque />} />
 
             <Route element={<AdminRoute />}>
               <Route path="/admin/usuarios" element={<AdminUsuarios />} />
