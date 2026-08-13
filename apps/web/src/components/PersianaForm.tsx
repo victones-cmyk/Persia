@@ -487,8 +487,9 @@ export function PersianaForm({
           const vertical = ehVertical(it);
           const opcoesComando = vertical ? COMANDOS_VERTICAL : COMANDOS;
           const opcoesAcionamento = opcoesAcionamentoDaCalculadora(calculadoraDoItem(it));
+          const incompleto = !itemValido(it);
           return (
-          <div key={it.id} className="rounded-sm border border-neutral-300 p-3" style={{ background: 'var(--neutral-50)' }}>
+          <div key={it.id} className={incompleto ? 'rounded-sm border-2 border-dashed border-error p-3' : 'rounded-sm border border-neutral-300 p-3'} style={{ background: 'var(--neutral-50)' }}>
             <div className={`flex items-center justify-between ${minimizado ? 'mb-0' : 'mb-2'}`}>
               <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
                 <button
@@ -502,6 +503,9 @@ export function PersianaForm({
                 </button>
                 <span className="text-xs-ui font-bold text-neutral-600 whitespace-nowrap">Item {idx + 1}</span>
                 <span className="truncate text-sm-ui font-semibold text-neutral-800" title={nomeProduto}>{nomeProduto}</span>
+                {incompleto && (
+                  <span className="badge badge-warning" title="Falta preencher algum campo obrigatório deste item">(incompleto)</span>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 {minimizado && resultPorIdx[idx]?.valor_bruto != null && (

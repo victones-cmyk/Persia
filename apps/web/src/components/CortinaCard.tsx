@@ -467,8 +467,10 @@ export function CortinaCard({
     onDuplicar?.();
   };
 
+  const incompleto = !calculando && !resumo.completo;
+
   return (
-    <div className="card p-4">
+    <div className={incompleto ? 'card p-4 border-2 border-dashed border-error' : 'card p-4'}>
       <div className={`flex items-center justify-between ${minimizado ? 'mb-0' : 'mb-3'}`}>
         <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
           <button
@@ -484,7 +486,7 @@ export function CortinaCard({
           <span className="truncate text-sm-ui font-semibold text-neutral-800" title={nomeProdutoPreview}>{nomeProdutoPreview}</span>
           {calc && calc.n_camadas > 1 && <span className="badge" style={{ background: 'var(--neutral-200)' }}>{calc.n_camadas} camadas</span>}
           {calculando && <FontAwesomeIcon icon={faSpinner} spin className="text-neutral-400" />}
-          {!calculando && !resumo.completo && (
+          {incompleto && (
             <span className="badge badge-warning" title="Falta preencher algum campo obrigatório ou escolher o produto de algum acessório">(incompleto)</span>
           )}
         </div>
