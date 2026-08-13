@@ -377,6 +377,9 @@ export function PersianaForm({
     && it.comando !== ''
     && it.fixacao_instalacao !== ''
     && it.instalacao_id !== '';
+  // Realce em pontilhado vermelho no campo obrigatório vazio (não no card inteiro) —
+  // em orçamentos com muitos itens, é mais fácil achar qual campo falta assim.
+  const campoVazio = 'input border-2 border-dashed border-error';
   // Só os itens completos entram no cálculo; itens incompletos bloqueiam o envio.
   const itensComp = itens.map((it, idx) => ({ it, idx })).filter(({ it }) => itemValido(it));
   const temIncompleto = itens.some((it) => !itemValido(it));
@@ -489,7 +492,7 @@ export function PersianaForm({
           const opcoesAcionamento = opcoesAcionamentoDaCalculadora(calculadoraDoItem(it));
           const incompleto = !itemValido(it);
           return (
-          <div key={it.id} className={incompleto ? 'rounded-sm border-2 border-dashed border-error p-3' : 'rounded-sm border border-neutral-300 p-3'} style={{ background: 'var(--neutral-50)' }}>
+          <div key={it.id} className="rounded-sm border border-neutral-300 p-3" style={{ background: 'var(--neutral-50)' }}>
             <div className={`flex items-center justify-between ${minimizado ? 'mb-0' : 'mb-2'}`}>
               <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
                 <button
@@ -546,7 +549,7 @@ export function PersianaForm({
               </div>
               <div>
                 <label className="form-label" htmlFor={`produto-persiana-${idx}`}>Produto Sob Medida<span className="label-required">*</span></label>
-                <select id={`produto-persiana-${idx}`} className="input" value={it.tipo} onChange={(e) => onTipoChange(idx, e.target.value as TipoPersiana)}>
+                <select id={`produto-persiana-${idx}`} className={it.tipo === '' ? campoVazio : 'input'} value={it.tipo} onChange={(e) => onTipoChange(idx, e.target.value as TipoPersiana)}>
                   <option value="">Selecione…</option>
                   {calculadoras.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
                 </select>
@@ -567,13 +570,14 @@ export function PersianaForm({
                     disabled={!it.tipo}
                     placeholder={it.tipo ? 'Buscar tecido…' : 'Escolha o produto'}
                     id={`tecido-persiana-${idx}`}
+                    invalid={it.tecido_id === ''}
                   />
                 )}
               </div>
               {!vertical && (
                 <div>
                   <label className="form-label" htmlFor={`cor-persiana-${idx}`}>Cor Acessório<span className="label-required">*</span></label>
-                  <select id={`cor-persiana-${idx}`} className="input" value={it.cor} onChange={(e) => atualizar(idx, { cor: e.target.value as Cor })}>
+                  <select id={`cor-persiana-${idx}`} className={it.cor === '' ? campoVazio : 'input'} value={it.cor} onChange={(e) => atualizar(idx, { cor: e.target.value as Cor })}>
                     <option value="">Selecione…</option>
                     {CORES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -581,7 +585,7 @@ export function PersianaForm({
               )}
               <div>
                 <label className="form-label" htmlFor={`acionamento-persiana-${idx}`}>Acionamento<span className="label-required">*</span></label>
-                <select id={`acionamento-persiana-${idx}`} className="input" value={it.acionamento} onChange={(e) => onAcionamentoChange(idx, e.target.value as Acionamento)}>
+                <select id={`acionamento-persiana-${idx}`} className={it.acionamento === '' ? campoVazio : 'input'} value={it.acionamento} onChange={(e) => onAcionamentoChange(idx, e.target.value as Acionamento)}>
                   <option value="">Selecione…</option>
                   {opcoesAcionamento.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
@@ -594,7 +598,7 @@ export function PersianaForm({
                   <label className="form-label" htmlFor={`bando-persiana-${idx}`}>Bandô<span className="label-required">*</span></label>
                   <select
                     id={`bando-persiana-${idx}`}
-                    className="input"
+                    className={it.bando_codigo === '' ? campoVazio : 'input'}
                     value={it.bando_codigo}
                     onChange={(e) => {
                       const escolhido = bandosVertical.find((b) => b.codigo_interno === e.target.value);
@@ -616,7 +620,7 @@ export function PersianaForm({
                   <label className="form-label" htmlFor={`emissor-persiana-${idx}`}>Emissor<span className="label-required">*</span></label>
                   <select
                     id={`emissor-persiana-${idx}`}
-                    className="input"
+                    className={it.emissor === '' ? campoVazio : 'input'}
                     value={it.emissor}
                     onChange={(e) => {
                       const v = e.target.value;
@@ -633,7 +637,7 @@ export function PersianaForm({
                     <label className="form-label" htmlFor={`tipo-emissor-persiana-${idx}`}>Tipo de emissor<span className="label-required">*</span></label>
                     <select
                       id={`tipo-emissor-persiana-${idx}`}
-                      className="input"
+                      className={it.emissor_codigo === '' ? campoVazio : 'input'}
                       value={it.emissor_codigo}
                       onChange={(e) => {
                         const escolhido = emissores.find((em) => em.codigo_interno === e.target.value);
@@ -649,7 +653,7 @@ export function PersianaForm({
                 )}
                 <div>
                   <label className="form-label" htmlFor={`canal-persiana-${idx}`}>Canal<span className="label-required">*</span></label>
-                  <select id={`canal-persiana-${idx}`} className="input" value={it.canal} onChange={(e) => atualizar(idx, { canal: e.target.value })}>
+                  <select id={`canal-persiana-${idx}`} className={it.canal === '' ? campoVazio : 'input'} value={it.canal} onChange={(e) => atualizar(idx, { canal: e.target.value })}>
                     <option value="">Selecione…</option>
                     {CANAIS_EMISSOR.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -661,12 +665,12 @@ export function PersianaForm({
             <div className={`grid grid-cols-1 sm:grid-cols-2 ${vertical ? 'lg:grid-cols-3' : 'lg:grid-cols-5'} gap-3 mb-3`}>
               <div>
                 <label className="form-label" htmlFor={`largura-persiana-${idx}`}>Largura (m)<span className="label-required">*</span></label>
-                <MedidaInput id={`largura-persiana-${idx}`} className={erros[idx] ? 'input input-error' : 'input'}
+                <MedidaInput id={`largura-persiana-${idx}`} className={erros[idx] ? 'input input-error' : it.largura === '' ? campoVazio : 'input'}
                   value={it.largura} onChange={(v) => { atualizar(idx, { largura: v }); setErros((p) => { const n = { ...p }; delete n[idx]; return n; }); }} />
               </div>
               <div>
                 <label className="form-label" htmlFor={`altura-persiana-${idx}`}>Altura (m)<span className="label-required">*</span></label>
-                <MedidaInput id={`altura-persiana-${idx}`} value={it.altura} onChange={(v) => onAlturaChange(idx, v)} />
+                <MedidaInput id={`altura-persiana-${idx}`} className={it.altura === '' ? campoVazio : 'input'} value={it.altura} onChange={(v) => onAlturaChange(idx, v)} />
               </div>
               <div>
                 <label className="form-label" htmlFor={`tc-persiana-${idx}`} title="75% da altura, editável (RN-04)">TC (m)</label>
@@ -677,14 +681,14 @@ export function PersianaForm({
                 <>
                   <div>
                     <label className="form-label" htmlFor={`rolamento-persiana-${idx}`}>Rolamento<span className="label-required">*</span></label>
-                    <select id={`rolamento-persiana-${idx}`} className="input" value={it.rolamento} onChange={(e) => atualizar(idx, { rolamento: e.target.value })}>
+                    <select id={`rolamento-persiana-${idx}`} className={it.rolamento === '' ? campoVazio : 'input'} value={it.rolamento} onChange={(e) => atualizar(idx, { rolamento: e.target.value })}>
                       <option value="">Selecione…</option>
                       {ROLAMENTOS.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="form-label" htmlFor={`base-persiana-${idx}`}>Base<span className="label-required">*</span></label>
-                    <select id={`base-persiana-${idx}`} className="input" value={it.base} onChange={(e) => atualizar(idx, { base: e.target.value })}>
+                    <select id={`base-persiana-${idx}`} className={it.base === '' ? campoVazio : 'input'} value={it.base} onChange={(e) => atualizar(idx, { base: e.target.value })}>
                       <option value="">Selecione…</option>
                       {CORES.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
@@ -697,14 +701,14 @@ export function PersianaForm({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="form-label" htmlFor={`comando-persiana-${idx}`}>Comando<span className="label-required">*</span></label>
-                <select id={`comando-persiana-${idx}`} className="input" value={it.comando} onChange={(e) => atualizar(idx, { comando: e.target.value })}>
+                <select id={`comando-persiana-${idx}`} className={it.comando === '' ? campoVazio : 'input'} value={it.comando} onChange={(e) => atualizar(idx, { comando: e.target.value })}>
                   <option value="">Selecione…</option>
                   {opcoesComando.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
                 <label className="form-label" htmlFor={`fixacao-persiana-${idx}`}>Fixação<span className="label-required">*</span></label>
-                <select id={`fixacao-persiana-${idx}`} className="input" value={it.fixacao_instalacao} onChange={(e) => atualizar(idx, { fixacao_instalacao: e.target.value })}>
+                <select id={`fixacao-persiana-${idx}`} className={it.fixacao_instalacao === '' ? campoVazio : 'input'} value={it.fixacao_instalacao} onChange={(e) => atualizar(idx, { fixacao_instalacao: e.target.value })}>
                   <option value="">Selecione…</option>
                   <option value="teto">Teto</option>
                   <option value="parede">Parede</option>
@@ -713,7 +717,7 @@ export function PersianaForm({
               {permitirInstalacao && (
                 <div>
                   <label className="form-label" htmlFor={`instalacao-persiana-${idx}`}>Instalação<span className="label-required">*</span></label>
-                  <select id={`instalacao-persiana-${idx}`} className="input" value={it.instalacao_id}
+                  <select id={`instalacao-persiana-${idx}`} className={it.instalacao_id === '' ? campoVazio : 'input'} value={it.instalacao_id}
                     onChange={(e) => atualizar(idx, { instalacao_id: e.target.value })}>
                     <option value="">Selecione…</option>
                     <option value={SEM_INSTALACAO}>Sem instalação</option>

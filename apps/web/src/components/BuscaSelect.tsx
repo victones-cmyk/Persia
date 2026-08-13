@@ -26,6 +26,7 @@ export function BuscaSelect({
   placeholder,
   ariaLabel,
   compact,
+  invalid,
 }: {
   options: OpcaoBusca[];
   value: string;
@@ -34,6 +35,8 @@ export function BuscaSelect({
   placeholder?: string;
   ariaLabel?: string;
   compact?: boolean;
+  /** Realça em pontilhado vermelho — campo obrigatório ainda vazio. */
+  invalid?: boolean;
 }) {
   const [termo, setTermo] = useState('');
   const [aberto, setAberto] = useState(false);
@@ -116,7 +119,7 @@ export function BuscaSelect({
     <div className="relative" ref={boxRef}>
       <div className="relative">
         <input
-          className="input"
+          className={invalid ? 'input border-2 border-dashed border-error' : 'input'}
           aria-label={ariaLabel}
           disabled={disabled}
           placeholder={placeholder}

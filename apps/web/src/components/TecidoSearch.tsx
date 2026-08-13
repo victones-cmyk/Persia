@@ -19,6 +19,7 @@ export function TecidoSearch({
   disabled,
   placeholder,
   id,
+  invalid,
 }: {
   tecidos: TecidoOpcao[];
   value: string;
@@ -26,6 +27,8 @@ export function TecidoSearch({
   disabled?: boolean;
   placeholder?: string;
   id?: string;
+  /** Realça em pontilhado vermelho — campo obrigatório ainda vazio. */
+  invalid?: boolean;
 }) {
   const [termo, setTermo] = useState('');
   const [aberto, setAberto] = useState(false);
@@ -110,7 +113,7 @@ export function TecidoSearch({
       <div className="relative">
         <input
           id={id}
-          className="input"
+          className={invalid ? 'input border-2 border-dashed border-error' : 'input'}
           name="busca-tecido"
           aria-label="Buscar tecido"
           disabled={disabled}

@@ -468,9 +468,10 @@ export function CortinaCard({
   };
 
   const incompleto = !calculando && !resumo.completo;
+  const campoVazio = 'input border-2 border-dashed border-error';
 
   return (
-    <div className={incompleto ? 'card p-4 border-2 border-dashed border-error' : 'card p-4'}>
+    <div className="card p-4">
       <div className={`flex items-center justify-between ${minimizado ? 'mb-0' : 'mb-3'}`}>
         <div className="flex min-w-0 flex-1 items-center gap-2 pr-3">
           <button
@@ -528,15 +529,15 @@ export function CortinaCard({
         </div>
         <div>
           <label className="form-label" htmlFor={`largura-cortina-${indice}`}>Largura (m)<span className="label-required">*</span></label>
-          <MedidaInput id={`largura-cortina-${indice}`} value={largura} onChange={setLargura} />
+          <MedidaInput id={`largura-cortina-${indice}`} value={largura} onChange={setLargura} className={largura === '' ? campoVazio : 'input'} />
         </div>
         <div>
           <label className="form-label" htmlFor={`altura-cortina-${indice}`}>Altura (m)<span className="label-required">*</span></label>
-          <MedidaInput id={`altura-cortina-${indice}`} value={altura} onChange={setAltura} />
+          <MedidaInput id={`altura-cortina-${indice}`} value={altura} onChange={setAltura} className={altura === '' ? campoVazio : 'input'} />
         </div>
         <div>
           <label className="form-label" htmlFor={`fixacao-cortina-${indice}`}>Fixação<span className="label-required">*</span></label>
-          <select id={`fixacao-cortina-${indice}`} className="input" value={fixacao} disabled={modelosSelecionados.length === 0} onChange={(e) => setFixacao(e.target.value as FixacaoCortina | '')}>
+          <select id={`fixacao-cortina-${indice}`} className={fixacao === '' ? campoVazio : 'input'} value={fixacao} disabled={modelosSelecionados.length === 0} onChange={(e) => setFixacao(e.target.value as FixacaoCortina | '')}>
             <option value="">{modelosSelecionados.length === 0 ? 'Escolha o modelo' : 'Selecione…'}</option>
             {fixacoesDisponiveis.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
@@ -546,11 +547,11 @@ export function CortinaCard({
         </div>
         <div>
           <label className="form-label" htmlFor={`tamanho-barra-cortina-${indice}`}>Tamanho da barra (cm)<span className="label-required">*</span></label>
-          <input id={`tamanho-barra-cortina-${indice}`} type="number" className="input" min={0} step={1} value={tamanhoBarra} onChange={(e) => setTamanhoBarra(e.target.value)} placeholder="" />
+          <input id={`tamanho-barra-cortina-${indice}`} type="number" className={tamanhoBarra === '' ? campoVazio : 'input'} min={0} step={1} value={tamanhoBarra} onChange={(e) => setTamanhoBarra(e.target.value)} placeholder="" />
         </div>
         <div>
           <label className="form-label" htmlFor={`tipo-barra-cortina-${indice}`}>Tipo de barra<span className="label-required">*</span></label>
-          <select id={`tipo-barra-cortina-${indice}`} className="input" value={tipoBarra} onChange={(e) => setTipoBarra(e.target.value as 'simples' | 'dupla' | '')}>
+          <select id={`tipo-barra-cortina-${indice}`} className={tipoBarra === '' ? campoVazio : 'input'} value={tipoBarra} onChange={(e) => setTipoBarra(e.target.value as 'simples' | 'dupla' | '')}>
             <option value="">Selecione…</option>
             <option value="simples">Simples</option>
             <option value="dupla">Dupla</option>
@@ -558,14 +559,14 @@ export function CortinaCard({
         </div>
         <div>
           <label className="form-label" htmlFor={`desconto-cortina-${indice}`}>Desconto<span className="label-required">*</span></label>
-          <select id={`desconto-cortina-${indice}`} className="input" value={desconto} onChange={(e) => setDesconto(e.target.value as DescontoCortina | '')}>
+          <select id={`desconto-cortina-${indice}`} className={desconto === '' ? campoVazio : 'input'} value={desconto} onChange={(e) => setDesconto(e.target.value as DescontoCortina | '')}>
             <option value="">Selecione…</option>
             {descontosDisponiveis.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </select>
         </div>
         <div>
           <label className="form-label" htmlFor={`abertura-cortina-${indice}`}>Tipo de abertura<span className="label-required">*</span></label>
-          <select id={`abertura-cortina-${indice}`} className="input" value={aberturas} onChange={(e) => setAberturas(e.target.value)}>
+          <select id={`abertura-cortina-${indice}`} className={aberturas === '' ? campoVazio : 'input'} value={aberturas} onChange={(e) => setAberturas(e.target.value)}>
             <option value="">Selecione…</option>
             <option value="2">Central</option>
             <option value="1">Sem abertura</option>
@@ -584,7 +585,7 @@ export function CortinaCard({
           <label className="form-label">Instalação<span className="label-required">*</span></label>
           {/* "Sem instalação" é uma escolha explícita (SEM_INSTALACAO), diferente de
               "ainda não escolhi" (vazio) — senão o campo obrigatório passaria batido. */}
-          <select className="input" value={instalacaoId} onChange={(e) => setInstalacaoId(e.target.value)}>
+          <select className={instalacaoId === '' ? campoVazio : 'input'} value={instalacaoId} onChange={(e) => setInstalacaoId(e.target.value)}>
             <option value="">Selecione…</option>
             <option value={SEM_INSTALACAO}>Sem instalação</option>
             {instalacoes.map((i) => <option key={i.id} value={i.id}>{i.nome} — {formatBRL(i.preco)}</option>)}
@@ -632,7 +633,7 @@ export function CortinaCard({
                   <div className="col-span-1 sm:col-span-4">
                     <span className="text-2xs-ui text-neutral-500">Tipo de Confecção<span className="label-required">*</span></span>
                     <select
-                      className="input"
+                      className={c.modelo === '' ? campoVazio : 'input'}
                       value={c.modelo}
                       onChange={(e) => {
                         const modelo = e.target.value as ModeloCortinaOpcao | '';
@@ -648,7 +649,7 @@ export function CortinaCard({
                   </div>
                   <div className={`col-span-1 ${isWaveCamada(c) ? 'sm:col-span-8' : 'sm:col-span-5'}`}>
                     <span className="text-2xs-ui text-neutral-500">Tecido<span className="label-required">*</span></span>
-                    <TecidoSearch tecidos={tecidos} value={c.tecidoId} onChange={(v) => setCamada(c.id, { tecidoId: v })} placeholder="Buscar tecido…" />
+                    <TecidoSearch tecidos={tecidos} value={c.tecidoId} onChange={(v) => setCamada(c.id, { tecidoId: v })} placeholder="Buscar tecido…" invalid={c.tecidoId === ''} />
                   </div>
                   {!isWaveCamada(c) && !(c.modelo === 'costurado_junto' && c.costuradoQuantidade === 'mesma_quantidade') && (
                     <div className="col-span-1 sm:col-span-3">
@@ -783,6 +784,7 @@ export function CortinaCard({
                         disabled={!opcoes}
                         placeholder={opcoes ? 'Buscar acessório…' : 'carregando opções…'}
                         ariaLabel={`Buscar acessório ${a.item}`}
+                        invalid={!sel}
                         compact
                       />
                     </div>
@@ -792,7 +794,7 @@ export function CortinaCard({
                           {formatNum(qtd, a.unidade === 'un' ? 0 : 2)} {a.unidade}
                         </div>
                       ) : (
-                        <input type="number" className="input" style={{ height: 30, fontSize: 12 }} min={0} step={1}
+                        <input type="number" className={qtd <= 0 ? campoVazio : 'input'} style={{ height: 30, fontSize: 12 }} min={0} step={1}
                           value={qtdManual[a.item] ?? ''} placeholder="qtd"
                           onChange={(e) => setQtdManual((m) => ({ ...m, [a.item]: e.target.value }))} />
                       )}
