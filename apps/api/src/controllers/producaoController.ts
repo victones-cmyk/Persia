@@ -1005,7 +1005,8 @@ export async function confirmarSaidaEstoque(req: Request, res: Response): Promis
     } catch (err) {
       const erro = err instanceof EstoqueVariacaoError ? err.message : err instanceof Error ? err.message : String(err);
       falhas.push({ produto_id: material.produto_id, nome: material.nome, erro });
-      break; // Para no primeiro erro — não adianta seguir se um produto já falhou.
+      // Sem `break`: um produto problemático (ex.: variação) não pode travar os
+      // demais, que dariam certo — cada material é independente no GC.
     }
   }
 
@@ -1024,23 +1025,35 @@ export async function confirmarSaidaEstoque(req: Request, res: Response): Promis
     },
   });
 
+  // Só marca como baixada a OS cujos materiais TODOS deram certo — senão ela
+  // ficaria "baixada" com uma peça ainda pendente, escondendo o problema. Marcar
+  // mesmo com falhas em outras OS é o que evita rebaixar (e decrementar de novo)
+  // quem já deu certo se o usuário tentar de novo depois de corrigir o produto
+  // com falha no GestãoClick.
+  const idsProdutosComFalha = new Set(falhas.map((f) => f.produto_id));
+  const ordensComSucesso = elegiveis.filter((o) => o.materiais.every((m) => !idsProdutosComFalha.has(m.produto_id)));
+  if (ordensComSucesso.length > 0) {
+    await prisma.ordemProducao.updateMany({
+      where: { id: { in: ordensComSucesso.map((o) => o.id) } },
+      data: { baixado_estoque_em: new Date() },
+    });
+  }
+
   if (falhas.length > 0) {
     const jaBaixados = sucesso.map((s) => `${s.nome} (${s.estoque_antes} → ${s.estoque_depois})`).join(', ');
+    // 409, não 502: isso é uma regra de negócio (produto com variação, etc.), não
+    // um problema de gateway — um 502 daqui faz o Cloudflare trocar a resposta
+    // pela página genérica dele, escondendo esta mensagem do usuário.
     throw new AppError(
-      502,
+      409,
       'FALHA_BAIXA_ESTOQUE',
-      `Falha ao baixar "${falhas[0].nome}" no GestãoClick: ${falhas[0].erro}. ${sucesso.length > 0 ? `Estes produtos JÁ foram baixados antes do erro — confira o estoque no GestãoClick antes de tentar de novo, para não baixar duas vezes: ${jaBaixados}.` : 'Nenhum produto foi alterado ainda.'}`,
+      `Falha ao baixar ${falhas.length === 1 ? `"${falhas[0].nome}"` : `${falhas.length} produtos`} no GestãoClick: ${falhas.map((f) => f.erro).join(' | ')}. ${sucesso.length > 0 ? `Os demais produtos já foram baixados com sucesso e ficam marcados — não serão baixados de novo: ${jaBaixados}.` : 'Nenhum produto foi alterado ainda.'} As peças que usam o produto com falha continuam pendentes até a correção manual no GestãoClick.`,
     );
   }
 
-  await prisma.ordemProducao.updateMany({
-    where: { id: { in: elegiveis.map((o) => o.id) } },
-    data: { baixado_estoque_em: new Date() },
-  });
-
   res.json({
     resultado: sucesso,
-    ordens_baixadas: elegiveis.map((o) => o.codigo),
+    ordens_baixadas: ordensComSucesso.map((o) => o.codigo),
     ordens_excluidas: excluidas,
     observacao,
   });
