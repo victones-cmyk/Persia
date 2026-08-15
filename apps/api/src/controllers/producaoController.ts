@@ -25,6 +25,7 @@ import {
   gerarPdfOrdemProducao,
   gerarZplEtiqueta,
   gerarZplEtiquetasImpressao,
+  type ComponenteSnapshot,
   type ItemProducaoSnapshot,
   type OrdemDocumento,
 } from '../services/producao/documentos';
@@ -35,6 +36,7 @@ import {
   type OrdemComItem,
 } from '../services/producao/materiaisEstoque';
 import { darSaidaEstoqueProduto, EstoqueVariacaoError, type BaixaEstoqueResultado } from '../services/gc/estoque';
+import { listarProdutos } from '../services/gc/catalogos';
 
 function temAcesso(orc: Pick<Orcamento, 'usuario_id'>, sessao: Express.Request['session']['usuario']): boolean {
   return Boolean(sessao && (sessao.perfil === 'admin' || orc.usuario_id === sessao.id));
@@ -960,9 +962,21 @@ async function itensAtuaisParaEnriquecimento(orc: Orcamento): Promise<ItemProduc
  * completamos aqui com o produto_id do item atual do orçamento (casando pela
  * descrição, que é o texto literal do nome do produto no GC) — mantendo as
  * quantidades da OS (medida final de produção), só suprindo o id que faltou.
+ *
+ * Se o item foi editado DEPOIS da OS gerada (ex.: cor do acessório trocada), a
+ * recalculação "atual" já não bate mais com o texto congelado na OS — o
+ * componente antigo (ex.: "KIT COMANDO 38MM COR BRANCO") nem aparece mais na
+ * lista atual (que agora diz "COR BEGE"), travando a OS inteira na baixa de
+ * estoque. Como último recurso, busca no catálogo um produto com esse nome
+ * EXATO — o texto congelado é sempre o nome literal do produto no GC, então se
+ * ele ainda existir (mesmo não sendo mais o que o item pede hoje), a baixa usa
+ * o material certo pra o que foi de fato cortado e registrado na OS.
  */
-function enriquecerComProdutoIdAtual(ordens: OrdemProducao[], itensAtuais: ItemProducaoSnapshot[]): OrdemComItem[] {
-  return ordens.map((ordem) => {
+async function enriquecerComProdutoIdAtual(ordens: OrdemProducao[], itensAtuais: ItemProducaoSnapshot[]): Promise<OrdemComItem[]> {
+  let catalogoPorNome: Map<string, string> | null = null;
+  const resultados: OrdemComItem[] = [];
+
+  for (const ordem of ordens) {
     const item = itemSnapshotDaOrdem(ordem);
     const atual = itensAtuais[ordem.item_index];
     const idsPorDescricao = new Map(
@@ -970,17 +984,28 @@ function enriquecerComProdutoIdAtual(ordens: OrdemProducao[], itensAtuais: ItemP
         .filter((c) => c.produto_id && c.descricao)
         .map((c) => [c.descricao as string, c.produto_id as string]),
     );
-    const componentes = (item.componentes ?? []).map((c) => (
-      c.produto_id || !c.descricao ? c : { ...c, produto_id: idsPorDescricao.get(c.descricao) ?? null }
-    ));
-    return { id: ordem.id, codigo: ordem.codigo, item_snapshot_json: { ...item, componentes } };
-  });
+    const componentes: ComponenteSnapshot[] = [];
+    for (const c of item.componentes ?? []) {
+      if (c.produto_id || !c.descricao) { componentes.push(c); continue; }
+      let produtoId = idsPorDescricao.get(c.descricao) ?? null;
+      if (!produtoId) {
+        if (!catalogoPorNome) {
+          const produtos = await listarProdutos({ ativo: 1 });
+          catalogoPorNome = new Map(produtos.map((p) => [p.nome.trim().toLowerCase(), String(p.id)]));
+        }
+        produtoId = catalogoPorNome.get(c.descricao.trim().toLowerCase()) ?? null;
+      }
+      componentes.push({ ...c, produto_id: produtoId });
+    }
+    resultados.push({ id: ordem.id, codigo: ordem.codigo, item_snapshot_json: { ...item, componentes } });
+  }
+  return resultados;
 }
 
 export async function preverSaidaEstoque(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   const pendentes = ordensPendentesDeBaixa(orc);
-  const enriquecidas = enriquecerComProdutoIdAtual(pendentes, await itensAtuaisParaEnriquecimento(orc));
+  const enriquecidas = await enriquecerComProdutoIdAtual(pendentes, await itensAtuaisParaEnriquecimento(orc));
   const { elegiveis, excluidas } = classificarOrdensParaBaixa(enriquecidas);
   const materiais = agregarMateriais(elegiveis);
   const observacao = textoDestinoBaixa(pedidoCodigo(orc), orc.nome_cliente, elegiveis);
@@ -998,7 +1023,7 @@ export async function preverSaidaEstoque(req: Request, res: Response): Promise<v
 export async function confirmarSaidaEstoque(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   const pendentes = ordensPendentesDeBaixa(orc);
-  const enriquecidas = enriquecerComProdutoIdAtual(pendentes, await itensAtuaisParaEnriquecimento(orc));
+  const enriquecidas = await enriquecerComProdutoIdAtual(pendentes, await itensAtuaisParaEnriquecimento(orc));
   const { elegiveis, excluidas } = classificarOrdensParaBaixa(enriquecidas);
   if (elegiveis.length === 0) {
     throw new AppError(409, 'SEM_MATERIAIS', 'Não há ordens de produção prontas para dar saída no estoque (falta OS gerada ou o mapeamento de produtos ainda não cobre os itens pendentes).');
