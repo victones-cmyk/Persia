@@ -145,6 +145,15 @@ function respostaGcObj(orc: Pick<Orcamento, 'resposta_gc'>): Prisma.JsonObject {
     : {};
 }
 
+/** produto_id já decrementados no estoque para este pedido, em qualquer tentativa
+ *  anterior de "Dar saída" — evita decrementar de novo um material que já deu
+ *  certo quando outro (ex.: um produto com variação) falha e o usuário tenta de
+ *  novo depois de corrigir. */
+function materiaisBaixadosDoPedido(orc: Pick<Orcamento, 'resposta_gc'>): Set<string> {
+  const raw = respostaGcObj(orc).estoque_materiais_baixados;
+  return new Set(Array.isArray(raw) ? raw.map(String) : []);
+}
+
 function medicaoAbsorcao(orc: Pick<Orcamento, 'resposta_gc'>): AbsorcaoMedicao | null {
   const raw = respostaGcObj(orc).medicao_absorcao;
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -997,11 +1006,26 @@ export async function confirmarSaidaEstoque(req: Request, res: Response): Promis
   const materiais = agregarMateriais(elegiveis);
   const observacao = textoDestinoBaixa(pedidoCodigo(orc), orc.nome_cliente, elegiveis);
 
+  // Idempotência por MATERIAL (não por OS): se uma OS tem 10 materiais e só 1
+  // falha (ex.: produto com variação), os outros 9 já foram decrementados de
+  // verdade no GC — marcar só a OS inteira não bastava, porque quando TODA OS
+  // do pedido compartilha o mesmo material problemático nenhuma nunca fica
+  // "limpa" pra marcar, e cada nova tentativa decrementava os 9 de novo. Aqui
+  // cada produto só é decrementado uma vez por pedido, não importa quantas
+  // vezes o usuário tentar de novo.
+  let respostaAtual = respostaGcObj(orc);
+  const jaBaixados = materiaisBaixadosDoPedido(orc);
+
   const sucesso: BaixaEstoqueResultado[] = [];
   const falhas: { produto_id: string; nome: string; erro: string }[] = [];
   for (const material of materiais) {
+    if (jaBaixados.has(material.produto_id)) continue; // já baixado numa tentativa anterior
     try {
-      sucesso.push(await darSaidaEstoqueProduto(material.produto_id, material.quantidade));
+      const resultado = await darSaidaEstoqueProduto(material.produto_id, material.quantidade);
+      sucesso.push(resultado);
+      jaBaixados.add(material.produto_id);
+      respostaAtual = { ...respostaAtual, estoque_materiais_baixados: [...jaBaixados] };
+      await prisma.orcamento.update({ where: { id: orc.id }, data: { resposta_gc: respostaAtual as unknown as Prisma.InputJsonValue } });
     } catch (err) {
       const erro = err instanceof EstoqueVariacaoError ? err.message : err instanceof Error ? err.message : String(err);
       falhas.push({ produto_id: material.produto_id, nome: material.nome, erro });
@@ -1025,13 +1049,10 @@ export async function confirmarSaidaEstoque(req: Request, res: Response): Promis
     },
   });
 
-  // Só marca como baixada a OS cujos materiais TODOS deram certo — senão ela
-  // ficaria "baixada" com uma peça ainda pendente, escondendo o problema. Marcar
-  // mesmo com falhas em outras OS é o que evita rebaixar (e decrementar de novo)
-  // quem já deu certo se o usuário tentar de novo depois de corrigir o produto
-  // com falha no GestãoClick.
-  const idsProdutosComFalha = new Set(falhas.map((f) => f.produto_id));
-  const ordensComSucesso = elegiveis.filter((o) => o.materiais.every((m) => !idsProdutosComFalha.has(m.produto_id)));
+  // Marca a OS como baixada quando TODOS os materiais dela já estão no conjunto
+  // baixado (desta chamada ou de alguma anterior) — senão ela ficaria "baixada"
+  // com uma peça ainda pendente, escondendo o problema.
+  const ordensComSucesso = elegiveis.filter((o) => o.materiais.every((m) => jaBaixados.has(m.produto_id)));
   if (ordensComSucesso.length > 0) {
     await prisma.ordemProducao.updateMany({
       where: { id: { in: ordensComSucesso.map((o) => o.id) } },
@@ -1040,14 +1061,14 @@ export async function confirmarSaidaEstoque(req: Request, res: Response): Promis
   }
 
   if (falhas.length > 0) {
-    const jaBaixados = sucesso.map((s) => `${s.nome} (${s.estoque_antes} → ${s.estoque_depois})`).join(', ');
+    const baixadosAgora = sucesso.map((s) => `${s.nome} (${s.estoque_antes} → ${s.estoque_depois})`).join(', ');
     // 409, não 502: isso é uma regra de negócio (produto com variação, etc.), não
     // um problema de gateway — um 502 daqui faz o Cloudflare trocar a resposta
     // pela página genérica dele, escondendo esta mensagem do usuário.
     throw new AppError(
       409,
       'FALHA_BAIXA_ESTOQUE',
-      `Falha ao baixar ${falhas.length === 1 ? `"${falhas[0].nome}"` : `${falhas.length} produtos`} no GestãoClick: ${falhas.map((f) => f.erro).join(' | ')}. ${sucesso.length > 0 ? `Os demais produtos já foram baixados com sucesso e ficam marcados — não serão baixados de novo: ${jaBaixados}.` : 'Nenhum produto foi alterado ainda.'} As peças que usam o produto com falha continuam pendentes até a correção manual no GestãoClick.`,
+      `Falha ao baixar ${falhas.length === 1 ? `"${falhas[0].nome}"` : `${falhas.length} produtos`} no GestãoClick: ${falhas.map((f) => f.erro).join(' | ')}. ${sucesso.length > 0 ? `Baixados agora, não serão baixados de novo: ${baixadosAgora}.` : jaBaixados.size > materiais.length - falhas.length ? 'Os demais produtos já tinham sido baixados numa tentativa anterior e não foram tocados de novo.' : 'Nenhum produto foi alterado ainda.'} As peças que usam o produto com falha continuam pendentes até a correção manual no GestãoClick.`,
     );
   }
 
