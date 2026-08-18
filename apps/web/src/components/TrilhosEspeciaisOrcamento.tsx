@@ -4,7 +4,7 @@ import { faChevronDown, faChevronRight, faCopy, faPlus, faSpinner, faTrash } fro
 import { api, ApiError } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
 import { BuscaSelect } from './BuscaSelect';
-import { formatBRL, formatNum } from '../lib/formatacao';
+import { formatBRL, formatNum, roundHalfUp } from '../lib/formatacao';
 import type { CalculadoraTrilhoEspecial, VarianteCalculadoraTrilho } from '../lib/calcTypes';
 import type { ProdutoExtraSnap } from '../lib/rascunhoLocal';
 import type { ItemExtraPayload, ItensExtrasEstado } from './ItensExtrasOrcamento';
@@ -129,12 +129,21 @@ export function TrilhosEspeciaisOrcamento({
   onEstado,
   onSnapshot,
   onDirtyChange,
+  descontoPct = 0,
+  ehRevenda = false,
 }: {
   inicial?: ProdutoExtraSnap[];
   onEstado: (estado: ItensExtrasEstado) => void;
   onSnapshot?: (snap: ProdutoExtraSnap[]) => void;
   onDirtyChange?: (sujo: boolean) => void;
+  /** % de desconto da revenda (0 p/ vendedor/admin) — só afeta os valores exibidos
+   *  aqui (o servidor recalcula e aplica o desconto de verdade no envio). */
+  descontoPct?: number;
+  /** true p/ revenda: some o detalhamento de custo unitário por componente — só o
+   *  total (já com desconto) fica visível, igual ao restante do orçamento. */
+  ehRevenda?: boolean;
 }) {
+  const fatorDesconto = descontoPct > 0 ? 1 - Math.max(0, Math.min(99, descontoPct)) / 100 : 1;
   const [calculadoras, setCalculadoras] = useState<CalculadoraTrilhoEspecial[]>([]);
   const [linhas, setLinhas] = useState<LinhaState[]>(() => normalizarInicial(inicial));
   const [resultados, setResultados] = useState<Record<string, ResultadoTrilho>>({});
@@ -290,7 +299,7 @@ export function TrilhosEspeciaisOrcamento({
           <h4 className="text-lg-ui font-medium">Calculadora de trilhos especiais</h4>
           <p className="text-xs-ui text-neutral-500">Escolha uma composição e informe largura, quantidade e os demais campos exigidos pela fórmula.</p>
         </div>
-        <span className="font-mono tabular-nums text-sm-ui font-semibold">{formatBRL(estado.total)}</span>
+        <span className="font-mono tabular-nums text-sm-ui font-semibold">{formatBRL(roundHalfUp(estado.total * fatorDesconto))}</span>
       </div>
 
       {!carregando && calculadoras.length === 0 && (
@@ -328,7 +337,7 @@ export function TrilhosEspeciaisOrcamento({
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   {minimizado && calculado && (
-                    <span className="font-mono tabular-nums text-xs-ui font-semibold text-neutral-800">{formatBRL(resultado.valor_total)}</span>
+                    <span className="font-mono tabular-nums text-xs-ui font-semibold text-neutral-800">{formatBRL(roundHalfUp(resultado.valor_total * fatorDesconto))}</span>
                   )}
                   {minimizado && (
                     <button type="button" className="text-primary hover:opacity-80 text-xs-ui flex items-center gap-1" onClick={() => duplicar(index)} title="Duplicar trilho">
@@ -427,26 +436,30 @@ export function TrilhosEspeciaisOrcamento({
 
               {calculado && (
                 <div className="mt-3 border border-neutral-200 rounded-sm bg-white overflow-hidden">
-                  <div className="grid grid-cols-12 gap-2 px-3 py-2 text-2xs-ui font-semibold text-neutral-500 bg-neutral-100">
-                    <div className="col-span-6">Produto da composição</div>
-                    <div className="col-span-2 text-right">Quantidade</div>
-                    <div className="col-span-2 text-right">Preço</div>
-                    <div className="col-span-2 text-right">Subtotal</div>
-                  </div>
-                  {resultado.componentes.map((componente) => (
-                    <div key={`${componente.produto_id}-${componente.formula}`} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs-ui border-t border-neutral-100 items-center">
-                      <div className="col-span-6 min-w-0">
-                        <div className="truncate text-neutral-700" title={componente.nome}>{componente.nome}</div>
-                        <div className="text-2xs-ui text-neutral-500 font-mono">{componente.codigo_interno} · {componente.formula}</div>
+                  {!ehRevenda && (
+                    <>
+                      <div className="grid grid-cols-12 gap-2 px-3 py-2 text-2xs-ui font-semibold text-neutral-500 bg-neutral-100">
+                        <div className="col-span-6">Produto da composição</div>
+                        <div className="col-span-2 text-right">Quantidade</div>
+                        <div className="col-span-2 text-right">Preço</div>
+                        <div className="col-span-2 text-right">Subtotal</div>
                       </div>
-                      <div className="col-span-2 text-right font-mono tabular-nums">{formatNum(componente.quantidade, 4)}</div>
-                      <div className="col-span-2 text-right font-mono tabular-nums">{formatBRL(componente.preco_venda)}</div>
-                      <div className="col-span-2 text-right font-mono tabular-nums font-semibold">{formatBRL(componente.subtotal)}</div>
-                    </div>
-                  ))}
+                      {resultado.componentes.map((componente) => (
+                        <div key={`${componente.produto_id}-${componente.formula}`} className="grid grid-cols-12 gap-2 px-3 py-2 text-xs-ui border-t border-neutral-100 items-center">
+                          <div className="col-span-6 min-w-0">
+                            <div className="truncate text-neutral-700" title={componente.nome}>{componente.nome}</div>
+                            <div className="text-2xs-ui text-neutral-500 font-mono">{componente.codigo_interno} · {componente.formula}</div>
+                          </div>
+                          <div className="col-span-2 text-right font-mono tabular-nums">{formatNum(componente.quantidade, 4)}</div>
+                          <div className="col-span-2 text-right font-mono tabular-nums">{formatBRL(componente.preco_venda)}</div>
+                          <div className="col-span-2 text-right font-mono tabular-nums font-semibold">{formatBRL(componente.subtotal)}</div>
+                        </div>
+                      ))}
+                    </>
+                  )}
                   <div className="flex justify-end gap-4 px-3 py-2 border-t border-neutral-200 bg-neutral-100 text-xs-ui">
-                    <span className="text-neutral-600">Total da composição</span>
-                    <strong className="font-mono tabular-nums text-neutral-800">{formatBRL(resultado.valor_total)}</strong>
+                    <span className="text-neutral-600">{ehRevenda ? 'Valor total' : 'Total da composição'}</span>
+                    <strong className="font-mono tabular-nums text-neutral-800">{formatBRL(roundHalfUp(resultado.valor_total * fatorDesconto))}</strong>
                   </div>
                 </div>
               )}

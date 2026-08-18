@@ -652,7 +652,7 @@ export function OrcamentoNovo() {
               <section key="trilho">
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faGripLines} className="text-neutral-500" /> Trilhos especiais</h2>
                 {prontoEdicao && (
-                  <TrilhosEspeciaisOrcamento inicial={rascunhoLocal?.trilhos_especiais ?? trilhoSnapRef.current ?? undefined} onEstado={setTrilhoEstado} onSnapshot={onSnapTrilho} onDirtyChange={onDirtyTrilho} />
+                  <TrilhosEspeciaisOrcamento inicial={rascunhoLocal?.trilhos_especiais ?? trilhoSnapRef.current ?? undefined} onEstado={setTrilhoEstado} onSnapshot={onSnapTrilho} onDirtyChange={onDirtyTrilho} descontoPct={descontoNum} ehRevenda={ehRevenda} />
                 )}
               </section>
             );
