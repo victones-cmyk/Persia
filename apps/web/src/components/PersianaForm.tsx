@@ -198,6 +198,12 @@ export function PersianaForm({
 
   // Lista de calculadoras de persianas carregadas dinamicamente
   const [calculadoras, setCalculadoras] = useState<CalculadoraPersiana[]>([]);
+  // Enquanto isso não vira true, `suportaEmissor` (que depende de `calculadoras`)
+  // não pode ser confiado — sem essa guarda, reabrir um rascunho com emissor já
+  // escolhido podia calcular o preço ANTES da config das calculadoras chegar,
+  // e `suportaEmissor` cair em falso por engano, tirando o emissor da conta
+  // silenciosamente (o item saía mais barato do que devia).
+  const [calculadorasProntas, setCalculadorasProntas] = useState(false);
   // Tecidos por TIPO (cada item escolhe seu tipo): carregados sob demanda e cacheados.
   const [tecidosPorTipo, setTecidosPorTipo] = useState<Record<string, TecidoOpcao[]>>({});
   const [tiposCarregando, setTiposCarregando] = useState<string[]>([]);
@@ -235,7 +241,8 @@ export function PersianaForm({
       .then((r) => {
         setCalculadoras(r.calculadoras);
       })
-      .catch(() => setCalculadoras([]));
+      .catch(() => setCalculadoras([]))
+      .finally(() => setCalculadorasProntas(true));
 
     for (const it of itens) if (it.tipo) garantirTecidos(it.tipo);
     getCacheado<{ instalacoes: TipoInstalacao[] }>('instalacoes', '/calcular/instalacoes')
@@ -422,6 +429,11 @@ export function PersianaForm({
   });
   const seqCalc = useRef(0);
   useEffect(() => {
+    // Espera a config das calculadoras chegar — sem isso, reabrir um rascunho
+    // com emissor já escolhido podia calcular antes da config carregar,
+    // `suportaEmissor` cair em falso por engano, e o preço sair sem o emissor,
+    // silenciosamente mais barato do que deveria.
+    if (!calculadorasProntas) return;
     seqCalc.current += 1;
     const seq = seqCalc.current;
     if (itensComp.length === 0) { setCalculando(false); onCalculandoChange?.(false); onResult(null); setResultPorIdx({}); return; }
@@ -432,7 +444,7 @@ export function PersianaForm({
     const id = setTimeout(() => { void calcularCom(comp, incompleto, seq); }, 400);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calcSig]);
+  }, [calcSig, calculadorasProntas]);
 
   async function calcularCom(comp: { it: ItemForm; idx: number }[], incompleto: boolean, seq: number) {
     setCalculando(true);
