@@ -666,7 +666,13 @@ export async function criarOrdensProducao(req: Request, res: Response): Promise<
   if (diferencaRelevante(previa.diferenca) && !absorverDiferenca && !ajusteGerado && !absorcaoAprovada) {
     throw new AppError(409, 'DIFERENCA_NAO_AUTORIZADA', 'A diferença da medição deve ser absorvida por um admin ou cobrada em venda complementar antes de gerar a OS.');
   }
-  if (absorverDiferenca && req.session.usuario?.perfil !== 'admin') {
+  // Só exige admin quando ainda NÃO existe uma absorção aprovada — depois que um
+  // admin já aprovou (fluxo de solicitar-absorção/decidir-absorção), o vendedor
+  // gera a OS honrando essa aprovação sem precisar ser admin de novo. Sem o
+  // `!absorcaoAprovada` aqui, o vendedor ficava travado: o front manda
+  // absorver_diferenca=true assim que carrega uma absorção já aprovada, e esse
+  // bloqueio disparava mesmo a diferença já estando formalmente autorizada.
+  if (absorverDiferenca && !absorcaoAprovada && req.session.usuario?.perfil !== 'admin') {
     throw new AppError(403, 'APENAS_ADMIN', 'Apenas administradores podem absorver diferença de medição.');
   }
 
