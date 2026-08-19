@@ -233,6 +233,16 @@ export function OrcamentoNovo() {
   useEffect(() => {
     if (!editarId) return;
     let vivo = true;
+    // Reseta o estado de TODAS as seções antes de carregar este rascunho — sem
+    // isso, trocar de rascunho sem recarregar a página (ex.: duplicar um
+    // orçamento e, na sequência, duplicar outro) deixava sobrar itens de
+    // trilho/avulso do rascunho ANTERIOR, contaminando o novo com dados que
+    // não eram dele (o valor final saía errado sem o usuário mexer em nada).
+    setProntoEdicao(false);
+    setPersianaInicial(undefined);
+    setCortinaInicial(undefined);
+    trilhoSnapRef.current = null;
+    avulsoSnapRef.current = null;
     (async () => {
       try {
         const r = await api.get<{ orcamento: OrcamentoDetalhe }>(`/orcamentos/${editarId}`);
@@ -619,7 +629,7 @@ export function OrcamentoNovo() {
           {/* Seções renderizadas na ORDEM em que o vendedor as selecionou. */}
           {ordem.map((s) => {
             if (s === 'persiana') return (
-              <section key="persiana">
+              <section key={`persiana-${editarId ?? 'novo'}`}>
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
                 {prontoEdicao && (
                   <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} onCalculandoChange={setPersianaCalculando} permitirInstalacao={!ehRevenda} descontoPct={descontoNum} />
@@ -627,7 +637,7 @@ export function OrcamentoNovo() {
               </section>
             );
             if (s === 'cortina') return (
-              <section key="cortina">
+              <section key={`cortina-${editarId ?? 'novo'}`}>
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas</h2>
                 {prontoEdicao && (
                   <CortinaOrcamento
@@ -649,7 +659,7 @@ export function OrcamentoNovo() {
               </section>
             );
             if (s === 'trilho') return (
-              <section key="trilho">
+              <section key={`trilho-${editarId ?? 'novo'}`}>
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faGripLines} className="text-neutral-500" /> Trilhos especiais</h2>
                 {prontoEdicao && (
                   <TrilhosEspeciaisOrcamento inicial={rascunhoLocal?.trilhos_especiais ?? trilhoSnapRef.current ?? undefined} onEstado={setTrilhoEstado} onSnapshot={onSnapTrilho} onDirtyChange={onDirtyTrilho} descontoPct={descontoNum} ehRevenda={ehRevenda} />
@@ -657,7 +667,7 @@ export function OrcamentoNovo() {
               </section>
             );
             return (
-              <section key="avulso">
+              <section key={`avulso-${editarId ?? 'novo'}`}>
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faBoxOpen} className="text-neutral-500" /> Produtos avulsos</h2>
                 {prontoEdicao && (
                   <ItensExtrasOrcamento titulo="Produtos avulsos" modo="avulso" inicial={rascunhoLocal?.produtos_avulsos ?? avulsoSnapRef.current ?? undefined} onEstado={setAvulsoEstado} onSnapshot={onSnapAvulso} onDirtyChange={onDirtyAvulso} />
