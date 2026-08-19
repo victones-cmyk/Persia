@@ -7,6 +7,11 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { validarSenha } from '../lib/senha';
 
+// Equipe interna (admin/vendedor) fica logada por mais tempo — são dispositivos
+// de uso diário na loja, não faz sentido pedir login de novo a cada 8h. O perfil
+// revenda (cliente externo) mantém o prazo padrão (env.SESSION_MAX_AGE).
+const SESSION_MAX_AGE_INTERNO_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+
 /** Forma pública do usuário exposta ao frontend (sem senha_hash). */
 function toSessionUser(u: {
   id: string;
@@ -74,6 +79,9 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
     req.session.usuario = sessionUser;
+    if (sessionUser.perfil === 'admin' || sessionUser.perfil === 'vendedor') {
+      req.session.cookie.maxAge = SESSION_MAX_AGE_INTERNO_MS;
+    }
     req.session.save((err) => {
       if (err) {
         console.error('[auth] falha ao salvar sessão:', err);

@@ -86,7 +86,10 @@ app.use(
     secret: env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    rolling: false,
+    // rolling: renova o cookie/maxAge a cada requisição autenticada, então o
+    // prazo conta a partir da ÚLTIMA atividade, não do login — sem isso, um
+    // usuário ativo era deslogado exatos 8h após entrar, mesmo usando o sistema.
+    rolling: true,
     cookie: {
       httpOnly: true,
       secure: isProduction,
