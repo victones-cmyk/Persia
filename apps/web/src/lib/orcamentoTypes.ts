@@ -23,6 +23,10 @@ export interface OrcamentoListItem {
 
 /** Snapshot de um item (janela) salvo em itens_json. */
 export interface ItemSnapshot {
+  origem?: 'persiana' | 'cortina' | 'trilho';
+  emendas?: number;
+  lado_motor?: string;
+  tipo_abertura?: string;
   ambiente?: string;
   tipo?: string; // produto sob medida do item (Victor 26/06/2026)
   instalacao_id?: string | null;

@@ -39,6 +39,13 @@ export interface TrilhoEspecialEntrada {
   observacao?: string;
 }
 
+export interface ComponenteExtraSnapshot {
+  descricao: string;
+  quantidade: number;
+  unidade?: string;
+  produto_id?: string | null;
+}
+
 export interface ItemExtraPreparado {
   tipo: 'produto_avulso' | 'trilho_especial';
   produto_id: string;
@@ -46,6 +53,12 @@ export interface ItemExtraPreparado {
   descricao_produto?: string;
   quantidade: number;
   largura?: number;
+  emendas?: number;
+  tc?: number;
+  motorizado?: boolean;
+  lado_motor?: 'direito' | 'esquerdo';
+  tipo_abertura?: 'direita' | 'esquerda';
+  componentes?: ComponenteExtraSnapshot[];
   valor_unitario: number;
   valor_final: number;
   valor_custo: number;
@@ -312,20 +325,32 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
       out.push({
         tipo: 'trilho_especial',
         produto_id: '',
-        nome_produto: `Trilho especial ${calculo.nome} — ${calculo.variante_nome}`,
-        // Para trilhos motorizados o produto sintético do GestãoClick precisa
-        // apenas do nome. Os demais mantêm a ficha técnica para produção.
-        descricao_produto: calculo.motorizado ? undefined : [
+        nome_produto: `${calculo.nome} — ${calculo.variante_nome}`,
+        // Lado do motor e tipo de abertura só fazem sentido para trilhos motorizados;
+        // TC só quando a fórmula da calculadora realmente o usa (> 0).
+        descricao_produto: [
           ambiente ? `Ambiente: ${ambiente}` : null,
-          `Modelo: ${calculo.nome} | Variante: ${calculo.variante_nome}`,
-          `Largura: ${calculo.largura} m | Quantidade: ${calculo.quantidade} | Emendas por trilho: ${calculo.emendas}`,
+          `Largura: ${calculo.largura} m`,
+          `Emendas: ${calculo.emendas}`,
+          `Quantidade: ${calculo.quantidade}`,
+          calculo.motorizado ? `Lado do motor: ${lado}` : null,
+          calculo.motorizado ? `Abertura: ${abertura}` : null,
           calculo.tc > 0 ? `TC: ${calculo.tc} m` : null,
-          `Lado do motor: ${lado} | Tipo de abertura: ${abertura}`,
-          ...calculo.componentes.map((c) => `${c.nome} (${c.codigo_interno}): ${c.quantidade} x ${c.preco_venda}`),
           observacao ? `Obs.: ${observacao}` : null,
         ].filter(Boolean).join('\n'),
         quantidade: calculo.quantidade,
         largura: calculo.largura,
+        emendas: calculo.emendas,
+        tc: calculo.tc,
+        motorizado: calculo.motorizado,
+        lado_motor: calculo.motorizado ? lado : undefined,
+        tipo_abertura: calculo.motorizado ? abertura : undefined,
+        componentes: calculo.componentes.map((c) => ({
+          descricao: `${c.nome} (${c.codigo_interno})`,
+          quantidade: c.quantidade,
+          unidade: 'un',
+          produto_id: c.produto_id,
+        })),
         valor_unitario: calculo.valor_unitario,
         valor_final: calculo.valor_total,
         valor_custo: calculo.custo_total,
@@ -343,7 +368,7 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
     out.push({
       tipo: 'trilho_especial',
       produto_id: produto.id,
-      nome_produto: `Trilho especial ${produto.nome}`,
+      nome_produto: produto.nome,
       descricao_produto: [
         ambiente ? `Ambiente: ${ambiente}` : null,
         `Produto base: ${produto.nome}`,
@@ -352,6 +377,7 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
       ].filter(Boolean).join('\n'),
       quantidade,
       largura,
+      componentes: [{ descricao: produto.nome, quantidade: roundHalfUp(largura * quantidade, 4), unidade: 'm', produto_id: produto.id }],
       valor_unitario: produto.preco_venda,
       valor_final: valorFinal,
       valor_custo: roundHalfUp(produto.valor_custo * largura * quantidade),

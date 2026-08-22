@@ -311,6 +311,48 @@ function aplicarDadosCortinaEntrada(item: ItemProducaoSnapshot, c?: CortinaEntra
   } as ItemProducaoSnapshotTecnico;
 }
 
+interface TrilhoSnapshotProducao {
+  nome_produto?: string;
+  descricao_produto?: string;
+  ambiente?: string;
+  largura?: number;
+  quantidade?: number;
+  emendas?: number;
+  tc?: number;
+  motorizado?: boolean;
+  lado_motor?: string;
+  tipo_abertura?: string;
+  valor_final?: number;
+  valor_custo?: number;
+  componentes?: Array<{ descricao?: string; quantidade?: number; unidade?: string; produto_id?: string | null }>;
+}
+
+function trilhoParaItem(t: TrilhoSnapshotProducao): ItemProducaoSnapshot {
+  return {
+    origem: 'trilho',
+    ambiente: t.ambiente,
+    tipo: 'Trilho especial',
+    largura_m: Number(t.largura ?? 0),
+    qtd_producao: Number(t.quantidade ?? 0),
+    emendas: t.emendas,
+    tc_m: t.tc,
+    lado_motor: t.motorizado ? t.lado_motor : undefined,
+    tipo_abertura: t.motorizado ? t.tipo_abertura : undefined,
+    nome_produto: t.nome_produto,
+    descricao_produto: t.descricao_produto,
+    valor_final: Number(t.valor_final ?? 0),
+    valor_total: Number(t.valor_final ?? 0),
+    valor_custo: Number(t.valor_custo ?? 0),
+    componentes: (t.componentes ?? []).map((c) => ({
+      grupo: 'Trilho',
+      descricao: String(c.descricao ?? '-'),
+      quantidade: Number(c.quantidade ?? 0),
+      unidade: c.unidade ?? 'un',
+      produto_id: c.produto_id ?? null,
+    })),
+  };
+}
+
 function itensDoOrcamento(orc: Pick<Orcamento, 'itens_json' | 'entrada_json' | 'tipo_produto'>): ItemProducaoSnapshot[] {
   const json = orc.itens_json as unknown;
   const entrada = orc.entrada_json as { itens?: ItemEntrada[]; cortinas?: CortinaEntrada[] } | null;
@@ -330,11 +372,13 @@ function itensDoOrcamento(orc: Pick<Orcamento, 'itens_json' | 'entrada_json' | '
   const obj = json as {
     persiana?: { itens?: ItemProducaoSnapshot[] };
     cortinas?: CortinaSnapshotProducao[];
+    trilhos_especiais?: TrilhoSnapshotProducao[];
   };
   const persianas = obj.persiana?.itens ?? [];
   return [
     ...persianas,
     ...(obj.cortinas ?? []).map((c, index) => aplicarDadosCortinaEntrada(cortinaParaItem(c), entrada?.cortinas?.[index])),
+    ...(obj.trilhos_especiais ?? []).map(trilhoParaItem),
   ];
 }
 
@@ -522,6 +566,10 @@ async function recalcularMedicao(orc: Orcamento, medicoes: AjusteMedida[]): Prom
     const itens = [
       ...(persSnaps as unknown as ItemProducaoSnapshot[]),
       ...cortPrep.map((p) => cortinaParaItem(p.snapshot as CortinaSnapshotProducao)),
+      // Trilhos especiais e produtos avulsos não têm largura/altura conferíveis
+      // nesta tela — sem reanexá-los aqui, editar a medida de QUALQUER persiana
+      // ou cortina do mesmo orçamento misto os sumiria da prévia (e da OS).
+      ...itensAtuais.slice(persianasEntrada.length + cortinasEntrada.length),
     ];
     const valorConferido = totalItens(itens);
     return {
@@ -1234,6 +1282,10 @@ function itemPareceCortina(item: ItemProducaoSnapshot): boolean {
   );
 }
 
+function ehOrdemTrilho(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snapshot_json'>): boolean {
+  return itemSnapshotDaOrdem(ordem).origem === 'trilho';
+}
+
 function ehOrdemPersiana(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snapshot_json'>): boolean {
   const item = itemSnapshotDaOrdem(ordem);
   if (String(ordem.tipo_produto) === 'persiana') return true;
@@ -1242,18 +1294,19 @@ function ehOrdemPersiana(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snaps
   return true;
 }
 
-type TipoDocumentoProducao = 'persiana' | 'cortina';
+type TipoDocumentoProducao = 'persiana' | 'cortina' | 'trilho';
 type StatusFiltroProducao = 'criada' | 'impressa' | 'cancelada';
 
 function tipoDocumentoProducao(ordem: Pick<OrdemProducao, 'tipo_produto' | 'item_snapshot_json'>): TipoDocumentoProducao {
+  if (ehOrdemTrilho(ordem)) return 'trilho';
   return ehOrdemPersiana(ordem) ? 'persiana' : 'cortina';
 }
 
 function filtroTipoDocumento(req: Request): TipoDocumentoProducao | null {
   const tipo = String(req.query.tipo ?? '').trim().toLowerCase();
   if (!tipo) return null;
-  if (tipo === 'persiana' || tipo === 'cortina') return tipo;
-  throw new AppError(400, 'TIPO_INVALIDO', 'Informe tipo=persiana ou tipo=cortina.');
+  if (tipo === 'persiana' || tipo === 'cortina' || tipo === 'trilho') return tipo;
+  throw new AppError(400, 'TIPO_INVALIDO', 'Informe tipo=persiana, tipo=cortina ou tipo=trilho.');
 }
 
 // Por padrão as ações em lote (imprimir etiquetas) só devem repetir o que ainda
@@ -1543,6 +1596,7 @@ export async function listarOrdensProducao(req: Request, res: Response): Promise
     if (ordem.status === 'cancelada') acc.canceladas += 1;
     if (t === 'persiana') acc.persianas += 1;
     if (t === 'cortina') acc.cortinas += 1;
+    if (t === 'trilho') acc.trilhos += 1;
     if (entrega && entrega < hoje && ordem.status !== 'cancelada') acc.atrasadas += 1;
     if (entrega && entrega >= hoje && entrega < amanha && ordem.status !== 'cancelada') acc.entregaHoje += 1;
     return acc;
@@ -1553,6 +1607,7 @@ export async function listarOrdensProducao(req: Request, res: Response): Promise
     canceladas: 0,
     persianas: 0,
     cortinas: 0,
+    trilhos: 0,
     atrasadas: 0,
     entregaHoje: 0,
   });

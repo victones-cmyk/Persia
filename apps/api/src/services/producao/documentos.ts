@@ -14,6 +14,11 @@ export interface ComponenteSnapshot {
 }
 
 export interface ItemProducaoSnapshot {
+  // Marcador explícito de origem — presente em snapshots criados a partir desta
+  // feature (trilho especial). Sem isso, a classificação do documento (OS/etiqueta)
+  // cairia nas heurísticas de persiana/cortina, que colidem com campos de trilho
+  // (ex.: tc_m também é usado por persiana motorizada).
+  origem?: 'persiana' | 'cortina' | 'trilho';
   ambiente?: string;
   tipo?: string;
   tecido_nome?: string;
@@ -35,6 +40,9 @@ export interface ItemProducaoSnapshot {
   fixacao?: string | null;
   abertura?: string | number | null;
   desconto?: string | null;
+  emendas?: number;
+  lado_motor?: string;
+  tipo_abertura?: string;
   n_camadas?: number;
   camadas?: Array<{
     nome?: string | null;
@@ -64,7 +72,7 @@ export interface EtiquetaEmbalagemMeta {
 }
 
 export interface OrdemPecaMeta {
-  tipo: 'persiana' | 'cortina';
+  tipo: 'persiana' | 'cortina' | 'trilho';
   numero: number;
   total: number;
 }
@@ -107,12 +115,13 @@ function dataCurtaBR(d: Date | null | undefined): string {
 
 function tipoLabel(t: string): string {
   if (t === 'cortina') return 'Cortina';
+  if (t === 'trilho') return 'Trilho especial';
   if (t === 'misto') return 'Misto';
   return 'Persiana';
 }
 
 function tipoOrdemA4(ordem: OrdemDocumento): string {
-  const tipo = ordem.peca?.tipo ?? (ehCortinaDocumento(ordem) ? 'cortina' : 'persiana');
+  const tipo = ordem.peca?.tipo ?? (ehTrilhoDocumento(ordem) ? 'trilho' : ehCortinaDocumento(ordem) ? 'cortina' : 'persiana');
   const label = tipoLabel(tipo);
   if (!ordem.peca) return label;
   return `${label} ${ordem.peca.numero}/${ordem.peca.total}`;
@@ -190,13 +199,19 @@ function primeiroNome(v: unknown): string {
   return texto(v, '').trim().split(/\s+/)[0] || '-';
 }
 
+function ehTrilhoDocumento(ordem: OrdemDocumento): boolean {
+  return ordem.item.origem === 'trilho';
+}
+
 function ehPersianaDocumento(ordem: OrdemDocumento): boolean {
   const item = ordem.item;
   return String(ordem.tipoProduto) !== 'cortina'
+    && !ehTrilhoDocumento(ordem)
     && Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined || item.rolamento);
 }
 
 function ehCortinaDocumento(ordem: OrdemDocumento): boolean {
+  if (ehTrilhoDocumento(ordem)) return false;
   return String(ordem.tipoProduto) === 'cortina'
     || Boolean(ordem.item.camadas?.length || componentesPorGrupo(ordem.item, 'Tecido').length);
 }
@@ -585,6 +600,45 @@ function desenharPdfCortina(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): voi
   desenharTabelaComponentesCortina(doc, ordem, item.componentes ?? [], 486);
 }
 
+function desenharPdfTrilho(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): void {
+  const item = ordem.item;
+  const left = 36;
+  const pageW = 523;
+  const gap = 8;
+  const ink = '#15191d';
+
+  desenharCabecalhoCortina(doc, ordem);
+
+  const metaY = 98;
+  const metaW = (pageW - gap * 3) / 4;
+  [
+    ['Pedido', ordem.pedidoCodigo],
+    ['Cliente', ordem.cliente],
+    ['Vendedor', primeiroNome(ordem.vendedor)],
+    ['Ambiente', texto(item.ambiente)],
+  ].forEach(([label, value], index) => {
+    campoCortinaPdf(doc, label, value, left + index * (metaW + gap), metaY, metaW, 36);
+  });
+
+  const produtoY = 150;
+  sectionTitle(doc, 'Produto', left, produtoY, pageW);
+  doc.font('Helvetica-Bold').fontSize(12).fillColor(ink).text(abreviar(produtoResumo(item), 112), left, produtoY + 23, { width: pageW, height: 18 });
+
+  const dadosY = 204;
+  sectionTitle(doc, 'Dados técnicos', left, dadosY, pageW);
+  const y0 = dadosY + 24;
+  const rowH = 36;
+  const colW = (pageW - gap * 2) / 3;
+  campoCortinaPdf(doc, 'Largura', `${numero(item.largura_m)} m`, left, y0, colW, 30);
+  campoCortinaPdf(doc, 'Quantidade de trilhos', item.qtd_producao === undefined ? '-' : numero(item.qtd_producao, 0), left + colW + gap, y0, colW, 30);
+  campoCortinaPdf(doc, 'Emendas', item.emendas === undefined ? '-' : numero(item.emendas, 0), left + (colW + gap) * 2, y0, colW, 30);
+  campoCortinaPdf(doc, 'TC', item.tc_m === undefined || item.tc_m <= 0 ? '-' : `${numero(item.tc_m)} m`, left, y0 + rowH, colW, 30);
+  campoCortinaPdf(doc, 'Lado do motor', texto(item.lado_motor, 'Não motorizado'), left + colW + gap, y0 + rowH, colW, 30);
+  campoCortinaPdf(doc, 'Abertura', texto(item.tipo_abertura), left + (colW + gap) * 2, y0 + rowH, colW, 30);
+
+  desenharTabelaComponentesCortina(doc, ordem, item.componentes ?? [], y0 + rowH * 2 + 20);
+}
+
 export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 36, info: { Title: `Ordem de Produção ${ordem.codigo}` } });
@@ -592,6 +646,12 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
     doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
+
+    if (ehTrilhoDocumento(ordem)) {
+      desenharPdfTrilho(doc, ordem);
+      doc.end();
+      return;
+    }
 
     if (ehPersianaDocumento(ordem)) {
       desenharPdfPersiana(doc, ordem);
@@ -681,6 +741,11 @@ export async function gerarPdfOrdemProducao(ordem: OrdemDocumento): Promise<Buff
 }
 
 function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): void {
+  if (ehTrilhoDocumento(ordem)) {
+    desenharPdfTrilho(doc, ordem);
+    return;
+  }
+
   if (ehPersianaDocumento(ordem)) {
     desenharPdfPersiana(doc, ordem);
     return;
@@ -975,9 +1040,39 @@ function dimensoesEtiqueta(dpi: number) {
   return { dotsPorMm, width, height, marginLeft, marginRight };
 }
 
+function gerarZplEtiquetaTrilho(ordem: OrdemDocumento, width: number, height: number, marginLeft: number, marginRight: number): string {
+  const item = ordem.item;
+  const contentW = width - marginLeft - marginRight;
+  const medida = `L:${numero(item.largura_m)}m  Qtd:${item.qtd_producao === undefined ? '-' : numero(item.qtd_producao, 0)}  Emendas:${item.emendas === undefined ? '-' : numero(item.emendas, 0)}`;
+  const motor = [
+    item.tc_m !== undefined && item.tc_m > 0 ? `TC:${numero(item.tc_m)}m` : null,
+    item.lado_motor ? `Motor:${item.lado_motor}` : null,
+    item.tipo_abertura ? `Abertura:${item.tipo_abertura}` : null,
+  ].filter(Boolean).join('  ');
+  const pedidoW = Math.round(contentW * 0.48);
+
+  return [
+    '^XA',
+    '^CI28',
+    `^PW${width}`,
+    `^LL${height}`,
+    '^LH0,0',
+    zplLine(marginLeft, 12, 25, 25, pedidoW, `Pedido ${ordem.pedidoCodigo}`, 1, 24),
+    zplLine(marginLeft, 42, 20, 20, contentW, `Cliente: ${ordem.cliente}`, 1, 56),
+    zplLine(marginLeft, 68, 20, 20, contentW, `Amb: ${texto(item.ambiente, '')}`, 1, 58),
+    zplLine(marginLeft, 94, 20, 20, contentW, produtoResumo(item), 2, 88),
+    zplLine(marginLeft, 142, 17, 17, contentW, medida, 2, 118),
+    motor ? zplLine(marginLeft, 182, 17, 17, contentW, motor, 1, 118) : '',
+    '^XZ',
+  ].filter(Boolean).join('\n');
+}
+
 export function gerarZplEtiqueta(ordem: OrdemDocumento, dpi = 203): string {
   const { dotsPorMm, width, height, marginLeft, marginRight } = dimensoesEtiqueta(dpi);
   const item = ordem.item;
+  if (ehTrilhoDocumento(ordem)) {
+    return gerarZplEtiquetaTrilho(ordem, width, height, marginLeft, marginRight);
+  }
   const temCamposPersiana = Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined);
   const ehCortina = String(ordem.tipoProduto) === 'cortina'
     || (!temCamposPersiana && componentesPorGrupo(item, 'Tecido').length > 0);
@@ -991,6 +1086,9 @@ export function gerarZplEtiqueta(ordem: OrdemDocumento, dpi = 203): string {
 export function gerarZplEtiquetasImpressao(ordem: OrdemDocumento, dpi = 203): string {
   const { dotsPorMm, width, height, marginLeft, marginRight } = dimensoesEtiqueta(dpi);
   const item = ordem.item;
+  if (ehTrilhoDocumento(ordem)) {
+    return gerarZplEtiquetaTrilho(ordem, width, height, marginLeft, marginRight);
+  }
   const temCamposPersiana = Boolean(item.acionamento || item.base || item.comando || item.tc_m !== undefined);
   const ehCortina = String(ordem.tipoProduto) === 'cortina'
     || (!temCamposPersiana && componentesPorGrupo(item, 'Tecido').length > 0);

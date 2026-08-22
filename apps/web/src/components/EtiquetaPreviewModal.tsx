@@ -19,6 +19,10 @@ interface PreviewItem {
   fixacao?: string | null;
   nome_produto?: string;
   etiqueta_embalagem_serial?: number;
+  emendas?: number;
+  lado_motor?: string;
+  tipo_abertura?: string;
+  qtd_producao?: number;
   componentes?: Array<{ grupo?: string; descricao?: string; quantidade?: number; unidade?: string }>;
 }
 
@@ -26,7 +30,7 @@ export interface EtiquetaPreviewOrdem {
   id: string;
   codigo: string;
   gc_pedido_codigo: string;
-  tipo_documento?: 'persiana' | 'cortina';
+  tipo_documento?: 'persiana' | 'cortina' | 'trilho';
   tipo_produto?: string;
   item_snapshot_json?: PreviewItem;
   orcamento?: {
@@ -151,9 +155,15 @@ function EtiquetaProduto({ ordem }: { ordem: EtiquetaPreviewOrdem }) {
     item?.rolamento ? `Rol:${item.rolamento}` : null,
   ].filter(Boolean).join('  ');
 
+  const motor = [
+    item?.tc_m !== undefined && item.tc_m > 0 ? `TC:${numero(item.tc_m)}m` : null,
+    item?.lado_motor ? `Motor:${item.lado_motor}` : null,
+    item?.tipo_abertura ? `Abertura:${item.tipo_abertura}` : null,
+  ].filter(Boolean).join('  ');
+
   return (
     <div className="card" style={{ width: 520, maxWidth: '100%', padding: 10, background: '#fff' }}>
-      <div className="font-mono text-2xs-ui text-neutral-500 mb-1">Etiqueta principal · {tipo === 'persiana' ? 'Persiana' : 'Cortina'}</div>
+      <div className="font-mono text-2xs-ui text-neutral-500 mb-1">Etiqueta principal · {tipo === 'persiana' ? 'Persiana' : tipo === 'trilho' ? 'Trilho especial' : 'Cortina'}</div>
       <div style={{ border: '2px solid #111', height: 182, padding: 8, display: 'grid', gap: 3, fontFamily: 'Arial, sans-serif', fontSize: 12, lineHeight: 1.15 }}>
         <Linha forte>Pedido {ordem.gc_pedido_codigo}</Linha>
         <Linha>Cliente: {ordem.orcamento?.nome_cliente}</Linha>
@@ -164,6 +174,13 @@ function EtiquetaProduto({ ordem }: { ordem: EtiquetaPreviewOrdem }) {
             <Linha>Frente: {frente}</Linha>
             {camada2 && <Linha>Camada 2: {camada2}</Linha>}
             {suporte && <Linha forte>{suporte}</Linha>}
+          </>
+        ) : tipo === 'trilho' ? (
+          <>
+            <Linha>Amb: {item?.ambiente}</Linha>
+            <Linha forte>{produtoResumo(item)}</Linha>
+            <Linha>L:{numero(item?.largura_m)}m  Qtd:{item?.qtd_producao ?? '-'}  Emendas:{item?.emendas ?? '-'}</Linha>
+            {motor && <Linha>{motor}</Linha>}
           </>
         ) : (
           <>

@@ -191,7 +191,7 @@ export function ProducaoModal({
   const [editandoIndex, setEditandoIndex] = useState<number | null>(null);
   const [imprimindoId, setImprimindoId] = useState<string | null>(null);
   const [desfazendoId, setDesfazendoId] = useState<string | null>(null);
-  const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | null>(null);
+  const [imprimindoLote, setImprimindoLote] = useState<'persiana' | 'cortina' | 'trilho' | null>(null);
   const [previaEtiqueta, setPreviaEtiqueta] = useState<EtiquetaPreviewOrdem | null>(null);
   const [estoqueModalAberto, setEstoqueModalAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -321,8 +321,9 @@ export function ProducaoModal({
     return null;
   }, [dados, podeGerar, pedido, entrega, selecionados.length, diferencaAutorizada]);
 
-  function tipoOrdem(ordem: OrdemProducao): 'persiana' | 'cortina' {
+  function tipoOrdem(ordem: OrdemProducao): 'persiana' | 'cortina' | 'trilho' {
     const item = ordem.item_snapshot_json;
+    if (item?.origem === 'trilho') return 'trilho';
     if (ordem.tipo_produto === 'persiana') return 'persiana';
     if (ordem.tipo_produto === 'cortina') return 'cortina';
     const extra = item as (ItemSnapshot & { descricao_produto?: unknown; camadas?: unknown[]; fixacao?: unknown; abertura?: unknown; desconto?: unknown }) | undefined;
@@ -346,7 +347,7 @@ export function ProducaoModal({
   }
 
   const totaisOrdens = useMemo(() => {
-    const totais = { persiana: 0, cortina: 0 };
+    const totais = { persiana: 0, cortina: 0, trilho: 0 };
     dados?.itens.forEach(({ ordem }) => {
       if (!ordem) return;
       totais[tipoOrdem(ordem)] += 1;
@@ -358,7 +359,7 @@ export function ProducaoModal({
   // que ainda falta imprimir. Reimprimir tudo continua possível, mas como ação
   // explícita separada (ver botão "reimprimir todas").
   const pendentesOrdens = useMemo(() => {
-    const pendentes = { persiana: 0, cortina: 0 };
+    const pendentes = { persiana: 0, cortina: 0, trilho: 0 };
     dados?.itens.forEach(({ ordem }) => {
       if (!ordem || ordem.status === 'impressa') return;
       pendentes[tipoOrdem(ordem)] += 1;
@@ -651,7 +652,7 @@ export function ProducaoModal({
     window.open(`/api/orcamentos/ordens-producao/${id}/pdf`, '_blank', 'noopener,noreferrer');
   }
 
-  function abrirPdfLote(tipo: 'persiana' | 'cortina') {
+  function abrirPdfLote(tipo: 'persiana' | 'cortina' | 'trilho') {
     if (!orcamento) return;
     window.open(`/api/orcamentos/${orcamento.id}/ordens-producao/pdf?tipo=${tipo}`, '_blank', 'noopener,noreferrer');
   }
@@ -671,7 +672,7 @@ export function ProducaoModal({
     }
   }
 
-  async function imprimirEtiquetasLote(tipo: 'persiana' | 'cortina', somentePendentes: boolean) {
+  async function imprimirEtiquetasLote(tipo: 'persiana' | 'cortina' | 'trilho', somentePendentes: boolean) {
     if (!orcamento) return;
     setImprimindoLote(tipo);
     setErro(null);
@@ -809,6 +810,15 @@ export function ProducaoModal({
             >
               <FontAwesomeIcon icon={faFilePdf} /> OS A4 cortinas ({totaisOrdens.cortina})
             </button>
+            <button
+              type="button"
+              className="btn btn-info btn-sm"
+              disabled={totaisOrdens.trilho === 0}
+              onClick={() => abrirPdfLote('trilho')}
+              title="Abrir todas as OS A4 de trilhos especiais em um PDF"
+            >
+              <FontAwesomeIcon icon={faFilePdf} /> OS A4 trilhos ({totaisOrdens.trilho})
+            </button>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -850,6 +860,28 @@ export function ProducaoModal({
                   title="Reimprime também as etiquetas de cortinas já impressas"
                 >
                   reimprimir todas ({totaisOrdens.cortina})
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-default btn-sm"
+                disabled={pendentesOrdens.trilho === 0 || imprimindoLote !== null}
+                onClick={() => void imprimirEtiquetasLote('trilho', true)}
+                title="Imprimir na Zebra apenas as etiquetas de trilhos especiais ainda não impressas"
+              >
+                <FontAwesomeIcon icon={faTag} /> {imprimindoLote === 'trilho' ? 'Imprimindo...' : `Etiquetas trilhos pendentes (${pendentesOrdens.trilho})`}
+              </button>
+              {totaisOrdens.trilho > pendentesOrdens.trilho && (
+                <button
+                  type="button"
+                  className="text-xs-ui text-neutral-500 hover:text-neutral-800"
+                  disabled={imprimindoLote !== null}
+                  onClick={() => void imprimirEtiquetasLote('trilho', false)}
+                  title="Reimprime também as etiquetas de trilhos especiais já impressas"
+                >
+                  reimprimir todas ({totaisOrdens.trilho})
                 </button>
               )}
             </div>

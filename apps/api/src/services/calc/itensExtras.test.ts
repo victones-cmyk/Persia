@@ -1,13 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ listarProdutos: vi.fn(), listarProdutosRemoto: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  listarProdutos: vi.fn(),
+  listarProdutosRemoto: vi.fn(),
+  encontrarCalculadoraTrilhoEspecial: vi.fn(),
+}));
 
 vi.mock('../gc/catalogos', () => ({
   listarProdutos: mocks.listarProdutos,
   listarProdutosRemoto: mocks.listarProdutosRemoto,
 }));
 
-import { calcularComposicaoTrilho, prepararProdutosAvulsos, type ProdutoCatalogoOrcamento } from './itensExtras';
+vi.mock('./calculadorasTrilhoEspecial', () => ({
+  encontrarCalculadoraTrilhoEspecial: mocks.encontrarCalculadoraTrilhoEspecial,
+}));
+
+import { calcularComposicaoTrilho, prepararProdutosAvulsos, prepararTrilhosEspeciais, type ProdutoCatalogoOrcamento } from './itensExtras';
 import { roundHalfUp } from './arredondamento';
 import type { CalculadoraTrilhoEspecial } from './calculadorasTrilhoEspecial';
 
@@ -84,6 +92,55 @@ describe('calculadora de trilhos especiais', () => {
     const r = calcularComposicaoTrilho(calculadoraComTc, { varianteId: 'com_tc', largura: 3, quantidade: 1, emendas: 0, tc: 2.5 }, produtos);
     expect(r.tc).toBe(2.5);
     expect(r.componentes[0].quantidade).toBe(2.5);
+  });
+});
+
+describe('prepararTrilhosEspeciais', () => {
+  beforeEach(() => {
+    mocks.listarProdutos.mockReset();
+    mocks.encontrarCalculadoraTrilhoEspecial.mockReset();
+    mocks.listarProdutos.mockResolvedValue(produtos);
+    mocks.encontrarCalculadoraTrilhoEspecial.mockReturnValue(calculadora);
+  });
+
+  it('nao prefixa "Trilho especial" no nome do produto enviado ao GestãoClick', async () => {
+    const [item] = await prepararTrilhosEspeciais([{
+      calculadora_id: 'trilho_teste', variante_id: 'motorizada', largura: 3, quantidade: 2, emendas: 1,
+    }]);
+    expect(item.nome_produto).toBe('Trilho Teste — Motorizada');
+  });
+
+  it('inclui ambiente, largura, emendas, quantidade, lado do motor, abertura e TC na descrição quando motorizado', async () => {
+    const [item] = await prepararTrilhosEspeciais([{
+      calculadora_id: 'trilho_teste', variante_id: 'motorizada', largura: 3, quantidade: 2, emendas: 1, tc: 1.2,
+      ambiente: 'Sala', lado_motor: 'esquerdo', tipo_abertura: 'esquerda',
+    }]);
+    expect(item.descricao_produto).toBe(
+      'Ambiente: Sala\nLargura: 3 m\nEmendas: 1\nQuantidade: 2\nLado do motor: esquerdo\nAbertura: esquerda\nTC: 1.2 m',
+    );
+  });
+
+  it('omite lado do motor, abertura e TC quando não motorizado ou TC zerado', async () => {
+    const calculadoraManual: CalculadoraTrilhoEspecial = {
+      ...calculadora,
+      variantes: [{ id: 'manual', nome: 'Manual', motorizado: false, componentes: calculadora.variantes[0].componentes }],
+    };
+    mocks.encontrarCalculadoraTrilhoEspecial.mockReturnValue(calculadoraManual);
+    const [item] = await prepararTrilhosEspeciais([{
+      calculadora_id: 'trilho_teste', variante_id: 'manual', largura: 3, quantidade: 2, emendas: 0,
+    }]);
+    expect(item.descricao_produto).toBe('Largura: 3 m\nEmendas: 0\nQuantidade: 2');
+  });
+
+  it('preenche os componentes com os produtos e quantidades calculados, para a OS e a baixa de estoque', async () => {
+    const [item] = await prepararTrilhosEspeciais([{
+      calculadora_id: 'trilho_teste', variante_id: 'motorizada', largura: 3, quantidade: 2, emendas: 0,
+    }]);
+    expect(item.componentes).toEqual([
+      { descricao: 'Perfil de alumínio (TR-001)', quantidade: 6, unidade: 'un', produto_id: '1' },
+      { descricao: 'Acessório do trilho (AC-002)', quantidade: 12, unidade: 'un', produto_id: '2' },
+      { descricao: 'Emenda do trilho (EM-003)', quantidade: 0, unidade: 'un', produto_id: '3' },
+    ]);
   });
 });
 

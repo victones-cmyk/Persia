@@ -8,7 +8,7 @@ import { EtiquetaPreviewModal, type EtiquetaPreviewOrdem } from '../components/E
 
 type StatusOrdem = 'criada' | 'impressa' | 'cancelada';
 type FiltroStatus = StatusOrdem | 'sem_os';
-type TipoDocumento = 'persiana' | 'cortina';
+type TipoDocumento = 'persiana' | 'cortina' | 'trilho';
 
 interface PedidoSemOs {
   id: string;
@@ -57,6 +57,7 @@ interface ResumoProducao {
   canceladas: number;
   persianas: number;
   cortinas: number;
+  trilhos: number;
   atrasadas: number;
   entregaHoje: number;
 }
@@ -73,6 +74,7 @@ const TIPOS: Array<{ valor: '' | TipoDocumento; label: string }> = [
   { valor: '', label: 'Todos os tipos' },
   { valor: 'persiana', label: 'Persianas' },
   { valor: 'cortina', label: 'Cortinas' },
+  { valor: 'trilho', label: 'Trilhos' },
 ];
 
 function dataCurta(v: string | null | undefined): string {
@@ -106,7 +108,7 @@ function statusBadge(status: StatusOrdem) {
 function tipoBadge(tipo: TipoDocumento) {
   return (
     <span className="badge badge-secondary">
-      {tipo === 'persiana' ? 'Persiana' : 'Cortina'}
+      {tipo === 'persiana' ? 'Persiana' : tipo === 'trilho' ? 'Trilho especial' : 'Cortina'}
     </span>
   );
 }
@@ -231,6 +233,7 @@ export function Producao() {
             <ResumoCard label="Hoje" valor={resumo?.entregaHoje ?? 0} />
             <ResumoCard label="Persianas" valor={resumo?.persianas ?? 0} />
             <ResumoCard label="Cortinas" valor={resumo?.cortinas ?? 0} />
+            <ResumoCard label="Trilhos" valor={resumo?.trilhos ?? 0} />
           </>
         )}
       </div>
