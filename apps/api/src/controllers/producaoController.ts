@@ -1357,59 +1357,92 @@ async function proximoSerialEtiqueta(tx: Prisma.TransactionClient): Promise<numb
   return proximo;
 }
 
-async function prepararEtiquetaEmbalagemPersiana(ordem: OrdemProducao): Promise<{
-  ordem: OrdemProducao;
-  meta: OrdemDocumento['etiquetaEmbalagem'];
-}> {
+/**
+ * Monta o número de peça (1/N) e o S/N de embalagem de uma persiana. Recebe
+ * `ordensPedido` (já carregada pelo chamador) em vez de buscá-la de novo —
+ * antes cada chamada abria sua PRÓPRIA transação com um findMany de TODAS as
+ * ordens do pedido, então imprimir um lote de N persianas fazia N transações
+ * sequenciais repetindo a mesma consulta N vezes, o que deixava a impressão
+ * em lote visivelmente lenta.
+ */
+function metaEtiquetaEmbalagemPersiana(
+  ordem: Pick<OrdemProducao, 'id' | 'item_snapshot_json'>,
+  persianas: Array<Pick<OrdemProducao, 'id'>>,
+): { pecaIndex: number; snapshot: ItemProducaoSnapshot; serialExistente: number } {
+  const pecaIndex = Math.max(0, persianas.findIndex((op) => op.id === ordem.id));
+  const snapshot = itemSnapshotDaOrdem(ordem);
+  return { pecaIndex, snapshot, serialExistente: Number(snapshot.etiqueta_embalagem_serial) };
+}
+
+async function prepararEtiquetaEmbalagemPersiana(
+  ordem: OrdemProducao,
+  ordensPedido: OrdemProducao[],
+): Promise<{ ordem: OrdemProducao; meta: OrdemDocumento['etiquetaEmbalagem'] }> {
   if (!ehOrdemPersiana(ordem)) return { ordem, meta: null };
 
+  const persianas = ordensPedido.filter(ehOrdemPersiana);
+  const { pecaIndex, snapshot, serialExistente } = metaEtiquetaEmbalagemPersiana(ordem, persianas);
+  const pecaTotal = Math.max(1, persianas.length);
+
+  if (Number.isFinite(serialExistente) && serialExistente >= 6000) {
+    return { ordem, meta: { pecaNumero: pecaIndex + 1, pecaTotal, serial: serialExistente } };
+  }
+
   return prisma.$transaction(async (tx) => {
-    const ordensPedido = await tx.ordemProducao.findMany({
-      where: { orcamento_id: ordem.orcamento_id },
-      orderBy: { item_index: 'asc' },
-    });
-    const persianas = ordensPedido.filter(ehOrdemPersiana);
-    const pecaIndex = Math.max(0, persianas.findIndex((op) => op.id === ordem.id));
-    const snapshot = itemSnapshotDaOrdem(ordem);
-    const serialExistente = Number(snapshot.etiqueta_embalagem_serial);
-    const serial = Number.isFinite(serialExistente) && serialExistente >= 6000
-      ? serialExistente
-      : await proximoSerialEtiqueta(tx);
-
-    if (serial === serialExistente) {
-      return {
-        ordem,
-        meta: {
-          pecaNumero: pecaIndex + 1,
-          pecaTotal: Math.max(1, persianas.length),
-          serial,
-        },
-      };
-    }
-
-    const itemAtualizado = {
-      ...snapshot,
-      etiqueta_embalagem_serial: serial,
-    };
+    const serial = await proximoSerialEtiqueta(tx);
+    const itemAtualizado = { ...snapshot, etiqueta_embalagem_serial: serial };
     const atualizada = await tx.ordemProducao.update({
       where: { id: ordem.id },
       data: { item_snapshot_json: itemAtualizado as unknown as Prisma.InputJsonValue },
     });
-
-    return {
-      ordem: atualizada,
-      meta: {
-        pecaNumero: pecaIndex + 1,
-        pecaTotal: Math.max(1, persianas.length),
-        serial,
-      },
-    };
+    return { ordem: atualizada, meta: { pecaNumero: pecaIndex + 1, pecaTotal, serial } };
   });
+}
+
+/**
+ * Versão em lote: resolve todas as etiquetas de embalagem do lote em UMA
+ * transação (em vez de uma por persiana), evitando N conexões/round-trips
+ * sequenciais quando o vendedor imprime várias etiquetas pendentes de uma vez.
+ */
+async function prepararEtiquetasEmbalagemPersianaLote(
+  ordens: OrdemProducao[],
+  ordensPedido: OrdemProducao[],
+): Promise<Map<string, OrdemDocumento['etiquetaEmbalagem']>> {
+  const persianas = ordensPedido.filter(ehOrdemPersiana);
+  const pecaTotal = Math.max(1, persianas.length);
+  const metas = new Map<string, OrdemDocumento['etiquetaEmbalagem']>();
+  const pendentes: Array<{ ordem: OrdemProducao; pecaIndex: number; snapshot: ItemProducaoSnapshot }> = [];
+
+  for (const ordem of ordens) {
+    if (!ehOrdemPersiana(ordem)) continue;
+    const { pecaIndex, snapshot, serialExistente } = metaEtiquetaEmbalagemPersiana(ordem, persianas);
+    if (Number.isFinite(serialExistente) && serialExistente >= 6000) {
+      metas.set(ordem.id, { pecaNumero: pecaIndex + 1, pecaTotal, serial: serialExistente });
+    } else {
+      pendentes.push({ ordem, pecaIndex, snapshot });
+    }
+  }
+
+  if (pendentes.length > 0) {
+    await prisma.$transaction(async (tx) => {
+      for (const { ordem, pecaIndex, snapshot } of pendentes) {
+        const serial = await proximoSerialEtiqueta(tx);
+        const itemAtualizado = { ...snapshot, etiqueta_embalagem_serial: serial };
+        await tx.ordemProducao.update({
+          where: { id: ordem.id },
+          data: { item_snapshot_json: itemAtualizado as unknown as Prisma.InputJsonValue },
+        });
+        metas.set(ordem.id, { pecaNumero: pecaIndex + 1, pecaTotal, serial });
+      }
+    });
+  }
+
+  return metas;
 }
 
 export async function imprimirEtiquetaOrdem(req: Request, res: Response): Promise<void> {
   const ordem = await carregarOrdemAutorizada(req);
-  const etiqueta = await prepararEtiquetaEmbalagemPersiana(ordem);
+  const etiqueta = await prepararEtiquetaEmbalagemPersiana(ordem, ordem.orcamento.ordens_producao);
   const zpl = gerarZplEtiquetasImpressao(ordemParaDocumento(etiqueta.ordem, ordem.orcamento, etiqueta.meta), env.ZEBRA_DPI);
   await imprimirRawEtiqueta(zpl);
   const atualizada = await prisma.ordemProducao.update({
@@ -1449,15 +1482,8 @@ export async function imprimirEtiquetasOrcamento(req: Request, res: Response): P
     throw new AppError(404, 'SEM_ORDENS', `Nenhuma etiqueta ${tipo ? `de ${tipo} ` : ''}${escopo} encontrada para este orçamento.`);
   }
 
-  const docs: OrdemDocumento[] = [];
-  for (const ordem of ordens) {
-    if (tipoDocumentoProducao(ordem) === 'persiana') {
-      const etiqueta = await prepararEtiquetaEmbalagemPersiana(ordem);
-      docs.push(ordemParaDocumento(etiqueta.ordem, orc, etiqueta.meta));
-      continue;
-    }
-    docs.push(ordemParaDocumento(ordem, orc));
-  }
+  const metasEmbalagem = await prepararEtiquetasEmbalagemPersianaLote(ordens, orc.ordens_producao);
+  const docs: OrdemDocumento[] = ordens.map((ordem) => ordemParaDocumento(ordem, orc, metasEmbalagem.get(ordem.id) ?? null));
 
   const zpl = docs.map((doc) => gerarZplEtiquetasImpressao(doc, env.ZEBRA_DPI)).join('\n');
   await imprimirRawEtiqueta(zpl);
