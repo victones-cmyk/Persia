@@ -121,6 +121,29 @@ describe('Cortina — método de emenda (altura > largura do tecido)', () => {
   });
 });
 
+describe('Cortina — emenda opcional (altura cabe na largura do tecido, mas o vendedor escolhe emenda mesmo assim)', () => {
+  const entradaCurta: EntradaCortina = {
+    modelo: 'franzido', fixacao: 'trilho', config: 'um_tecido',
+    largura: 3, altura: 1.0, largura_tecido: 3.0,
+    franzido_frente: 3, tamanho_barra: 0.1, tipo_barra: 'dupla', aberturas: 1,
+  };
+
+  it('sem metodo_altura, cortina curta continua em corte único (normal)', () => {
+    const r = calcularCortina(entradaCurta);
+    expect(r.altura_excede_tecido).toBe(false);
+    expect(r.metodo).toBe('normal');
+    expect(r.metragem_frente).toBe(9); // consumo = 3×3 = 9, sem folga por não ter emenda
+  });
+
+  it('com metodo_altura=emenda, mesmo não sendo obrigatório, calcula por faixas — e aqui gasta MENOS tecido', () => {
+    const r = calcularCortina({ ...entradaCurta, metodo_altura: 'emenda' });
+    expect(r.altura_excede_tecido).toBe(false); // continua não sendo obrigatório
+    expect(r.metodo).toBe('emenda'); // mas a escolha do vendedor é respeitada
+    expect(r.tiras_frente).toBe(3); // 3 faixas (consumo 9 ÷ tecido 3,00)
+    expect(r.metragem_frente).toBe(3.84); // 3 × (1,00 + 0,28 de barra/folga) — bem menos que os 9 m do corte único
+  });
+});
+
 describe('Cortina — emenda: nº de faixas = consumo ÷ largura do tecido (Victor v.5.1)', () => {
   // Exemplo do Victor (v.5.1): cortina 2,00 × 6,00, tecido 3,00 m, franzido 4 →
   // consumo 8,00 → 3 faixas (8 ÷ 3), NÃO 4 (antes inflava por um mínimo = franzido).

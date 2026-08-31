@@ -179,7 +179,11 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
 
   const barraConsumo = roundHalfUp(reg.folga_topo[e.modelo] + tamanhoBarra * fatorBarra);
   const alturaExcedeTecido = e.altura + barraConsumo > e.largura_tecido;
-  const metodo: MetodoCortina = alturaExcedeTecido ? (e.metodo_altura ?? 'emenda') : 'normal';
+  // Quando a altura excede a largura do tecido, emenda/barra postiça é obrigatória
+  // (não cabe corte único). Fora disso, o corte único (normal) é o padrão, mas o
+  // vendedor pode escolher emenda mesmo sem ser obrigatório — em cortinas menores
+  // ela às vezes gasta MENOS tecido que o corte único (Victor 26/08/2026).
+  const metodo: MetodoCortina = e.metodo_altura ?? (alturaExcedeTecido ? 'emenda' : 'normal');
 
   // ---- Tecido frente ----
   // Wave usa o franzido configurado na calculadora; sem configuração, cai no padrão global.
@@ -199,7 +203,7 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   } else if (e.config === 'dois_tecidos_varao_duplo') {
     const consumoTras = roundHalfUp(e.largura * franzidoTras);
     const alturaExcedeTecidoTras = e.altura + barraConsumo > larguraTecidoTras;
-    const metodoTras: MetodoCortina = alturaExcedeTecidoTras ? (e.metodo_altura ?? 'emenda') : 'normal';
+    const metodoTras: MetodoCortina = e.metodo_altura ?? (alturaExcedeTecidoTras ? 'emenda' : 'normal');
     const tras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras, aberturas).metragem;
     metragemTras = roundHalfUp(tras + bainhasLateraisAcrescimo);
   }
