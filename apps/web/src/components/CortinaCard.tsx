@@ -108,7 +108,7 @@ function modeloCamadaPayload(modelo: ModeloCortinaOpcao | ''): ModeloCortinaOpca
 
 export function CortinaCard({
   indice, tecidos, opcoes, instalacoes, instalacaoFaixaM, inicial, restauro, onChange, onRemover, podeRemover, onPreenchidoChange, onSnapshot, onDuplicar,
-  onCalculandoChange, permitirInstalacao = true, descontoPct = 0,
+  onCalculandoChange, permitirInstalacao = true, descontoPct = 0, rtPct = 0,
 }: {
   indice: number;
   tecidos: TecidoOpcao[];
@@ -129,7 +129,12 @@ export function CortinaCard({
   permitirInstalacao?: boolean;
   /** % de desconto da revenda (0 p/ vendedor/admin) — só afeta o total exibido aqui (minimizado). */
   descontoPct?: number;
+  /** % de RT do arquiteto (0 quando não informado) — só afeta o total exibido aqui (minimizado). */
+  rtPct?: number;
 }) {
+  // Mesma ordem do servidor (RT primeiro, desconto depois — ver rtCalc.ts/descontoCalc.ts):
+  // sem o RT aqui, o total do card minimizado ficava menor que o valor realmente salvo.
+  const fatorRtCard = rtPct > 0 ? 1 / (1 - Math.max(0, Math.min(99, rtPct)) / 100) : 1;
   const fatorDescontoCard = descontoPct > 0 ? 1 - Math.max(0, Math.min(99, descontoPct)) / 100 : 1;
   // Modelo da camada: restauro/inicial por camada; fallback ao modelo único antigo (compat).
   const modeloCamadaInicial = (i: number): ModeloCortinaOpcao | '' =>
@@ -504,7 +509,7 @@ export function CortinaCard({
         <div className="flex shrink-0 items-center gap-3">
           {minimizado && (
             <span className="font-mono tabular-nums text-xs-ui font-semibold text-neutral-800">
-              {calculando ? 'Calculando...' : resumo.completo ? formatBRL(roundHalfUp(resumo.total * fatorDescontoCard)) : '—'}
+              {calculando ? 'Calculando...' : resumo.completo ? formatBRL(roundHalfUp(roundHalfUp(resumo.total * fatorRtCard) * fatorDescontoCard)) : '—'}
             </span>
           )}
           {minimizado && onDuplicar && (

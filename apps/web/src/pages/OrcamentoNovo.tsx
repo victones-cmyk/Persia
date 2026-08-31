@@ -654,6 +654,7 @@ export function OrcamentoNovo() {
                     onEstado={setCortinaEstado}
                     permitirInstalacao={!ehRevenda}
                     descontoPct={descontoNum}
+                    rtPct={rtNum}
                   />
                 )}
               </section>
