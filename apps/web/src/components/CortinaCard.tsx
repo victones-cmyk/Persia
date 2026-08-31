@@ -60,13 +60,6 @@ const SEM_INSTALACAO = 'sem_instalacao';
 const nomePadraoCamada = (index: number): string => (index === 0 ? 'Frente' : `Camada ${index + 1}`);
 const novaCamada = (modelo: ModeloCortinaOpcao | '' = '', index = 0): CamadaState => ({ id: crypto.randomUUID(), nome: nomePadraoCamada(index), tecidoId: '', modelo, franzido: '', metodoAltura: 'emenda', usarEmendaOpcional: false, costuradoQuantidade: 'mesma_quantidade' });
 
-/** metodo_altura efetivo a mandar ao servidor: quando a emenda é obrigatória, a
- *  escolha do select (emenda/barra postiça); fora disso, 'emenda' só se o vendedor
- *  optou por ela — senão omite e o servidor usa o corte único padrão. */
-function metodoAlturaPayload(c: CamadaState, obrigatorio: boolean): MetodoAlturaCortina | undefined {
-  if (obrigatorio) return c.metodoAltura;
-  return c.usarEmendaOpcional ? 'emenda' : undefined;
-}
 const calcCache = new Map<string, { expiraEm: number; valor: CalcCortinaCompletaResp }>();
 const calcEmVoo = new Map<string, Promise<CalcCortinaCompletaResp>>();
 
@@ -374,7 +367,7 @@ export function CortinaCard({
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
         bainhas_laterais: bainhasLaterais === '' ? undefined : Number(bainhasLaterais) / 100,
-        camadas: camadas.map((c, i) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: modeloCamadaPayload(c.modelo), franzido: franzidoDe(c), metodo_altura: metodoAlturaPayload(c, calc?.camadas[i]?.altura_excede_tecido === true), ...(c.modelo === 'costurado_junto' ? { costurado_quantidade: c.costuradoQuantidade } : {}) })),
+        camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: modeloCamadaPayload(c.modelo), franzido: franzidoDe(c), metodo_altura: c.metodoAltura, emenda_opcional: c.usarEmendaOpcional, ...(c.modelo === 'costurado_junto' ? { costurado_quantidade: c.costuradoQuantidade } : {}) })),
       };
       try {
         const r = await postCalculoCortinaCacheado(assinatura, payload);
@@ -450,7 +443,7 @@ export function CortinaCard({
         tamanho_barra: tamanhoBarraNum, tipo_barra: tipoBarraVal,
         aberturas: aberturas === '' ? undefined : Number(aberturas),
         bainhas_laterais: bainhasLaterais === '' ? undefined : Number(bainhasLaterais) / 100,
-        camadas: camadas.map((c, i) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: modeloCamadaPayload(c.modelo) ?? 'franzido', franzido: franzidoDe(c), metodo_altura: metodoAlturaPayload(c, calc?.camadas[i]?.altura_excede_tecido === true), ...(c.modelo === 'costurado_junto' ? { costurado_quantidade: c.costuradoQuantidade } : {}) })),
+        camadas: camadas.map((c) => ({ nome: c.nome.trim() || undefined, tecido_id: c.tecidoId, modelo: modeloCamadaPayload(c.modelo) ?? 'franzido', franzido: franzidoDe(c), metodo_altura: c.metodoAltura, emenda_opcional: c.usarEmendaOpcional, ...(c.modelo === 'costurado_junto' ? { costurado_quantidade: c.costuradoQuantidade } : {}) })),
         acessorios: acessoriosPayload, nome_produto: nomeProdutoPreview, ja_possui_varao: jaPossuiVarao,
         instalacao_id: instalacaoId && instalacaoId !== SEM_INSTALACAO ? instalacaoId : null,
       },

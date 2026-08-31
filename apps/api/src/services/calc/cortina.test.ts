@@ -128,15 +128,27 @@ describe('Cortina — emenda opcional (altura cabe na largura do tecido, mas o v
     franzido_frente: 3, tamanho_barra: 0.1, tipo_barra: 'dupla', aberturas: 1,
   };
 
-  it('sem metodo_altura, cortina curta continua em corte único (normal)', () => {
+  it('sem nada informado, cortina curta continua em corte único (normal)', () => {
     const r = calcularCortina(entradaCurta);
     expect(r.altura_excede_tecido).toBe(false);
     expect(r.metodo).toBe('normal');
     expect(r.metragem_frente).toBe(9); // consumo = 3×3 = 9, sem folga por não ter emenda
   });
 
-  it('com metodo_altura=emenda, mesmo não sendo obrigatório, calcula por faixas — e aqui gasta MENOS tecido', () => {
+  // Regressão real (Victor 31/08/2026): orçamentos salvos ANTES da opção de emenda
+  // opcional existir têm metodo_altura='emenda' preenchido por um default do
+  // formulário que nunca foi uma escolha do vendedor (o campo era ignorado fora da
+  // obrigatoriedade). Se metodo_altura sozinho bastasse pra ligar a emenda, reabrir
+  // ou conferir a medição desses orçamentos passaria a cobrar menos tecido do que
+  // foi realmente vendido — dois preços diferentes pra mesma cortina.
+  it('metodo_altura=emenda SOZINHO (sem emenda_opcional) não muda nada — é só o resquício de orçamentos antigos', () => {
     const r = calcularCortina({ ...entradaCurta, metodo_altura: 'emenda' });
+    expect(r.metodo).toBe('normal');
+    expect(r.metragem_frente).toBe(9);
+  });
+
+  it('com emenda_opcional=true, calcula por faixas — e aqui gasta MENOS tecido', () => {
+    const r = calcularCortina({ ...entradaCurta, emenda_opcional: true });
     expect(r.altura_excede_tecido).toBe(false); // continua não sendo obrigatório
     expect(r.metodo).toBe('emenda'); // mas a escolha do vendedor é respeitada
     expect(r.tiras_frente).toBe(3); // 3 faixas (consumo 9 ÷ tecido 3,00)

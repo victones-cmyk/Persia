@@ -28,7 +28,7 @@ import { descricaoProdutoCortina, nomeProdutoCortina } from '../services/calc/co
 
 // `modelo` aceita também as variantes de prega (prega_macho etc.): elas só mudam
 // o nome exibido, então seguem até a ficha do produto e viram 'prega' no motor.
-interface CamadaEntrada { nome?: string; tecido_id: string; franzido?: number | string; modelo?: ModeloCamadaEntrada; metodo_altura?: 'emenda' | 'barra_postica'; costurado_quantidade?: 'mesma_quantidade' | 'proporcao_franzido' }
+interface CamadaEntrada { nome?: string; tecido_id: string; franzido?: number | string; modelo?: ModeloCamadaEntrada; metodo_altura?: 'emenda' | 'barra_postica'; emenda_opcional?: boolean; costurado_quantidade?: 'mesma_quantidade' | 'proporcao_franzido' }
 interface AcessorioEntrada { item: string; produto_id?: string; quantidade?: number }
 export interface CortinaEntrada {
   ambiente?: string;
@@ -83,6 +83,7 @@ export async function prepararCortina(c: CortinaEntrada): Promise<CortinaPrepara
     franzido: cam.franzido !== undefined && cam.franzido !== '' ? Number(cam.franzido) : undefined,
     modelo: modeloDeCalculoCamada(cam.modelo), // modelo PRÓPRIO da camada (Victor v.4.1: frente wave + fundo franzido)
     metodo_altura: cam.metodo_altura,
+    emenda_opcional: cam.emenda_opcional,
     costurado_quantidade: cam.costurado_quantidade,
   }));
 

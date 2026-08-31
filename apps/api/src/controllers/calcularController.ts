@@ -345,6 +345,7 @@ export async function calcularCortinaController(req: Request, res: Response): Pr
     tipo_barra: b.tipo_barra,
     aberturas: b.aberturas !== undefined && b.aberturas !== '' ? Number(b.aberturas) : undefined,
     metodo_altura: b.metodo_altura === 'barra_postica' ? 'barra_postica' : b.metodo_altura === 'emenda' ? 'emenda' : undefined,
+    emenda_opcional: b.emenda_opcional === true,
   };
 
   try {
@@ -394,11 +395,12 @@ export async function calcularCortinaCompletaController(req: Request, res: Respo
     tecidos.push(t);
   }
 
-  const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string; modelo?: string; metodo_altura?: string; costurado_quantidade?: string }, i: number) => ({
+  const camadasCalc: CamadaCortina[] = camadasIn.map((c: { franzido?: number | string; modelo?: string; metodo_altura?: string; emenda_opcional?: boolean; costurado_quantidade?: string }, i: number) => ({
     largura_tecido: tecidos[i]!.dimensao_m,
     franzido: c.franzido !== undefined && c.franzido !== '' ? Number(c.franzido) : undefined,
     modelo: modeloDeCalculoCamada(c.modelo), // modelo PRÓPRIO da camada (Victor v.4.1); variantes de prega viram 'prega'
     metodo_altura: c.metodo_altura === 'barra_postica' ? 'barra_postica' : c.metodo_altura === 'emenda' ? 'emenda' : undefined,
+    emenda_opcional: c.emenda_opcional === true,
     costurado_quantidade: c.costurado_quantidade === 'proporcao_franzido' ? 'proporcao_franzido' : c.costurado_quantidade === 'mesma_quantidade' ? 'mesma_quantidade' : undefined,
   }));
 

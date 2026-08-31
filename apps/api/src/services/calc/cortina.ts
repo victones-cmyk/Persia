@@ -68,7 +68,12 @@ export interface EntradaCortina {
   espacamento_ilhos?: number; // m, default 0,15 (ilhós, sobre a largura franzida)
   espacamento_ferragem?: number; // m, default 0,10 (argola/rodízio, sobre o varão)
   largura_tecido_tras?: number; // largura do rolo do 2º tecido, se diferente
-  metodo_altura?: MetodoAlturaCortina; // quando altura + consumos > largura do tecido
+  metodo_altura?: MetodoAlturaCortina; // escolha entre emenda/barra postiça QUANDO a emenda é obrigatória (altura + consumos > largura do tecido)
+  /** Fora da obrigatoriedade, o vendedor pode optar por emenda mesmo assim (economiza
+   *  tecido em cortinas menores) — sinalizador PRÓPRIO, separado de `metodo_altura`:
+   *  orçamentos salvos antes desta opção existir têm `metodo_altura` preenchido com um
+   *  valor padrão que nunca foi uma escolha real, então não pode ser reaproveitado aqui. */
+  emenda_opcional?: boolean;
 }
 
 export interface ItemCortina {
@@ -180,10 +185,16 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   const barraConsumo = roundHalfUp(reg.folga_topo[e.modelo] + tamanhoBarra * fatorBarra);
   const alturaExcedeTecido = e.altura + barraConsumo > e.largura_tecido;
   // Quando a altura excede a largura do tecido, emenda/barra postiça é obrigatória
-  // (não cabe corte único). Fora disso, o corte único (normal) é o padrão, mas o
-  // vendedor pode escolher emenda mesmo sem ser obrigatório — em cortinas menores
-  // ela às vezes gasta MENOS tecido que o corte único (Victor 26/08/2026).
-  const metodo: MetodoCortina = e.metodo_altura ?? (alturaExcedeTecido ? 'emenda' : 'normal');
+  // (não cabe corte único) — `metodo_altura` escolhe entre as duas, como sempre foi.
+  // Fora disso, o corte único (normal) continua o padrão; só vira emenda com o novo
+  // opt-in `emenda_opcional` (Victor 26/08/2026) — NUNCA por `metodo_altura` sozinho,
+  // porque orçamentos salvos antes dessa opção existir têm esse campo preenchido com
+  // um valor padrão que nunca foi uma escolha real (o campo era ignorado fora da
+  // obrigatoriedade); reaproveitá-lo aqui faria a conferência de medição recalcular
+  // como emenda cortinas que na venda foram cortadas normal.
+  const metodo: MetodoCortina = alturaExcedeTecido
+    ? (e.metodo_altura ?? 'emenda')
+    : (e.emenda_opcional ? 'emenda' : 'normal');
 
   // ---- Tecido frente ----
   // Wave usa o franzido configurado na calculadora; sem configuração, cai no padrão global.
@@ -203,7 +214,9 @@ export function calcularCortina(e: EntradaCortina): ResultadoCortina {
   } else if (e.config === 'dois_tecidos_varao_duplo') {
     const consumoTras = roundHalfUp(e.largura * franzidoTras);
     const alturaExcedeTecidoTras = e.altura + barraConsumo > larguraTecidoTras;
-    const metodoTras: MetodoCortina = e.metodo_altura ?? (alturaExcedeTecidoTras ? 'emenda' : 'normal');
+    const metodoTras: MetodoCortina = alturaExcedeTecidoTras
+      ? (e.metodo_altura ?? 'emenda')
+      : (e.emenda_opcional ? 'emenda' : 'normal');
     const tras = metragemFace(consumoTras, larguraTecidoTras, e.altura, barraConsumo, metodoTras, aberturas).metragem;
     metragemTras = roundHalfUp(tras + bainhasLateraisAcrescimo);
   }
@@ -314,6 +327,7 @@ export interface CamadaCortina {
   modelo?: ModeloCamadaCortina; // modelo PRÓPRIO da camada. Costurado junto só é válido da camada 2 em diante.
   costurado_quantidade?: QuantidadeCosturadoJunto;
   metodo_altura?: MetodoAlturaCortina;
+  emenda_opcional?: boolean;
 }
 
 export interface EntradaCortinaCompleta {
@@ -387,6 +401,7 @@ export function calcularCortinaMultiCamada(e: EntradaCortinaCompleta): Resultado
       largura_tecido: cam.largura_tecido,
       franzido_frente: cam.franzido,
       metodo_altura: cam.metodo_altura,
+      emenda_opcional: cam.emenda_opcional,
       tamanho_barra: e.tamanho_barra,
       tipo_barra: e.tipo_barra,
       aberturas: e.aberturas,
