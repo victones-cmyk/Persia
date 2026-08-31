@@ -161,7 +161,7 @@ export function CortinaCard({
         modelo: modeloCamadaInicial(i),
         franzido: (c as { franzido?: number | string }).franzido != null ? String((c as { franzido?: number | string }).franzido) : '',
         metodoAltura: ((c as { metodoAltura?: MetodoAlturaCortina; metodo_altura?: MetodoAlturaCortina }).metodoAltura ?? (c as { metodo_altura?: MetodoAlturaCortina }).metodo_altura ?? 'emenda'),
-        usarEmendaOpcional: (c as { usarEmendaOpcional?: boolean }).usarEmendaOpcional ?? false,
+        usarEmendaOpcional: (c as { usarEmendaOpcional?: boolean; emenda_opcional?: boolean }).usarEmendaOpcional ?? (c as { emenda_opcional?: boolean }).emenda_opcional ?? false,
         costuradoQuantidade: ((c as { costuradoQuantidade?: QuantidadeCosturadoJunto; costurado_quantidade?: QuantidadeCosturadoJunto }).costuradoQuantidade ?? (c as { costurado_quantidade?: QuantidadeCosturadoJunto }).costurado_quantidade ?? 'mesma_quantidade'),
       }));
     }
