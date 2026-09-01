@@ -417,6 +417,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
             <col style={{ width: 180 }} />
             <col style={{ width: 120 }} />
             <col />
+            {isAdmin && <col style={{ width: 130 }} />}
             <col style={{ width: 110 }} />
             <col style={{ width: 130 }} />
             <col style={{ width: 120 }} />
@@ -428,6 +429,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
               <Th>Nº GestãoClick</Th>
               <Th>Nº Pedido</Th>
               <Th>Cliente</Th>
+              {isAdmin && <Th>Vendedor</Th>}
               <Th>Tipo</Th>
               <Th>Valor Final</Th>
               <Th>Status</Th>
@@ -441,14 +443,14 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
             {carregando && orcamentos.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} style={{ borderTop: '1px solid #dee2e6' }}>
-                  <td colSpan={8} style={{ padding: 12 }}>
+                  <td colSpan={isAdmin ? 9 : 8} style={{ padding: 12 }}>
                     <div className="skeleton" style={{ height: 18 }} />
                   </td>
                 </tr>
               ))
             ) : orcamentos.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 24, textAlign: 'center', color: '#6c757d' }}>
+                <td colSpan={isAdmin ? 9 : 8} style={{ padding: 24, textAlign: 'center', color: '#6c757d' }}>
                   {somenteVendas ? 'Nenhuma venda encontrada.' : 'Nenhum orçamento encontrado.'}
                 </td>
               </tr>
@@ -476,6 +478,9 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                       o.nome_cliente
                     )}
                   </td>
+                  {isAdmin && (
+                    <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{o.usuario?.nome ?? '—'}</td>
+                  )}
                   <td style={{ padding: 12 }} className="text-sm-ui text-neutral-600">{tipoLabel(o.tipo_produto)}</td>
                   <td style={{ padding: 12 }} className="font-mono tabular-nums">{formatBRL(Number(o.valor_final))}</td>
                   <td style={{ padding: 12 }}><StatusBadge status={o.status} /></td>

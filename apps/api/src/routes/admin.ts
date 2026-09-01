@@ -6,6 +6,7 @@ import {
   editarUsuario,
   desativarUsuario,
   excluirUsuario,
+  listarVendedoresAtribuiveis,
   listarFuncionariosGc,
   listarLogAcoes,
   getRegrasCalculo,
@@ -34,6 +35,7 @@ router.post('/usuarios', criarUsuario);
 router.put('/usuarios/:id', editarUsuario);
 router.post('/usuarios/:id/desativar', desativarUsuario);
 router.delete('/usuarios/:id', excluirUsuario);
+router.get('/vendedores', listarVendedoresAtribuiveis);
 router.get('/funcionarios-gc', listarFuncionariosGc);
 router.get('/lojas', listarLojas);
 

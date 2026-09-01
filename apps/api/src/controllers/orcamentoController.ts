@@ -15,6 +15,7 @@ import { valorComRt, componenteRt } from '../services/calc/rtCalc';
 import { valorComDesconto, componenteDesconto } from '../services/calc/descontoCalc';
 import { encontrarCalculadora, exigeLarguraTecido } from '../services/calc/calculadoras';
 import { verificarAcessoCalculadora, clienteGcDaRevenda, resolverDescontoPct } from '../lib/permissaoRevenda';
+import { resolverVendedorAtribuido } from '../lib/atribuicaoVendedor';
 
 import { indiceInstalacoes } from '../services/gc/instalacao';
 import {
@@ -405,6 +406,8 @@ export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[])
 export async function criarOrcamento(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
   const b = req.body ?? {};
+  // Admin pode montar o orçamento em nome de um vendedor (aparece na listagem dele).
+  const vendedorAtribuido = await resolverVendedorAtribuido(sessao, b.vendedor_id);
 
   // Tipo POR ITEM (Victor 26/06/2026): `b.tipo` é só fallback p/ rascunhos antigos.
   const tipoFallback = isTipoPersiana(b.tipo) ? (b.tipo as TipoPersiana) : null;
@@ -499,7 +502,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   // tipo_produto = tipo do 1º item (representativo; o tipo real de cada item está em itens_json).
   const baseDados = {
     tipo_produto: dbTipoProduto,
-    usuario_id: editarOrc?.usuario_id ?? sessao.id,
+    usuario_id: vendedorAtribuido?.id ?? editarOrc?.usuario_id ?? sessao.id,
     loja_id: loja.id,
     entrada_json: entradaJson,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
@@ -536,7 +539,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     const envio = await executarEnvioGc({
       itens: preparados.map((p) => ({ nome_produto: p.nome_produto, descricao_produto: p.descricao_produto, valor_final: p.valor_final, valor_custo: p.valor_custo })),
       gc_cliente_id: gcClienteId!,
-      gcVendedorId: sessao.gc_usuario_id,
+      gcVendedorId: vendedorAtribuido?.gc_usuario_id ?? sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
       vendaDireta,
     });

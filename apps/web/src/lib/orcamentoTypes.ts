@@ -5,6 +5,7 @@ export interface OrcamentoListItem {
   id: string;
   tipo_produto: string;
   status: StatusOrcamento;
+  usuario_id?: string;
   nome_cliente: string;
   gc_cliente_id?: string | null;
   gc_orcamento_id: string | null;

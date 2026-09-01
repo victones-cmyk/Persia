@@ -16,6 +16,7 @@ import { quantidadeInstalacaoCortina } from '../services/calc/instalacaoCalc';
 import { valorComRt } from '../services/calc/rtCalc';
 import { valorComDesconto } from '../services/calc/descontoCalc';
 import { verificarAcessoCalculadora, clienteGcDaRevenda, resolverDescontoPct } from '../lib/permissaoRevenda';
+import { resolverVendedorAtribuido } from '../lib/atribuicaoVendedor';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { criarOrcamento as gcCriarOrcamento, montarPayload, type LinhaProdutoGc, type NovoOrcamentoGc } from '../services/gc/orcamentos';
@@ -213,6 +214,8 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
   const sessao = req.session.usuario!;
   const b = req.body ?? {};
   const apenasSalvar = b.apenas_salvar === true;
+  // Admin pode montar o orçamento em nome de um vendedor (aparece na listagem dele).
+  const vendedorAtribuido = await resolverVendedorAtribuido(sessao, b.vendedor_id);
 
   verificarAcessoCalculadora(sessao, 'cortina');
   const cortinasEntrada: CortinaEntrada[] = (Array.isArray(b.cortinas) ? b.cortinas : []).map((c: CortinaEntrada) =>
@@ -280,7 +283,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
 
   const baseDados = {
     tipo_produto: 'cortina' as const,
-    usuario_id: editarOrc?.usuario_id ?? sessao.id,
+    usuario_id: vendedorAtribuido?.id ?? editarOrc?.usuario_id ?? sessao.id,
     loja_id: loja.id,
     entrada_json: { cortinas: cortinasEntrada, rt_pct: rtPct, desconto_pct: descontoPct, desconto_revenda_desativado: descontoRevendaDesativado } as unknown as Prisma.InputJsonValue,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
@@ -321,7 +324,7 @@ export async function criarOrcamentoCortina(req: Request, res: Response): Promis
       servicos: [],
       data: new Date().toISOString().slice(0, 10),
       usuario_id: env.GC_USUARIO_INTEGRACAO_ID || null,
-      vendedor_id: sessao.gc_usuario_id,
+      vendedor_id: vendedorAtribuido?.gc_usuario_id ?? sessao.gc_usuario_id,
       loja_id: loja.gc_loja_id,
     };
     // Revenda: sem orçamento no GC — a venda já é fechada direto (Victor 31/07/2026).

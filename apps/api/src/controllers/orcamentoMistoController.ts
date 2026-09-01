@@ -22,6 +22,7 @@ import { prepararCortina, recalcularCortinasDeEntrada, type CortinaEntrada, type
 import { valorComRt, componenteRt } from '../services/calc/rtCalc';
 import { valorComDesconto, componenteDesconto } from '../services/calc/descontoCalc';
 import { verificarAcessoCalculadora, clienteGcDaRevenda, resolverDescontoPct } from '../lib/permissaoRevenda';
+import { resolverVendedorAtribuido } from '../lib/atribuicaoVendedor';
 import {
   prepararProdutosAvulsos,
   prepararTrilhosEspeciais,
@@ -48,6 +49,8 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const sessao = req.session.usuario! as SessaoUsuario;
   const b = req.body ?? {};
   const apenasSalvar = b.apenas_salvar === true;
+  // Admin pode montar o orçamento em nome de um vendedor (aparece na listagem dele).
+  const vendedorAtribuido = await resolverVendedorAtribuido(sessao, b.vendedor_id);
 
   const tipoFallback = isTipoPersiana(b.tipo) ? (b.tipo as TipoPersiana) : null;
   const semInstalacao = sessao.perfil === 'revenda'; // revenda não tem serviço de instalação
@@ -175,7 +178,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const primeiroExtra = extrasPrep[0] ?? null;
   const baseDados = {
     tipo_produto: 'misto' as const,
-    usuario_id: editarOrc?.usuario_id ?? sessao.id,
+    usuario_id: vendedorAtribuido?.id ?? editarOrc?.usuario_id ?? sessao.id,
     loja_id: loja.id,
     entrada_json: entradaJson,
     nome_cliente: b.nome_cliente ? String(b.nome_cliente) : '(sem cliente)',
@@ -225,7 +228,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
     const envio = await executarEnvioGc({
       itens: produtosEnvio,
       gc_cliente_id: gcClienteId!,
-      gcVendedorId: sessao.gc_usuario_id,
+      gcVendedorId: vendedorAtribuido?.gc_usuario_id ?? sessao.gc_usuario_id,
       gcLojaId: loja.gc_loja_id,
       vendaDireta,
     });

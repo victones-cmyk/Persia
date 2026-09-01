@@ -20,6 +20,7 @@ import { ItensExtrasOrcamento, type ItensExtrasEstado } from '../components/Iten
 import { TrilhosEspeciaisOrcamento } from '../components/TrilhosEspeciaisOrcamento';
 import { ClienteSearch } from '../components/ClienteSearch';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { AtribuirVendedorModal } from '../components/AtribuirVendedorModal';
 import { formatBRL, roundHalfUp } from '../lib/formatacao';
 import type { CortinaInicial } from '../components/CortinaCard';
 import type { OrcamentoCalculado, ClienteResumo, ItemInput, TipoPersiana, Cor, Acionamento, OrcamentoSalvo } from '../lib/calcTypes';
@@ -74,6 +75,23 @@ export function OrcamentoNovo() {
       api.get<{ lojas: Loja[] }>('/admin/lojas')
         .then((r) => setLojas(r.lojas))
         .catch(() => setLojas([]));
+    }
+  }, [usuario]);
+
+  // Admin pode montar o orçamento em nome de um vendedor (aparece na listagem dele).
+  interface Vendedor { id: string; nome: string }
+  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+  const [vendedorId, setVendedorId] = useState('');
+  // Já perguntamos (ou já sabemos, ao reabrir um rascunho já atribuído) — não perguntar de novo.
+  const [vendedorResolvido, setVendedorResolvido] = useState(false);
+  const [perguntaVendedorAberta, setPerguntaVendedorAberta] = useState(false);
+  // Salvar/Enviar que ficou esperando a resposta da pergunta de vendedor, pra retomar.
+  const [acaoAposVendedor, setAcaoAposVendedor] = useState<'salvar' | 'enviar' | null>(null);
+  useEffect(() => {
+    if (usuario?.perfil === 'admin') {
+      api.get<{ vendedores: Vendedor[] }>('/admin/vendedores')
+        .then((r) => setVendedores(r.vendedores))
+        .catch(() => setVendedores([]));
     }
   }, [usuario]);
 
@@ -254,6 +272,14 @@ export function OrcamentoNovo() {
         }
         setCliente(o.gc_cliente_id ? { id: o.gc_cliente_id, nome: o.nome_cliente, tipo_pessoa: '', documento: null } : null);
         setLojaId(o.loja_id ?? '');
+        // Rascunho já atribuído a um vendedor (ou não é meu, sendo admin) — não pergunta de novo.
+        if (o.usuario_id && o.usuario_id !== usuario?.id) {
+          setVendedorId(o.usuario_id);
+          setVendedorResolvido(true);
+        } else {
+          setVendedorId('');
+          setVendedorResolvido(false);
+        }
         const entrada = (o.entrada_json ?? null) as { tipo?: string; itens?: ItemInput[]; cortinas?: CortinaInicial[]; trilhos_especiais?: ProdutoExtraSnap[]; produtos_avulsos?: ProdutoExtraSnap[]; rt_pct?: number; desconto_revenda_desativado?: boolean } | null;
         const ehMisto = o.tipo_produto === 'misto';
         const ehCortina = o.tipo_produto === 'cortina';
@@ -425,7 +451,7 @@ export function OrcamentoNovo() {
     try {
       const comum = {
         rt_pct: rtNum,
-        ...(usuario?.perfil === 'admin' ? { loja_id: lojaId || undefined } : {}),
+        ...(usuario?.perfil === 'admin' ? { loja_id: lojaId || undefined, vendedor_id: vendedorId || undefined } : {}),
         ...(cliente ? { gc_cliente_id: cliente.id, nome_cliente: ehRevenda ? nomeClienteRevenda : cliente.nome } : {}),
         ...(!ehRevenda && revendaDoCliente ? { desconto_revenda_desativado: descontoRevendaDesativado } : {}),
         ...(apenasSalvar ? { apenas_salvar: true } : {}),
@@ -470,6 +496,39 @@ export function OrcamentoNovo() {
     } finally {
       if (apenasSalvar) setSalvando(false); else setEnviando(false);
     }
+  }
+
+  // Admin clicando Salvar/Enviar sem vendedor atribuído ainda: intercepta e
+  // pergunta antes de abrir a confirmação de salvar/enviar de sempre.
+  function iniciarSalvar() {
+    if (!podeSalvar) return;
+    if (usuario?.perfil === 'admin' && !vendedorResolvido) {
+      setAcaoAposVendedor('salvar');
+      setPerguntaVendedorAberta(true);
+      return;
+    }
+    setSalvarAberto(true);
+  }
+  function iniciarEnviar() {
+    if (!podeEnviar) return;
+    if (usuario?.perfil === 'admin' && !vendedorResolvido) {
+      setAcaoAposVendedor('enviar');
+      setPerguntaVendedorAberta(true);
+      return;
+    }
+    setEnviarAberto(true);
+  }
+  function aoResolverVendedor(escolhidoId: string | null) {
+    setVendedorId(escolhidoId ?? '');
+    setVendedorResolvido(true);
+    setPerguntaVendedorAberta(false);
+    if (acaoAposVendedor === 'salvar') setSalvarAberto(true);
+    else if (acaoAposVendedor === 'enviar') setEnviarAberto(true);
+    setAcaoAposVendedor(null);
+  }
+  function fecharPerguntaVendedor() {
+    setPerguntaVendedorAberta(false);
+    setAcaoAposVendedor(null);
   }
 
   function descartarRecuperado() {
@@ -751,13 +810,13 @@ export function OrcamentoNovo() {
             {/* No mobile os botões vivem na barra fixa no rodapé (abaixo); aqui só do lg pra cima,
                 onde o painel já fica sempre visível ao lado do formulário (sticky). */}
             <div className="hidden lg:flex gap-2">
-              <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={() => setSalvarAberto(true)} title="Salva sem enviar ao GestãoClick">
+              <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={iniciarSalvar} title="Salva sem enviar ao GestãoClick">
                 {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faFloppyDisk} /> Salvar</>}
               </button>
               <button type="button" className="btn btn-danger flex-1" disabled={ocupado} aria-disabled={ocupado} onClick={() => { if (algoPreenchido) setCancelarAberto(true); else doCancelar(); }} title="Descarta o que está preenchido e sai">
                 <FontAwesomeIcon icon={faXmark} /> Cancelar
               </button>
-              <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={() => { if (podeEnviar) setEnviarAberto(true); }}>
+              <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={iniciarEnviar}>
                 {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> {ehRevenda ? 'Fechar venda' : 'Enviar'}</>}
               </button>
             </div>
@@ -778,18 +837,24 @@ export function OrcamentoNovo() {
           </span>
         </div>
         <div className="flex gap-2">
-          <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={() => setSalvarAberto(true)} title="Salva sem enviar ao GestãoClick">
+          <button type="button" className="btn btn-default flex-1" disabled={!podeSalvar} aria-disabled={!podeSalvar} onClick={iniciarSalvar} title="Salva sem enviar ao GestãoClick">
             {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faFloppyDisk} />}
           </button>
           <button type="button" className="btn btn-danger" disabled={ocupado} aria-disabled={ocupado} onClick={() => { if (algoPreenchido) setCancelarAberto(true); else doCancelar(); }} title="Descarta o que está preenchido e sai">
             <FontAwesomeIcon icon={faXmark} />
           </button>
-          <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={() => { if (podeEnviar) setEnviarAberto(true); }}>
+          <button type="button" className="btn btn-success flex-1" disabled={!podeEnviar} aria-disabled={!podeEnviar} onClick={iniciarEnviar}>
             {enviando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faPaperPlane} /> {ehRevenda ? 'Fechar venda' : 'Enviar'}</>}
           </button>
         </div>
       </div>
 
+      <AtribuirVendedorModal
+        aberto={perguntaVendedorAberta}
+        vendedores={vendedores}
+        onResolver={aoResolverVendedor}
+        onFechar={fecharPerguntaVendedor}
+      />
       <ConfirmModal
         aberto={salvarAberto}
         titulo="Salvar orçamento"

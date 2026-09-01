@@ -307,6 +307,19 @@ export async function listarUsuarios(_req: Request, res: Response): Promise<void
 }
 
 /**
+ * Lista vendedores ativos pro seletor "Atribuir a um vendedor" — quando o admin
+ * monta um orçamento em nome de outra pessoa, pra aparecer na listagem dela.
+ */
+export async function listarVendedoresAtribuiveis(_req: Request, res: Response): Promise<void> {
+  const vendedores = await prisma.usuario.findMany({
+    where: { perfil: 'vendedor', ativo: true },
+    select: { id: true, nome: true },
+    orderBy: { nome: 'asc' },
+  });
+  res.json({ vendedores });
+}
+
+/**
  * Lista os funcionários (vendedores) do GestãoClick para o seletor "Vendedor GC".
  * Retorna só os ativos, ordenados por nome. Se o GC estiver indisponível, devolve
  * lista vazia + flag gc_offline (o frontend cai para o campo de texto manual).
