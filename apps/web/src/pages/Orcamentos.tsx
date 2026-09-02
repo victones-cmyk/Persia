@@ -412,7 +412,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
 
       {/* Tabela */}
       <div className="card p-0 table-scroll">
-        <table className="data-table" style={{ minWidth: 1080 }}>
+        <table className="data-table" style={{ minWidth: isAdmin ? 1210 : 1080 }}>
           <colgroup>
             <col style={{ width: 180 }} />
             <col style={{ width: 120 }} />

@@ -415,6 +415,14 @@ input[type='number'] {
   .data-table th,
   .data-table td {
     vertical-align: middle;
+    /* table-layout:fixed trava a largura da coluna, mas por padrão o texto que
+       não cabe TRANSBORDA por cima da coluna vizinha em vez de cortar — some
+       colunas (ex.: Cliente) espremem quando a janela não está maximizada ou
+       quando uma coluna nova entra (ex.: Vendedor), e o texto sobreposto vira
+       ilegível. Trunca com reticências em vez de vazar. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .data-table .table-actions {
     position: sticky;
@@ -422,6 +430,8 @@ input[type='number'] {
     z-index: 1;
     background: var(--surface-card);
     box-shadow: -1px 0 0 var(--neutral-300);
+    overflow: visible;
+    white-space: normal;
   }
   .data-table thead .table-actions {
     z-index: 2;
