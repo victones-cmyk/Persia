@@ -1,5 +1,5 @@
 // apps/api/src/services/gc/clientes.ts
-// Busca de clientes no GestãoClick (SRD §11). Debounce de 300ms é no frontend.
+// Busca e cadastro de clientes no GestãoClick (SRD §11). Debounce de 300ms é no frontend.
 // No GC, cpf e cnpj são campos separados (não há cpf_cnpj único).
 
 import { gcRequest, type GcEnvelope } from './client';
@@ -19,9 +19,26 @@ export interface ClienteResumo {
   documento: string | null;
 }
 
-export interface NovoClienteRapido {
+export interface EnderecoCliente {
+  cep?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  estado?: string;
+}
+
+export interface NovoCliente {
+  tipo_pessoa: 'PF' | 'PJ';
   nome: string;
-  telefone?: string | null;
+  razao_social?: string;
+  cpf?: string;
+  cnpj?: string;
+  email?: string;
+  telefone?: string;
+  celular?: string;
+  endereco?: EnderecoCliente;
 }
 
 /** Busca clientes ativos por nome ou documento (1ª página, máx 100). */
@@ -48,19 +65,47 @@ export async function buscarClientes(query: string): Promise<ClienteResumo[]> {
   }));
 }
 
-export async function criarClienteRapido(input: NovoClienteRapido): Promise<ClienteResumo> {
+/** Cria um cliente no GestãoClick (PF ou PJ), com contato e endereço opcionais. */
+export async function criarCliente(input: NovoCliente): Promise<ClienteResumo> {
   const nome = input.nome.trim();
-  const telefone = input.telefone?.trim() ?? '';
+  const tipoPessoa = input.tipo_pessoa === 'PJ' ? 'PJ' : 'PF';
+
+  const data: Record<string, unknown> = {
+    tipo_pessoa: tipoPessoa,
+    nome,
+    ativo: '1',
+  };
+  if (input.telefone?.trim()) data.telefone = input.telefone.trim();
+  if (input.celular?.trim()) data.celular = input.celular.trim();
+  if (input.email?.trim()) data.email = input.email.trim();
+
+  if (tipoPessoa === 'PJ') {
+    if (input.cnpj?.trim()) data.cnpj = input.cnpj.trim();
+    if (input.razao_social?.trim()) data.razao_social = input.razao_social.trim();
+  } else if (input.cpf?.trim()) {
+    data.cpf = input.cpf.trim();
+  }
+
+  const end = input.endereco;
+  const temEndereco = end && (end.cep || end.logradouro || end.numero || end.bairro || end.cidade || end.estado);
+  if (temEndereco) {
+    data.enderecos = [{
+      endereco: {
+        cep: end!.cep ?? '',
+        logradouro: end!.logradouro ?? '',
+        numero: end!.numero ?? '',
+        complemento: end!.complemento ?? '',
+        bairro: end!.bairro ?? '',
+        cidade: end!.cidade ?? '',
+        estado: end!.estado ?? '',
+      },
+    }];
+  }
 
   const env = await gcRequest<GcEnvelope<GcClienteRaw>>({
     method: 'POST',
     url: '/api/clientes',
-    data: {
-      tipo_pessoa: 'PF',
-      nome,
-      telefone,
-      ativo: '1',
-    },
+    data,
   });
 
   const c = env.data;
@@ -71,7 +116,7 @@ export async function criarClienteRapido(input: NovoClienteRapido): Promise<Clie
   return {
     id: c.id,
     nome: c.nome ?? nome,
-    tipo_pessoa: c.tipo_pessoa ?? 'PF',
+    tipo_pessoa: c.tipo_pessoa ?? tipoPessoa,
     documento: c.cnpj || c.cpf || null,
   };
 }
