@@ -164,9 +164,23 @@ export function CalculadorasTrilhoEspecial() {
               <label className="form-label">Nome de Exibição<span className="label-required">*</span></label>
               <input className="input" value={editando.nome} placeholder="ex: Trilho Wave" onChange={(e) => setEditando({ ...editando, nome: e.target.value })} />
             </div>
+            <div>
+              <label className="form-label">Layout do formulário</label>
+              <select
+                className="input"
+                value={editando.layout === 'trilho_deslizante' ? 'trilho_deslizante' : 'padrao'}
+                onChange={(e) => setEditando({ ...editando, layout: e.target.value === 'trilho_deslizante' ? 'trilho_deslizante' : 'padrao' })}
+              >
+                <option value="padrao">Padrão</option>
+                <option value="trilho_deslizante">Trilho deslizante (Altura no lugar do TC manual)</option>
+              </select>
+              <div className="helper-text">
+                No layout "Trilho deslizante", o vendedor informa Altura em vez de TC (TC = 75% da altura, calculado sozinho); "Lado do motor" vira "Lado do comando"; e o campo "Tipo de abertura" some do orçamento.
+              </div>
+            </div>
             <div className="alert alert-info text-xs-ui">
               <span>
-                As fórmulas podem usar <span className="font-mono">LARGURA</span>, <span className="font-mono">EMENDAS</span> e <span className="font-mono">TC</span>. Para o produto da emenda, use apenas <span className="font-mono">EMENDAS</span>. Os campos "Emendas/trilho" e "TC" só aparecem no orçamento do vendedor quando alguma fórmula da variante os utiliza.
+                As fórmulas podem usar <span className="font-mono">LARGURA</span>, <span className="font-mono">ALTURA</span>, <span className="font-mono">EMENDAS</span> e <span className="font-mono">TC</span>. Para o produto da emenda, use apenas <span className="font-mono">EMENDAS</span>. Os campos "Emendas/trilho" e "TC" só aparecem no orçamento do vendedor quando alguma fórmula da variante os utiliza.
               </span>
             </div>
           </div>

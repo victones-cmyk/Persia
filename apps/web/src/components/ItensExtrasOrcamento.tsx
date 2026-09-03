@@ -21,6 +21,7 @@ export interface ItemExtraPayload {
   variante_id?: string;
   ambiente?: string;
   largura?: number;
+  altura?: number;
   quantidade: number;
   emendas?: number;
   tc?: number;

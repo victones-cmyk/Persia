@@ -15,6 +15,8 @@ interface LinhaState {
   variante_id: string;
   ambiente: string;
   largura: string;
+  /** Só para calculadoras layout='trilho_deslizante': alimenta o TC (75% da altura). */
+  altura: string;
   quantidade: string;
   emendas: string;
   tc: string;
@@ -62,6 +64,7 @@ const vazia = (): LinhaState => ({
   variante_id: '',
   ambiente: '',
   largura: '',
+  altura: '',
   quantidade: '1',
   emendas: '0',
   tc: '',
@@ -79,6 +82,7 @@ function normalizarInicial(inicial?: ProdutoExtraSnap[]): LinhaState[] {
     variante_id: item.variante_id ?? '',
     ambiente: item.ambiente ?? '',
     largura: item.largura ?? '',
+    altura: item.altura ?? '',
     quantidade: item.quantidade ?? '1',
     emendas: item.emendas ?? '0',
     tc: item.tc ?? '',
@@ -105,6 +109,12 @@ function variantePara(calculadoras: CalculadoraTrilhoEspecial[], linha: Pick<Lin
   return calculadoras.find((c) => c.id === linha.calculadora_id)?.variantes?.find((v) => v.id === linha.variante_id);
 }
 
+// Layout 'trilho_deslizante': o formulário troca o TC digitado à mão por uma
+// Altura, da qual o TC é calculado (75%) — ver CalculadorasTrilhoEspecial (admin).
+function ehLayoutDeslizante(calculadoras: CalculadoraTrilhoEspecial[], linha: Pick<LinhaState, 'calculadora_id'>): boolean {
+  return calculadoras.find((c) => c.id === linha.calculadora_id)?.layout === 'trilho_deslizante';
+}
+
 function usaVariavel(variante: VarianteCalculadoraTrilho | undefined, nome: string): boolean {
   const re = new RegExp(`\\b${nome}\\b`, 'i');
   return (variante?.componentes ?? []).some((c) => re.test(c.qtd));
@@ -119,6 +129,7 @@ function linhaValida(linha: LinhaState, calculadoras: CalculadoraTrilhoEspecial[
   if (!(Number(linha.largura) > 0) || !(Number(linha.quantidade) > 0)) return false;
   const variante = variantePara(calculadoras, linha);
   if (usaVariavel(variante, 'EMENDAS') && !(Number.isInteger(Number(linha.emendas)) && Number(linha.emendas) >= 0)) return false;
+  if (ehLayoutDeslizante(calculadoras, linha) && !(Number(linha.altura) > 0)) return false;
   if (usaVariavel(variante, 'TC') && !(Number(linha.tc) > 0)) return false;
   if (componentesGrupo(variante).some((c) => !linha.selecoes_componentes[c.id])) return false;
   return true;
@@ -184,7 +195,7 @@ export function TrilhosEspeciaisOrcamento({
       .finally(() => setCarregando(false));
   }, []);
 
-  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, v: l.variante_id, l: l.largura, q: l.quantidade, e: l.emendas, t: l.tc, s: l.selecoes_componentes })));
+  const assinatura = JSON.stringify(linhas.map((l) => ({ id: l.id, c: l.calculadora_id, v: l.variante_id, l: l.largura, a: l.altura, q: l.quantidade, e: l.emendas, t: l.tc, s: l.selecoes_componentes })));
   useEffect(() => {
     const seq = ++sequencia.current;
     const validas = linhas.filter((l) => linhaValida(l, calculadoras));
@@ -204,6 +215,7 @@ export function TrilhosEspeciaisOrcamento({
             calculadora_id: linha.calculadora_id,
             variante_id: linha.variante_id,
             largura: Number(linha.largura),
+            altura: linha.altura === '' ? undefined : Number(linha.altura),
             quantidade: Number(linha.quantidade),
             emendas: Number(linha.emendas),
             tc: Number(linha.tc) || 0,
@@ -240,6 +252,7 @@ export function TrilhosEspeciaisOrcamento({
         calculadora_id: linha.calculadora_id,
         variante_id: linha.variante_id,
         largura: Number(linha.largura),
+        ...(linha.altura ? { altura: Number(linha.altura) } : {}),
         quantidade: Number(linha.quantidade),
         emendas: Number(linha.emendas),
         tc: Number(linha.tc) || 0,
@@ -260,6 +273,7 @@ export function TrilhosEspeciaisOrcamento({
       variante_id: l.variante_id,
       ambiente: l.ambiente,
       largura: l.largura,
+      altura: l.altura,
       quantidade: l.quantidade,
       emendas: l.emendas,
       tc: l.tc,
@@ -313,6 +327,7 @@ export function TrilhosEspeciaisOrcamento({
           const variante = variantePara(calculadoras, linha);
           const mostrarEmendas = usaVariavel(variante, 'EMENDAS');
           const mostrarTc = usaVariavel(variante, 'TC');
+          const deslizante = ehLayoutDeslizante(calculadoras, linha);
           const minimizado = minimizados.has(linha.id);
           const nomeLinha = [
             calculadoras.find((c) => c.id === linha.calculadora_id)?.nome,
@@ -379,6 +394,23 @@ export function TrilhosEspeciaisOrcamento({
                   <label className="form-label">Largura (m)<span className="label-required">*</span></label>
                   <input className="input input-mono" type="number" min={0} step={0.01} value={linha.largura} onChange={(e) => alterar(linha.id, { largura: e.target.value })} />
                 </div>
+                {deslizante && (
+                  <div className="col-span-4 md:col-span-2">
+                    <label className="form-label">Altura (m)<span className="label-required">*</span></label>
+                    <input
+                      className="input input-mono"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={linha.altura}
+                      onChange={(e) => {
+                        const altura = e.target.value;
+                        const tc = altura === '' ? '' : String(roundHalfUp(Number(altura) * 0.75, 2));
+                        alterar(linha.id, { altura, tc });
+                      }}
+                    />
+                  </div>
+                )}
                 {mostrarEmendas && (
                   <div className="col-span-4 md:col-span-2">
                     <label className="form-label">Emendas/trilho<span className="label-required">*</span></label>
@@ -388,7 +420,16 @@ export function TrilhosEspeciaisOrcamento({
                 {mostrarTc && (
                   <div className="col-span-4 md:col-span-2">
                     <label className="form-label">TC (m)<span className="label-required">*</span></label>
-                    <input className="input input-mono" type="number" min={0} step={0.01} value={linha.tc} onChange={(e) => alterar(linha.id, { tc: e.target.value })} />
+                    <input
+                      className="input input-mono"
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={linha.tc}
+                      disabled={deslizante}
+                      title={deslizante ? 'Calculado automaticamente: 75% da altura' : undefined}
+                      onChange={(e) => alterar(linha.id, { tc: e.target.value })}
+                    />
                   </div>
                 )}
                 <div className="col-span-4 md:col-span-2">
@@ -396,19 +437,21 @@ export function TrilhosEspeciaisOrcamento({
                   <input className="input input-mono" type="number" min={1} step={1} value={linha.quantidade} onChange={(e) => alterar(linha.id, { quantidade: e.target.value })} />
                 </div>
                 <div className="col-span-6 md:col-span-3">
-                  <label className="form-label">Lado do motor<span className="label-required">*</span></label>
+                  <label className="form-label">{deslizante ? 'Lado do comando' : 'Lado do motor'}<span className="label-required">*</span></label>
                   <select className="input" value={linha.lado_motor} onChange={(e) => alterar(linha.id, { lado_motor: e.target.value as LinhaState['lado_motor'] })}>
                     <option value="direito">Direito</option>
                     <option value="esquerdo">Esquerdo</option>
                   </select>
                 </div>
-                <div className="col-span-6 md:col-span-3">
-                  <label className="form-label">Tipo de abertura<span className="label-required">*</span></label>
-                  <select className="input" value={linha.tipo_abertura} onChange={(e) => alterar(linha.id, { tipo_abertura: e.target.value as LinhaState['tipo_abertura'] })}>
-                    <option value="direita">Direita</option>
-                    <option value="esquerda">Esquerda</option>
-                  </select>
-                </div>
+                {!deslizante && (
+                  <div className="col-span-6 md:col-span-3">
+                    <label className="form-label">Tipo de abertura<span className="label-required">*</span></label>
+                    <select className="input" value={linha.tipo_abertura} onChange={(e) => alterar(linha.id, { tipo_abertura: e.target.value as LinhaState['tipo_abertura'] })}>
+                      <option value="direita">Direita</option>
+                      <option value="esquerda">Esquerda</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               {componentesGrupo(variante).length > 0 && (

@@ -61,6 +61,7 @@ export interface ProdutoExtraSnap {
   variante_id?: string;
   ambiente: string;
   largura?: string;
+  altura?: string;
   quantidade: string;
   emendas?: string;
   tc?: string;

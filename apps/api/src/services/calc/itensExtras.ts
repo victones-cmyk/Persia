@@ -27,6 +27,8 @@ export interface TrilhoEspecialEntrada {
   variante_id?: string;
   produto_id?: string; // legado: trilhos salvos antes da integração com as calculadoras
   largura: number;
+  /** Só para calculadoras layout='trilho_deslizante': TC = 75% da altura. */
+  altura?: number;
   quantidade: number;
   emendas?: number;
   tc?: number;
@@ -53,6 +55,7 @@ export interface ItemExtraPreparado {
   descricao_produto?: string;
   quantidade: number;
   largura?: number;
+  altura?: number;
   emendas?: number;
   tc?: number;
   motorizado?: boolean;
@@ -88,6 +91,7 @@ export interface CalculoTrilhoEspecial {
   emendas: number;
   tc: number;
   motorizado: boolean;
+  layout: 'padrao' | 'trilho_deslizante';
   componentes: ComponenteTrilhoCalculado[];
   valor_unitario: number;
   valor_total: number;
@@ -98,6 +102,8 @@ export interface CalculoTrilhoEspecial {
 export interface EntradaCalculoTrilho {
   varianteId?: string;
   largura: number;
+  /** Só usada por fórmulas que referenciam ALTURA (ex.: calculadoras layout='trilho_deslizante'). */
+  altura?: number;
   quantidade: number;
   emendas: number;
   tc: number;
@@ -146,7 +152,7 @@ export function calcularComposicaoTrilho(
   entrada: EntradaCalculoTrilho,
   produtos: ProdutoCatalogoOrcamento[],
 ): CalculoTrilhoEspecial {
-  const { varianteId, largura, quantidade, emendas, tc, selecoesComponentes } = entrada;
+  const { varianteId, largura, altura, quantidade, emendas, tc, selecoesComponentes } = entrada;
   const variantes = calculadora.variantes ?? [];
   // Sem variante_id (orçamentos salvos antes desta feature): assume a primeira
   // variante. Com variante_id preenchido que não corresponde a nenhuma variante
@@ -177,7 +183,7 @@ export function calcularComposicaoTrilho(
     }
     let quantidadeFormula: number;
     try {
-      quantidadeFormula = roundHalfUp(evalQuantidade(componente.qtd, { largura, altura: 0, tc, emendas }), 4);
+      quantidadeFormula = roundHalfUp(evalQuantidade(componente.qtd, { largura, altura: altura ?? 0, tc, emendas }), 4);
     } catch (e) {
       throw new AppError(400, 'FORMULA_TRILHO_INVALIDA', e instanceof Error ? e.message : `Fórmula inválida em "${componente.descricao}".`);
     }
@@ -208,6 +214,7 @@ export function calcularComposicaoTrilho(
     emendas,
     tc,
     motorizado: variante.motorizado === true,
+    layout: calculadora.layout === 'trilho_deslizante' ? 'trilho_deslizante' : 'padrao',
     componentes,
     valor_unitario: roundHalfUp(valorTotal / quantidade),
     valor_total: valorTotal,
@@ -219,6 +226,7 @@ export async function calcularTrilhoEspecial(entrada: {
   calculadoraId: unknown;
   varianteId?: string;
   largura: unknown;
+  altura?: unknown;
   quantidade: unknown;
   emendas?: unknown;
   tc?: unknown;
@@ -227,11 +235,12 @@ export async function calcularTrilhoEspecial(entrada: {
   const calculadora = encontrarCalculadoraTrilhoEspecial(String(entrada.calculadoraId ?? '').trim());
   if (!calculadora) throw new AppError(400, 'CALCULADORA_TRILHO_INVALIDA', 'Selecione uma calculadora de trilho especial válida.');
   const largura = medidaValida(entrada.largura);
+  const altura = entrada.altura !== undefined ? alturaValida(entrada.altura) : undefined;
   const quantidade = quantidadeValida(entrada.quantidade);
   const emendas = emendasValida(entrada.emendas ?? 0);
   const tc = tcValido(entrada.tc ?? 0);
   const produtos = (await listarProdutos({ ativo: 1 })).map(normalizarProduto);
-  return calcularComposicaoTrilho(calculadora, { varianteId: entrada.varianteId, largura, quantidade, emendas, tc, selecoesComponentes: entrada.selecoesComponentes }, produtos);
+  return calcularComposicaoTrilho(calculadora, { varianteId: entrada.varianteId, largura, altura, quantidade, emendas, tc, selecoesComponentes: entrada.selecoesComponentes }, produtos);
 }
 
 function texto(v: unknown): string {
@@ -247,6 +256,14 @@ function quantidadeValida(v: unknown): number {
 function medidaValida(v: unknown): number {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) throw new AppError(400, 'MEDIDA_INVALIDA', 'Informe uma medida válida.');
+  return roundHalfUp(n);
+}
+
+// Altura é opcional a nível de backend (só calculadoras layout='trilho_deslizante'
+// a exigem) — quem obriga o preenchimento é o formulário do vendedor, igual ao TC.
+function alturaValida(v: unknown): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) throw new AppError(400, 'ALTURA_INVALIDA', 'Informe uma altura válida.');
   return roundHalfUp(n);
 }
 
@@ -313,11 +330,17 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
         calculadoraId: entrada.calculadora_id,
         varianteId: entrada.variante_id,
         largura: entrada.largura,
+        altura: entrada.altura,
         quantidade: entrada.quantidade,
         emendas: entrada.emendas ?? 0,
         tc: entrada.tc,
         selecoesComponentes: entrada.selecoes_componentes,
       });
+      const deslizante = calculo.layout === 'trilho_deslizante';
+      // Layout 'trilho_deslizante': o vendedor informa Altura em vez de TC — TC vem
+      // calculado (75% da altura) do próprio formulário. Exige altura aqui de novo
+      // (não confia no cálculo do TC feito no cliente).
+      const altura = deslizante ? alturaValida(entrada.altura) : undefined;
       const ambiente = texto(entrada.ambiente);
       const observacao = texto(entrada.observacao);
       const lado = ladoMotor(entrada.lado_motor);
@@ -326,25 +349,29 @@ export async function prepararTrilhosEspeciais(entradas: TrilhoEspecialEntrada[]
         tipo: 'trilho_especial',
         produto_id: '',
         nome_produto: `${calculo.nome} — ${calculo.variante_nome}`,
-        // Lado do motor e tipo de abertura só fazem sentido para trilhos motorizados;
-        // TC só quando a fórmula da calculadora realmente o usa (> 0).
+        // Lado do motor/comando: sempre nos trilhos deslizantes (não tem "motorizado"
+        // no sentido elétrico); nos demais, só quando a variante É motorizada, como
+        // sempre foi. Abertura não existe nos deslizantes. TC só quando a fórmula da
+        // calculadora realmente o usa (> 0).
         descricao_produto: [
           ambiente ? `Ambiente: ${ambiente}` : null,
           `Largura: ${calculo.largura} m`,
+          deslizante ? `Altura: ${altura} m` : null,
           `Emendas: ${calculo.emendas}`,
           `Quantidade: ${calculo.quantidade}`,
-          calculo.motorizado ? `Lado do motor: ${lado}` : null,
-          calculo.motorizado ? `Abertura: ${abertura}` : null,
+          deslizante ? `Lado do comando: ${lado}` : calculo.motorizado ? `Lado do motor: ${lado}` : null,
+          !deslizante && calculo.motorizado ? `Abertura: ${abertura}` : null,
           calculo.tc > 0 ? `TC: ${calculo.tc} m` : null,
           observacao ? `Obs.: ${observacao}` : null,
         ].filter(Boolean).join('\n'),
         quantidade: calculo.quantidade,
         largura: calculo.largura,
+        altura,
         emendas: calculo.emendas,
         tc: calculo.tc,
         motorizado: calculo.motorizado,
-        lado_motor: calculo.motorizado ? lado : undefined,
-        tipo_abertura: calculo.motorizado ? abertura : undefined,
+        lado_motor: (deslizante || calculo.motorizado) ? lado : undefined,
+        tipo_abertura: (!deslizante && calculo.motorizado) ? abertura : undefined,
         componentes: calculo.componentes.map((c) => ({
           descricao: `${c.nome} (${c.codigo_interno})`,
           quantidade: c.quantidade,

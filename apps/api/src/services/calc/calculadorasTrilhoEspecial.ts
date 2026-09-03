@@ -34,6 +34,10 @@ export interface CalculadoraTrilhoEspecial {
   /** Composições alternativas do mesmo modelo de trilho. */
   variantes?: VarianteCalculadoraTrilho[];
   componentes: ComponenteCalculadoraTrilho[];
+  /** 'trilho_deslizante': formulário do vendedor troca Largura+TC manual por
+   *  Largura+Altura (TC = 75% da altura, calculado); "Lado do motor" vira
+   *  "Lado do comando"; e some o campo "Tipo de abertura" (Victor 03/09/2026). */
+  layout?: 'padrao' | 'trilho_deslizante';
 }
 
 export const CALCULADORAS_TRILHO_ESPECIAL_DEFAULT: CalculadoraTrilhoEspecial[] = [];
@@ -59,6 +63,7 @@ function normalizar(calculadoras: CalculadoraTrilhoEspecial[]): CalculadoraTrilh
     ...c,
     db_tipo_produto: 'trilho_especial',
     ativo: c.ativo !== false,
+    layout: c.layout === 'trilho_deslizante' ? 'trilho_deslizante' : 'padrao',
     variantes: (Array.isArray(c.variantes) && c.variantes.length > 0 ? c.variantes : [{
       id: 'padrao',
       nome: 'Padrão',

@@ -92,6 +92,7 @@ export async function calcularTrilhoEspecialController(req: Request, res: Respon
       calculadoraId: b.calculadora_id,
       varianteId: typeof b.variante_id === 'string' ? b.variante_id : undefined,
       largura: b.largura,
+      altura: b.altura,
       quantidade: b.quantidade,
       emendas: b.emendas ?? 0,
       tc: b.tc,

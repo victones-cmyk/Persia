@@ -144,6 +144,73 @@ describe('prepararTrilhosEspeciais', () => {
   });
 });
 
+describe('prepararTrilhosEspeciais — layout trilho_deslizante', () => {
+  const calculadoraDeslizante: CalculadoraTrilhoEspecial = {
+    id: 'trilho_deslizante_teste',
+    nome: 'Trilho Deslizante Teste',
+    db_tipo_produto: 'trilho_especial',
+    ativo: true,
+    layout: 'trilho_deslizante',
+    componentes: [],
+    variantes: [{
+      id: 'padrao', nome: 'Padrão', motorizado: true, componentes: [
+        // Prova que ALTURA também vira variável de fórmula de verdade (não só TC).
+        { codigo_interno: 'TR-001', descricao: 'Perfil', qtd: 'ALTURA' },
+        { codigo_interno: 'AC-002', descricao: 'Corda', qtd: '(LARGURA+TC)*2' },
+      ],
+    }],
+  };
+
+  beforeEach(() => {
+    mocks.listarProdutos.mockReset();
+    mocks.encontrarCalculadoraTrilhoEspecial.mockReset();
+    mocks.listarProdutos.mockResolvedValue(produtos.slice(0, 2));
+    mocks.encontrarCalculadoraTrilhoEspecial.mockReturnValue(calculadoraDeslizante);
+  });
+
+  it('exige altura válida — não aceita ausente/zero mesmo com TC preenchido', async () => {
+    await expect(prepararTrilhosEspeciais([{
+      calculadora_id: 'trilho_deslizante_teste', variante_id: 'padrao', largura: 3, quantidade: 1, tc: 1.5,
+    }])).rejects.toMatchObject({ code: 'ALTURA_INVALIDA' });
+
+    await expect(prepararTrilhosEspeciais([{
+      calculadora_id: 'trilho_deslizante_teste', variante_id: 'padrao', largura: 3, altura: 0, quantidade: 1, tc: 1.5,
+    }])).rejects.toMatchObject({ code: 'ALTURA_INVALIDA' });
+  });
+
+  it('ALTURA alimenta as fórmulas dos componentes (não só o TC)', async () => {
+    const [item] = await prepararTrilhosEspeciais([{
+      calculadora_id: 'trilho_deslizante_teste', variante_id: 'padrao', largura: 2, altura: 2, quantidade: 1, tc: 1.5,
+    }]);
+    expect(item.componentes).toEqual([
+      { descricao: 'Perfil de alumínio (TR-001)', quantidade: 2, unidade: 'un', produto_id: '1' }, // ALTURA
+      { descricao: 'Acessório do trilho (AC-002)', quantidade: 7, unidade: 'un', produto_id: '2' }, // (2+1.5)*2
+    ]);
+  });
+
+  it('descrição usa "Lado do comando" (não "Lado do motor"), inclui Altura e nunca inclui Abertura', async () => {
+    const [item] = await prepararTrilhosEspeciais([{
+      calculadora_id: 'trilho_deslizante_teste', variante_id: 'padrao', largura: 1, altura: 1.6, quantidade: 1, tc: 1.2,
+      ambiente: 'Sacada', lado_motor: 'esquerdo', tipo_abertura: 'esquerda',
+    }]);
+    expect(item.descricao_produto).toBe(
+      'Ambiente: Sacada\nLargura: 1 m\nAltura: 1.6 m\nEmendas: 0\nQuantidade: 1\nLado do comando: esquerdo\nTC: 1.2 m',
+    );
+    expect(item.descricao_produto).not.toMatch(/motor|Abertura/i);
+  });
+
+  it('"Lado do comando" aparece mesmo quando a variante não é motorizada (ao contrário do layout padrão)', async () => {
+    mocks.encontrarCalculadoraTrilhoEspecial.mockReturnValue({
+      ...calculadoraDeslizante,
+      variantes: [{ ...calculadoraDeslizante.variantes[0], motorizado: false }],
+    });
+    const [item] = await prepararTrilhosEspeciais([{
+      calculadora_id: 'trilho_deslizante_teste', variante_id: 'padrao', largura: 1, altura: 1, quantidade: 1, tc: 1,
+    }]);
+    expect(item.descricao_produto).toContain('Lado do comando: direito');
+  });
+});
+
 describe('prepararProdutosAvulsos', () => {
   beforeEach(() => {
     mocks.listarProdutos.mockReset();

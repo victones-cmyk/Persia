@@ -88,6 +88,9 @@ export interface CalculadoraTrilhoEspecial {
   motorizado?: boolean;
   variantes?: VarianteCalculadoraTrilho[];
   componentes: ComponenteCalculadoraTrilho[];
+  /** 'trilho_deslizante': formulário troca TC manual por Altura (TC = 75% da
+   *  altura), renomeia "Lado do motor" p/ "Lado do comando" e some com "Abertura". */
+  layout?: 'padrao' | 'trilho_deslizante';
 }
 
 
