@@ -29,7 +29,7 @@ type TipoProduto = 'persiana' | 'cortina';
 interface AmbienteAgenda {
   id: string | null;
   nome: string;
-  tipo_produto: TipoProduto | null;
+  tipos_produto: TipoProduto[];
   trilho_especial: boolean;
   largura: number | null;
   altura: number | null;
@@ -75,10 +75,12 @@ export function MedicaoAgendaModal({
   const [ambientes, setAmbientes] = useState<AmbienteAgenda[]>([]);
   const [carregandoAmbientes, setCarregandoAmbientes] = useState(false);
   // Folhas por índice de ambiente; '' = ambiente não entra no orçamento.
-  const [folhas, setFolhas] = useState<Record<number, string>>({});
-  // Tipo por ambiente: vem marcado do Agenda quando alguém marcou, mas quem
-  // decide é o vendedor — pode trocar aqui sem mexer na OS.
-  const [tipos, setTipos] = useState<Record<number, TipoProduto>>({});
+  // Folhas por ambiente E por produto: o mesmo vão vira, por exemplo, 5 persianas
+  // e 2 cortinas — as contagens não se derivam uma da outra.
+  const [folhas, setFolhas] = useState<Record<string, string>>({});
+  // Quais produtos entram, por ambiente. Vem marcado do Agenda quando alguém
+  // marcou, mas quem decide é o vendedor — pode trocar aqui sem mexer na OS.
+  const [tipos, setTipos] = useState<Record<number, TipoProduto[]>>({});
   const [comTrilho, setComTrilho] = useState<Record<number, boolean>>({});
   const [erro, setErro] = useState<string | null>(null);
 
@@ -117,15 +119,18 @@ export function MedicaoAgendaModal({
     try {
       const r = await api.get<{ ambientes: AmbienteAgenda[] }>(`/agenda/eventos/${ev.id}/ambientes`);
       setAmbientes(r.ambientes);
-      const inicial: Record<number, string> = {};
-      const tiposIniciais: Record<number, TipoProduto> = {};
+      const inicial: Record<string, string> = {};
+      const tiposIniciais: Record<number, TipoProduto[]> = {};
       const trilhoInicial: Record<number, boolean> = {};
       r.ambientes.forEach((a, i) => {
         if (!a.medido) return;
-        inicial[i] = String(a.folhas_sugeridas && a.folhas_sugeridas > 0 ? a.folhas_sugeridas : 1);
         // Sem marcação na OS, assume persiana — é o caso mais comum e o vendedor troca num clique.
-        tiposIniciais[i] = a.tipo_produto ?? 'persiana';
+        const ts = a.tipos_produto.length > 0 ? a.tipos_produto : (['persiana'] as TipoProduto[]);
+        tiposIniciais[i] = ts;
         trilhoInicial[i] = a.trilho_especial;
+        // A sugestão do técnico é do vão, então serve de partida para os dois.
+        const sug = String(a.folhas_sugeridas && a.folhas_sugeridas > 0 ? a.folhas_sugeridas : 1);
+        for (const t of ts) inicial[`${i}:${t}`] = sug;
       });
       setFolhas(inicial); setTipos(tiposIniciais); setComTrilho(trilhoInicial);
     } catch (e) {
@@ -135,24 +140,30 @@ export function MedicaoAgendaModal({
     }
   }
 
-  const previa = ambientes.map((a, i) => {
-    const n = Number(folhas[i]);
-    if (!a.medido || !Number.isInteger(n) || n <= 0) return [];
+  const partesDe = (i: number, a: AmbienteAgenda, t: TipoProduto): number[] => {
+    if (!a.medido || !(tipos[i] ?? []).includes(t)) return [];
+    const n = Number(folhas[`${i}:${t}`]);
+    if (!Number.isInteger(n) || n <= 0) return [];
     return dividirLarguraEmFolhas(a.largura!, n);
-  });
-  const totalItens = previa.reduce((s, p) => s + p.length, 0);
+  };
+  const previa = ambientes.map((a, i) => ({
+    persiana: partesDe(i, a, 'persiana'),
+    cortina: partesDe(i, a, 'cortina'),
+  }));
+  const totalItens = previa.reduce((s, p) => s + p.persiana.length + p.cortina.length, 0);
 
   function gerar() {
     const geracao: GeracaoMedicao = { persianas: [], cortinas: [], trilhos: [] };
     ambientes.forEach((a, i) => {
-      if (previa[i].length === 0) return;
-      const destino = tipos[i] === 'cortina' ? geracao.cortinas : geracao.persianas;
-      for (const largura of previa[i]) {
-        destino.push({ ambiente: a.nome, largura, altura: a.altura! });
+      for (const largura of previa[i].persiana) {
+        geracao.persianas.push({ ambiente: a.nome, largura, altura: a.altura! });
+      }
+      for (const largura of previa[i].cortina) {
+        geracao.cortinas.push({ ambiente: a.nome, largura, altura: a.altura! });
       }
       // Um trilho por ambiente, com a largura do vão inteiro — o trilho atravessa
       // o vão todo, não acompanha a divisão das folhas.
-      if (tipos[i] === 'cortina' && comTrilho[i]) {
+      if (previa[i].cortina.length > 0 && comTrilho[i]) {
         geracao.trilhos.push({ ambiente: a.nome, largura: a.largura! });
       }
     });
@@ -272,19 +283,50 @@ export function MedicaoAgendaModal({
                           )}
                         </div>
                         {a.medido && (
-                          <div style={{ width: 110, flexShrink: 0 }}>
-                            <label className="form-label">O que é</label>
-                            <select
-                              className="input"
-                              value={tipos[i] ?? 'persiana'}
-                              onChange={(e) => setTipos((p) => ({ ...p, [i]: e.target.value as TipoProduto }))}
-                              style={{ marginBottom: 6 }}
-                            >
-                              <option value="persiana">Persiana</option>
-                              <option value="cortina">Cortina</option>
-                            </select>
-                            {tipos[i] === 'cortina' && (
-                              <label className="flex items-center gap-1 text-xs-ui text-neutral-600 mb-1" style={{ cursor: 'pointer' }}>
+                          <div style={{ width: 168, flexShrink: 0 }}>
+                            <div className="form-label">O que vai aqui</div>
+                            {(['persiana', 'cortina'] as const).map((t) => {
+                              const marcado = (tipos[i] ?? []).includes(t);
+                              return (
+                                <div key={t} className="flex items-center gap-2 mb-1">
+                                  <label className="flex items-center gap-1 text-xs-ui text-neutral-700" style={{ cursor: 'pointer', flex: 1 }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={marcado}
+                                      onChange={(e) => {
+                                        const ligar = e.target.checked;
+                                        setTipos((p) => {
+                                          const atuais = p[i] ?? [];
+                                          return { ...p, [i]: ligar ? [...atuais, t] : atuais.filter((x) => x !== t) };
+                                        });
+                                        // Ao ligar, parte da sugestão do técnico; ao desligar, some com a contagem.
+                                        setFolhas((p) => {
+                                          const n = { ...p };
+                                          if (ligar) n[`${i}:${t}`] = n[`${i}:${t}`] ?? String(a.folhas_sugeridas && a.folhas_sugeridas > 0 ? a.folhas_sugeridas : 1);
+                                          else delete n[`${i}:${t}`];
+                                          return n;
+                                        });
+                                        if (t === 'cortina' && !ligar) setComTrilho((p) => ({ ...p, [i]: false }));
+                                      }}
+                                    />
+                                    {t === 'persiana' ? 'Persiana' : 'Cortina'}
+                                  </label>
+                                  <input
+                                    className="input input-mono"
+                                    style={{ width: 56, height: 30, padding: '2px 6px' }}
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    aria-label={`Folhas de ${t} em ${a.nome}`}
+                                    disabled={!marcado}
+                                    value={folhas[`${i}:${t}`] ?? ''}
+                                    onChange={(e) => setFolhas((p) => ({ ...p, [`${i}:${t}`]: e.target.value }))}
+                                  />
+                                </div>
+                              );
+                            })}
+                            {(tipos[i] ?? []).includes('cortina') && (
+                              <label className="flex items-center gap-1 text-xs-ui text-neutral-600" style={{ cursor: 'pointer' }}>
                                 <input
                                   type="checkbox"
                                   checked={comTrilho[i] ?? false}
@@ -293,33 +335,31 @@ export function MedicaoAgendaModal({
                                 Trilho especial
                               </label>
                             )}
-                            <label className="form-label" htmlFor={`folhas-${i}`}>Folhas</label>
-                            <input
-                              id={`folhas-${i}`}
-                              className="input input-mono"
-                              type="number"
-                              min={0}
-                              step={1}
-                              value={folhas[i] ?? ''}
-                              onChange={(e) => setFolhas((p) => ({ ...p, [i]: e.target.value }))}
-                              placeholder="0"
-                            />
                           </div>
                         )}
                       </div>
-                      {previa[i].length > 0 && (
+                      {(previa[i].persiana.length > 0 || previa[i].cortina.length > 0) && (
                         <div className="helper-text mt-2">
-                          {previa[i].length} {previa[i].length === 1 ? 'folha' : 'folhas'} de{' '}
-                          <strong className="font-mono tabular-nums">
-                            {[...new Set(previa[i])].map((v) => formatNum(v)).join(' e ')} m
-                          </strong>
-                          {' '}× {formatNum(a.altura!)} m
+                          {(['persiana', 'cortina'] as const).filter((t) => previa[i][t].length > 0).map((t) => (
+                            <div key={t}>
+                              {previa[i][t].length} {t === 'persiana'
+                                ? (previa[i][t].length === 1 ? 'persiana' : 'persianas')
+                                : (previa[i][t].length === 1 ? 'cortina' : 'cortinas')} de{' '}
+                              <strong className="font-mono tabular-nums">
+                                {[...new Set(previa[i][t])].map((v) => formatNum(v)).join(' e ')} m
+                              </strong>
+                              {' '}× {formatNum(a.altura!)} m
+                            </div>
+                          ))}
+                          {previa[i].cortina.length > 0 && comTrilho[i] && (
+                            <div>1 trilho especial de <strong className="font-mono tabular-nums">{formatNum(a.largura!)} m</strong> (vão inteiro)</div>
+                          )}
                         </div>
                       )}
                     </div>
                   ))}
                   <div className="helper-text">
-                    Deixe 0 nos ambientes que não entram. A divisão é igual como ponto de partida — ajuste as larguras nos itens depois.
+                    Desmarque o que não entra. A divisão é igual como ponto de partida — ajuste as larguras nos itens depois.
                   </div>
                 </div>
               )}

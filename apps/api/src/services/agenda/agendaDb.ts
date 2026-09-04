@@ -44,11 +44,12 @@ export interface AmbienteAgenda {
   id: string | null;
   nome: string;
   /**
-   * O que vai neste ambiente, quando alguém marcou. É SUGESTÃO: o técnico nem
-   * sempre sabe, e quem decide é o vendedor ao montar o orçamento — mesma
-   * divisão de papéis das folhas sugeridas.
+   * O que vai neste ambiente, quando alguém marcou. Lista porque o cliente pode
+   * querer os dois na mesma parede (blackout com cortina por cima). É SUGESTÃO:
+   * o técnico nem sempre sabe, e quem decide é o vendedor ao montar o orçamento
+   * — mesma divisão de papéis das folhas sugeridas.
    */
-  tipo_produto: 'persiana' | 'cortina' | null;
+  tipos_produto: ('persiana' | 'cortina')[];
   trilho_especial: boolean;
   largura: number | null;
   altura: number | null;
@@ -162,12 +163,17 @@ export function normalizarAmbiente(bruto: unknown): AmbienteAgenda | null {
   if (!nome) return null;
   const largura = numeroOuNulo(a.largura);
   const altura = numeroOuNulo(a.altura);
-  const tipo = a.tipo_produto === 'persiana' || a.tipo_produto === 'cortina' ? a.tipo_produto : null;
+  // Aceita a lista atual e o campo único da primeira versão, que ficou em
+  // registros marcados antes de existir a marcação dupla.
+  const brutos = Array.isArray(a.tipos_produto) ? a.tipos_produto : [a.tipo_produto];
+  const tipos = [...new Set(
+    brutos.filter((t): t is 'persiana' | 'cortina' => t === 'persiana' || t === 'cortina'),
+  )];
   return {
     id: typeof a.id === 'string' && a.id.trim() !== '' ? a.id.trim() : null,
     nome,
-    tipo_produto: tipo,
-    trilho_especial: tipo === 'cortina' && a.trilho_especial === true,
+    tipos_produto: tipos,
+    trilho_especial: tipos.includes('cortina') && a.trilho_especial === true,
     largura,
     altura,
     folhas_sugeridas: numeroOuNulo(a.folhas_sugeridas),
