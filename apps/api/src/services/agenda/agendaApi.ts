@@ -10,6 +10,11 @@
 
 import { env } from '../../config/env';
 
+export interface TecnicoAgenda {
+  id: number;
+  name: string;
+}
+
 export interface AmbienteParaAgenda {
   /** Identidade compartilhada do ambiente. Quem cria primeiro cunha; o outro lado respeita. */
   id: string;
@@ -18,10 +23,14 @@ export interface AmbienteParaAgenda {
   altura?: number | null;
   folhas_sugeridas?: number | null;
   observacao?: string | null;
+  /** O que o vendedor já sabe que vai neste ambiente — é o que diz ao técnico o que medir. */
+  tipos_produto?: ('persiana' | 'cortina')[];
+  trilho_especial?: boolean;
 }
 
 export interface NovaOsAgenda {
   tipo: 'measurement' | 'installation' | 'return' | 'warranty';
+  tecnico_id?: number | null;
   cliente_nome: string;
   cliente_endereco?: string | null;
   cliente_telefone?: string | null;
@@ -103,6 +112,7 @@ export function criarOsNoAgenda(os: NovaOsAgenda): Promise<OsCriada> {
       client_number: os.cliente_numero ?? '',
       client_complement: os.cliente_complemento ?? '',
       seller: os.vendedor ?? '',
+      assigned_to: os.tecnico_id ?? null,
       order_number: os.pedido_codigo ?? '',
       scheduled_at: os.agendado_para ?? '',
       notes: os.observacoes ?? '',
@@ -113,7 +123,15 @@ export function criarOsNoAgenda(os: NovaOsAgenda): Promise<OsCriada> {
         altura: a.altura ?? null,
         folhas_sugeridas: a.folhas_sugeridas ?? null,
         info: a.observacao ?? '',
+        tipos_produto: a.tipos_produto ?? [],
+        trilho_especial: a.trilho_especial === true,
       })),
     }),
   });
+}
+
+/** Técnicos que podem receber a OS — para o vendedor já atribuir ao agendar. */
+export async function listarTecnicosDoAgenda(): Promise<TecnicoAgenda[]> {
+  const r = await chamar<{ tecnicos: TecnicoAgenda[] }>('/api/integracao/tecnicos', { method: 'GET' });
+  return r.tecnicos ?? [];
 }

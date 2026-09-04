@@ -6,11 +6,12 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { buscarEventosAgendaAvulso, listarAmbientesDeEvento } from '../controllers/agendaController';
+import { buscarEventosAgendaAvulso, listarAmbientesDeEvento, listarTecnicosAgenda } from '../controllers/agendaController';
 
 const router = Router();
 router.use(requireAuth);
 
+router.get('/tecnicos', listarTecnicosAgenda);
 router.get('/eventos/buscar', buscarEventosAgendaAvulso);
 router.get('/eventos/:id/ambientes', listarAmbientesDeEvento);
 

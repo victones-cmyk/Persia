@@ -6,8 +6,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCalendarCheck, faHashtag, faMagnifyingGlass, faSpinner, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faCalendarPlus, faCalendarCheck, faHashtag, faMagnifyingGlass, faSpinner, faXmark } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
+import { AgendarOsModal } from './AgendarOsModal';
 
 export interface EventoAgenda {
   id: number;
@@ -87,7 +88,8 @@ function EventoLinha({ evento, acao }: { evento: EventoAgenda; acao?: React.Reac
   );
 }
 
-export function AgendaVinculo({ orcamentoId, nomeCliente }: { orcamentoId: string; nomeCliente: string }) {
+export function AgendaVinculo({ orcamentoId, nomeCliente, gcClienteId }: { orcamentoId: string; nomeCliente: string; gcClienteId?: string | null }) {
+  const [agendarAberto, setAgendarAberto] = useState(false);
   const [vinculados, setVinculados] = useState<EventoAgenda[]>([]);
   const [habilitado, setHabilitado] = useState(true);
   const [carregando, setCarregando] = useState(true);
@@ -213,6 +215,9 @@ export function AgendaVinculo({ orcamentoId, nomeCliente }: { orcamentoId: strin
           <button type="button" className="btn btn-default btn-xs" disabled={buscando || carregando} onClick={() => void buscar('os')}>
             <FontAwesomeIcon icon={faHashtag} /> Buscar por nº da OS
           </button>
+          <button type="button" className="btn btn-success btn-xs" disabled={carregando} onClick={() => setAgendarAberto(true)}>
+            <FontAwesomeIcon icon={faCalendarPlus} /> Agendar visita
+          </button>
         </div>
       </div>
 
@@ -317,6 +322,14 @@ export function AgendaVinculo({ orcamentoId, nomeCliente }: { orcamentoId: strin
           </div>
         </div>
       )}
+      <AgendarOsModal
+        aberto={agendarAberto}
+        orcamentoId={orcamentoId}
+        nomeCliente={nomeCliente}
+        gcClienteId={gcClienteId ?? null}
+        onAgendado={() => { setAgendarAberto(false); void carregar(); }}
+        onFechar={() => setAgendarAberto(false)}
+      />
     </div>
   );
 }

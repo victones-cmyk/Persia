@@ -4,7 +4,7 @@
 import { Router, type Request, type Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
-import { buscarClientes, criarCliente, type EnderecoCliente } from '../services/gc/clientes';
+import { buscarClientePorId, buscarClientes, criarCliente, type EnderecoCliente } from '../services/gc/clientes';
 import { buscarRevendaPorClienteGc } from '../lib/permissaoRevenda';
 import { cpfValido, cnpjValido } from '../lib/documentoBR';
 import { env } from '../config/env';
@@ -34,6 +34,20 @@ router.get('/clientes/:id/revenda', async (req: Request, res: Response) => {
   if (!id) throw new AppError(400, 'CLIENTE_INVALIDO', 'Cliente inválido.');
   const revenda = await buscarRevendaPorClienteGc(id);
   res.json({ revenda });
+});
+
+// GET /api/gc/clientes/:id/completo — cliente com endereço e telefone, para
+// pré-preencher o agendamento de visita sem redigitar o que já está no GC.
+router.get('/clientes/:id/completo', async (req: Request, res: Response) => {
+  const sessao = req.session.usuario!;
+  if (sessao.perfil === 'revenda') {
+    throw new AppError(403, 'ACESSO_NEGADO', 'Não disponível para o perfil revenda.');
+  }
+  const id = String(req.params.id ?? '').trim();
+  if (!id) throw new AppError(400, 'CLIENTE_INVALIDO', 'Cliente inválido.');
+  const cliente = await buscarClientePorId(id);
+  if (!cliente) throw new AppError(404, 'NAO_ENCONTRADO', 'Cliente não encontrado no GestãoClick.');
+  res.json({ cliente });
 });
 
 // GET /api/gc/clientes?q=termo — busca de clientes (frontend faz debounce 300ms).

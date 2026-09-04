@@ -36,6 +36,7 @@ import {
 import {
   buscarEventosAgenda,
   desvincularEventoAgenda,
+  agendarOsDoOrcamento,
   listarAmbientesAgenda,
   listarVinculosAgenda,
   listarVinculosAgendaEmLote,
@@ -67,6 +68,7 @@ router.get('/:id/agenda', listarVinculosAgenda);
 router.get('/:id/agenda/ambientes', listarAmbientesAgenda);
 router.get('/:id/agenda/buscar', buscarEventosAgenda);
 router.post('/:id/agenda', vincularEventosAgenda);
+router.post('/:id/agenda/agendar', agendarOsDoOrcamento);
 router.delete('/:id/agenda/:appointmentId', desvincularEventoAgenda);
 router.post('/:id/producao/medicao/preview', preverMedicaoProducao);
 router.post('/:id/producao/medicao/venda-ajuste', gerarVendaAjusteMedicao);

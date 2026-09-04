@@ -354,7 +354,7 @@ export function OrcamentoDetalhe() {
 
         {/* OS do Agenda: aqui cobre também o orçamento que ainda não virou pedido
             (ex.: medição feita antes da venda), que não aparece na tela de Vendas. */}
-        {!eRascunho && <div className="mt-4"><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} /></div>}
+        {!eRascunho && <div className="mt-4"><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} gcClienteId={orc.gc_cliente_id} /></div>}
 
         {/* Cliente — erro: seletor (retentativa); demais: exibe o cliente atual */}
         {emEdicao ? (

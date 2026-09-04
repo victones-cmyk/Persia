@@ -5,10 +5,12 @@
 // escolhe sozinho. Os dados exibidos vêm sempre ao vivo do Agenda; a Pérsia
 // guarda só o id do vínculo.
 
+import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
+import { agendaApiHabilitada, criarOsNoAgenda, listarTecnicosDoAgenda, AgendaApiError, type AmbienteParaAgenda } from '../services/agenda/agendaApi';
 import {
   agendaHabilitado,
   buscarAmbientesDosEventos,
@@ -195,6 +197,105 @@ export async function listarAmbientesDeEvento(req: Request, res: Response): Prom
   if (!evento) throw new AppError(404, 'NAO_ENCONTRADO', 'OS não encontrada no Agenda.');
   const [ambientes] = await buscarAmbientesDosEventos([id]);
   res.json({ evento, ambientes: ambientes?.ambientes ?? [] });
+}
+
+/** GET /api/agenda/tecnicos — quem pode receber a OS, para o vendedor já atribuir. */
+export async function listarTecnicosAgenda(req: Request, res: Response): Promise<void> {
+  exigirVendedorOuAdmin(req);
+  if (!agendaApiHabilitada()) {
+    res.json({ habilitado: false, tecnicos: [] });
+    return;
+  }
+  try {
+    res.json({ habilitado: true, tecnicos: await listarTecnicosDoAgenda() });
+  } catch {
+    // Agenda fora do ar não pode impedir o resto da tela de funcionar; a lista
+    // vem vazia e o agendamento segue possível sem atribuir técnico.
+    res.json({ habilitado: true, tecnicos: [] });
+  }
+}
+
+/**
+ * POST /api/orcamentos/:id/agenda/agendar — cria a OS no Agenda a partir deste
+ * orçamento e já a vincula. Fecha o caminho "vende primeiro, mede depois", em
+ * que o vendedor abria o outro app e refazia o cadastro do cliente na mão.
+ */
+export async function agendarOsDoOrcamento(req: Request, res: Response): Promise<void> {
+  exigirAgenda();
+  exigirVendedorOuAdmin(req);
+  const sessao = req.session.usuario!;
+  const orc = await carregarOrcamentoAutorizado(req);
+  if (!agendaApiHabilitada()) {
+    throw new AppError(503, 'AGENDA_SEM_CHAVE', 'A criação de OS no Agenda não está configurada neste servidor.');
+  }
+
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const texto = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const tipo = texto(b.tipo, 20);
+  if (tipo !== 'measurement' && tipo !== 'installation') {
+    throw new AppError(400, 'TIPO_INVALIDO', 'Escolha medição ou instalação.');
+  }
+  const clienteNome = texto(b.cliente_nome, 100) || orc.nome_cliente;
+  if (!clienteNome || clienteNome === '(sem cliente)') {
+    throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Informe o nome do cliente para agendar.');
+  }
+
+  const tecnicoBruto = Number(b.tecnico_id);
+  const ambientes: AmbienteParaAgenda[] = (Array.isArray(b.ambientes) ? b.ambientes : [])
+    .map((a) => {
+      const amb = a as Record<string, unknown>;
+      const nome = texto(amb.nome, 100);
+      if (!nome) return null;
+      const tipos = (Array.isArray(amb.tipos_produto) ? amb.tipos_produto : [])
+        .filter((t): t is 'persiana' | 'cortina' => t === 'persiana' || t === 'cortina');
+      return {
+        // Id cunhado aqui: este ambiente nasce na Pérsia e o Agenda o respeita.
+        id: randomUUID(),
+        nome,
+        observacao: texto(amb.observacao, 2000) || null,
+        tipos_produto: tipos,
+        trilho_especial: tipos.includes('cortina') && amb.trilho_especial === true,
+      } as AmbienteParaAgenda;
+    })
+    .filter((a): a is AmbienteParaAgenda => a !== null);
+
+  let os;
+  try {
+    os = await criarOsNoAgenda({
+      tipo,
+      tecnico_id: Number.isInteger(tecnicoBruto) && tecnicoBruto > 0 ? tecnicoBruto : null,
+      cliente_nome: clienteNome,
+      cliente_endereco: texto(b.cliente_endereco, 500) || null,
+      cliente_telefone: texto(b.cliente_telefone, 20) || null,
+      cliente_cep: texto(b.cliente_cep, 20) || null,
+      cliente_numero: texto(b.cliente_numero, 20) || null,
+      cliente_complemento: texto(b.cliente_complemento, 100) || null,
+      vendedor: sessao.nome,
+      pedido_codigo: orc.gc_pedido_codigo ?? orc.gc_codigo ?? null,
+      agendado_para: texto(b.agendado_para, 40) || null,
+      observacoes: texto(b.observacoes, 2000) || null,
+      ambientes,
+    });
+  } catch (e) {
+    const msg = e instanceof AgendaApiError ? e.message : 'Falha ao criar a OS no Agenda.';
+    throw new AppError(502, 'AGENDA_FALHOU', msg);
+  }
+
+  // A OS existe lá; daqui em diante uma falha não deve desfazer isso — o vínculo
+  // pode ser refeito pela tela, a OS não.
+  await prisma.orcamentoAgendaVinculo.createMany({
+    data: [{ orcamento_id: orc.id, agenda_appointment_id: os.id, tipo, criado_por: sessao.id }],
+    skipDuplicates: true,
+  });
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: sessao.id,
+      acao: 'agenda_os_criada',
+      detalhe: { orcamento_id: orc.id, appointment_id: os.id, tipo, ambientes: ambientes.length },
+    },
+  });
+
+  res.status(201).json({ os });
 }
 
 function idsValidos(body: unknown): number[] {

@@ -65,6 +65,51 @@ export async function buscarClientes(query: string): Promise<ClienteResumo[]> {
   }));
 }
 
+/** Cliente com contato e endereço — usado para pré-preencher o agendamento. */
+export interface ClienteCompleto extends ClienteResumo {
+  telefone: string | null;
+  celular: string | null;
+  endereco: EnderecoCliente | null;
+}
+
+interface GcEnderecoRaw {
+  endereco?: { cep?: string; logradouro?: string; numero?: string; complemento?: string; bairro?: string; nome_cidade?: string; estado?: string };
+}
+
+/**
+ * Busca um cliente pelo id, com endereço. Evita que o vendedor redigite
+ * endereço e telefone ao agendar uma visita — o dado já está no GestãoClick.
+ */
+export async function buscarClientePorId(id: string): Promise<ClienteCompleto | null> {
+  const env = await gcRequest<GcEnvelope<GcClienteRaw & { telefone?: string; celular?: string; enderecos?: GcEnderecoRaw[] }>>({
+    method: 'GET',
+    url: `/api/clientes/${encodeURIComponent(id)}`,
+  });
+  const c = env.data;
+  if (!c?.id) return null;
+
+  const e = c.enderecos?.[0]?.endereco;
+  return {
+    id: c.id,
+    nome: c.nome,
+    tipo_pessoa: c.tipo_pessoa,
+    documento: c.cnpj || c.cpf || null,
+    telefone: c.telefone || null,
+    celular: c.celular || null,
+    endereco: e
+      ? {
+          cep: e.cep || '',
+          logradouro: e.logradouro || '',
+          numero: e.numero || '',
+          complemento: e.complemento || '',
+          bairro: e.bairro || '',
+          cidade: e.nome_cidade || '',
+          estado: e.estado || '',
+        }
+      : null,
+  };
+}
+
 /** Cria um cliente no GestãoClick (PF ou PJ), com contato e endereço opcionais. */
 export async function criarCliente(input: NovoCliente): Promise<ClienteResumo> {
   const nome = input.nome.trim();
