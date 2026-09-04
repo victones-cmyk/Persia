@@ -68,6 +68,9 @@ export const env = {
   // de order_number). Vazio → integração desligada, sem quebrar o resto do app.
   AGENDA_DATABASE_URL: optional('AGENDA_DATABASE_URL', ''),
   AGENDA_BASE_URL: optional('AGENDA_BASE_URL', 'https://agenda.texhaus.com.br'),
+  // Chave da API de integração do Agenda (criar OS a partir de uma venda).
+  // Vazia → a Pérsia continua LENDO o Agenda pelo banco, mas não cria OS por lá.
+  AGENDA_API_KEY: optional('AGENDA_API_KEY', ''),
 
   // Servidor
   PORT: Number(optional('PORT', '3001')),
