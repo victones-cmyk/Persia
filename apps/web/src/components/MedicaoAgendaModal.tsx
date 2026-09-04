@@ -24,9 +24,13 @@ interface EventoAgenda {
   pedido_codigo: string | null;
 }
 
+type TipoProduto = 'persiana' | 'cortina';
+
 interface AmbienteAgenda {
   id: string | null;
   nome: string;
+  tipo_produto: TipoProduto | null;
+  trilho_especial: boolean;
   largura: number | null;
   altura: number | null;
   folhas_sugeridas: number | null;
@@ -41,6 +45,14 @@ export interface ItemGeradoMedicao {
   altura: number;
 }
 
+/** O que sai do modal, já separado por seção do orçamento. */
+export interface GeracaoMedicao {
+  persianas: ItemGeradoMedicao[];
+  cortinas: ItemGeradoMedicao[];
+  /** Um trilho por ambiente de cortina marcado com trilho especial (largura do vão inteiro). */
+  trilhos: { ambiente: string; largura: number }[];
+}
+
 const rotuloTipo = (t: string) =>
   t === 'measurement' ? 'Medição' : t === 'installation' ? 'Instalação' : t === 'warranty' ? 'Garantia' : 'Retorno';
 
@@ -52,7 +64,7 @@ export function MedicaoAgendaModal({
 }: {
   aberto: boolean;
   clienteSugerido?: string;
-  onGerar: (itens: ItemGeradoMedicao[], appointmentId: number) => void;
+  onGerar: (geracao: GeracaoMedicao, appointmentId: number) => void;
   onFechar: () => void;
 }) {
   const [termo, setTermo] = useState('');
@@ -64,13 +76,17 @@ export function MedicaoAgendaModal({
   const [carregandoAmbientes, setCarregandoAmbientes] = useState(false);
   // Folhas por índice de ambiente; '' = ambiente não entra no orçamento.
   const [folhas, setFolhas] = useState<Record<number, string>>({});
+  // Tipo por ambiente: vem marcado do Agenda quando alguém marcou, mas quem
+  // decide é o vendedor — pode trocar aqui sem mexer na OS.
+  const [tipos, setTipos] = useState<Record<number, TipoProduto>>({});
+  const [comTrilho, setComTrilho] = useState<Record<number, boolean>>({});
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     if (!aberto) return;
     setTermo(clienteSugerido?.trim() ?? '');
     setEventos([]); setBuscou(false); setEvento(null);
-    setAmbientes([]); setFolhas({}); setErro(null);
+    setAmbientes([]); setFolhas({}); setTipos({}); setComTrilho({}); setErro(null);
   }, [aberto, clienteSugerido]);
 
   if (!aberto) return null;
@@ -102,10 +118,16 @@ export function MedicaoAgendaModal({
       const r = await api.get<{ ambientes: AmbienteAgenda[] }>(`/agenda/eventos/${ev.id}/ambientes`);
       setAmbientes(r.ambientes);
       const inicial: Record<number, string> = {};
+      const tiposIniciais: Record<number, TipoProduto> = {};
+      const trilhoInicial: Record<number, boolean> = {};
       r.ambientes.forEach((a, i) => {
-        if (a.medido) inicial[i] = String(a.folhas_sugeridas && a.folhas_sugeridas > 0 ? a.folhas_sugeridas : 1);
+        if (!a.medido) return;
+        inicial[i] = String(a.folhas_sugeridas && a.folhas_sugeridas > 0 ? a.folhas_sugeridas : 1);
+        // Sem marcação na OS, assume persiana — é o caso mais comum e o vendedor troca num clique.
+        tiposIniciais[i] = a.tipo_produto ?? 'persiana';
+        trilhoInicial[i] = a.trilho_especial;
       });
-      setFolhas(inicial);
+      setFolhas(inicial); setTipos(tiposIniciais); setComTrilho(trilhoInicial);
     } catch (e) {
       setErro(mensagemErro(e, 'Não foi possível ler os ambientes desta OS.'));
     } finally {
@@ -121,14 +143,22 @@ export function MedicaoAgendaModal({
   const totalItens = previa.reduce((s, p) => s + p.length, 0);
 
   function gerar() {
-    const itens: ItemGeradoMedicao[] = [];
+    const geracao: GeracaoMedicao = { persianas: [], cortinas: [], trilhos: [] };
     ambientes.forEach((a, i) => {
+      if (previa[i].length === 0) return;
+      const destino = tipos[i] === 'cortina' ? geracao.cortinas : geracao.persianas;
       for (const largura of previa[i]) {
-        itens.push({ ambiente: a.nome, largura, altura: a.altura! });
+        destino.push({ ambiente: a.nome, largura, altura: a.altura! });
+      }
+      // Um trilho por ambiente, com a largura do vão inteiro — o trilho atravessa
+      // o vão todo, não acompanha a divisão das folhas.
+      if (tipos[i] === 'cortina' && comTrilho[i]) {
+        geracao.trilhos.push({ ambiente: a.nome, largura: a.largura! });
       }
     });
-    if (itens.length === 0 || !evento) return;
-    onGerar(itens, evento.id);
+    if (!evento) return;
+    if (geracao.persianas.length + geracao.cortinas.length === 0) return;
+    onGerar(geracao, evento.id);
   }
 
   return (
@@ -243,6 +273,26 @@ export function MedicaoAgendaModal({
                         </div>
                         {a.medido && (
                           <div style={{ width: 110, flexShrink: 0 }}>
+                            <label className="form-label">O que é</label>
+                            <select
+                              className="input"
+                              value={tipos[i] ?? 'persiana'}
+                              onChange={(e) => setTipos((p) => ({ ...p, [i]: e.target.value as TipoProduto }))}
+                              style={{ marginBottom: 6 }}
+                            >
+                              <option value="persiana">Persiana</option>
+                              <option value="cortina">Cortina</option>
+                            </select>
+                            {tipos[i] === 'cortina' && (
+                              <label className="flex items-center gap-1 text-xs-ui text-neutral-600 mb-1" style={{ cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={comTrilho[i] ?? false}
+                                  onChange={(e) => setComTrilho((p) => ({ ...p, [i]: e.target.checked }))}
+                                />
+                                Trilho especial
+                              </label>
+                            )}
                             <label className="form-label" htmlFor={`folhas-${i}`}>Folhas</label>
                             <input
                               id={`folhas-${i}`}

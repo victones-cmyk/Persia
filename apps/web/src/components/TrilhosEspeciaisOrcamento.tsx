@@ -137,6 +137,7 @@ function linhaValida(linha: LinhaState, calculadoras: CalculadoraTrilhoEspecial[
 
 export function TrilhosEspeciaisOrcamento({
   inicial,
+  trilhosDaMedicao,
   onEstado,
   onSnapshot,
   onDirtyChange,
@@ -144,6 +145,9 @@ export function TrilhosEspeciaisOrcamento({
   ehRevenda = false,
 }: {
   inicial?: ProdutoExtraSnap[];
+  /** Trilhos vindos da medição (ambiente marcado como cortina com trilho especial):
+   *  entram com ambiente e largura do vão; a calculadora fica em branco. */
+  trilhosDaMedicao?: { chave: string; itens: { ambiente: string; largura: number }[] };
   onEstado: (estado: ItensExtrasEstado) => void;
   onSnapshot?: (snap: ProdutoExtraSnap[]) => void;
   onDirtyChange?: (sujo: boolean) => void;
@@ -157,6 +161,21 @@ export function TrilhosEspeciaisOrcamento({
   const fatorDesconto = descontoPct > 0 ? 1 - Math.max(0, Math.min(99, descontoPct)) / 100 : 1;
   const [calculadoras, setCalculadoras] = useState<CalculadoraTrilhoEspecial[]>([]);
   const [linhas, setLinhas] = useState<LinhaState[]>(() => normalizarInicial(inicial));
+
+  // Trilhos gerados a partir da medição: ambiente e largura do vão vêm prontos,
+  // o vendedor escolhe o modelo de trilho.
+  const medicaoAplicada = useRef<string | null>(null);
+  useEffect(() => {
+    const g = trilhosDaMedicao;
+    if (!g || g.itens.length === 0 || medicaoAplicada.current === g.chave) return;
+    medicaoAplicada.current = g.chave;
+    const novos = g.itens.map((it) => ({ ...vazia(), ambiente: it.ambiente, largura: String(it.largura) }));
+    setLinhas((prev) => {
+      const soUmaVazia = prev.length === 1 && !prev[0].calculadora_id && !prev[0].largura && !prev[0].ambiente;
+      return soUmaVazia ? novos : [...prev, ...novos];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trilhosDaMedicao]);
   const [resultados, setResultados] = useState<Record<string, ResultadoTrilho>>({});
   const [erros, setErros] = useState<Record<string, string>>({});
   const [carregando, setCarregando] = useState(true);

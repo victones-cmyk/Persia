@@ -16,6 +16,8 @@ describe('normalizarAmbiente', () => {
     expect(a).toEqual({
       id: '5ab3fef1-b692-40e0-b1c3-a0e753129d13',
       nome: 'Sacada',
+      tipo_produto: null,
+      trilho_especial: false,
       largura: 10.8,
       altura: 2.5,
       folhas_sugeridas: 8,
@@ -79,5 +81,23 @@ describe('normalizarAmbiente', () => {
   it('trata ausência de fotos sem quebrar', () => {
     expect(normalizarAmbiente({ name: 'Sala' })?.fotos).toEqual([]);
     expect(normalizarAmbiente({ name: 'Sala', photos: 'nao-e-array' })?.fotos).toEqual([]);
+  });
+
+  it('lê a marcação de o que vai no ambiente', () => {
+    expect(normalizarAmbiente({ name: 'Sala', tipo_produto: 'cortina', trilho_especial: true }))
+      .toMatchObject({ tipo_produto: 'cortina', trilho_especial: true });
+    expect(normalizarAmbiente({ name: 'Sala', tipo_produto: 'persiana' }))
+      .toMatchObject({ tipo_produto: 'persiana', trilho_especial: false });
+  });
+
+  it('ignora tipo desconhecido e trilho fora de cortina', () => {
+    expect(normalizarAmbiente({ name: 'Sala', tipo_produto: 'toldo' })?.tipo_produto).toBeNull();
+    // trilho especial só existe acompanhando cortina
+    expect(normalizarAmbiente({ name: 'Sala', tipo_produto: 'persiana', trilho_especial: true })?.trilho_especial).toBe(false);
+  });
+
+  it('registro antigo vem sem marcação, para o vendedor decidir', () => {
+    expect(normalizarAmbiente({ name: 'Sacada', info: '2.25 x 1.75' }))
+      .toMatchObject({ tipo_produto: null, trilho_especial: false });
   });
 });

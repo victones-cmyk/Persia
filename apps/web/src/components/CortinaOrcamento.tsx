@@ -34,7 +34,7 @@ export interface CortinaOrcamentoEstado {
 
 export function CortinaOrcamento({
   cliente, gcStatus, gcUsuarioId, inicial, restauro, editarId, onDirtyChange, onSnapshot, onEnviado,
-  embutido = false, onEstado, onCarregar, permitirInstalacao = true, descontoPct = 0, rtPct = 0,
+  embutido = false, onEstado, onCarregar, permitirInstalacao = true, descontoPct = 0, rtPct = 0, cortinasDaMedicao,
 }: {
   cliente: ClienteResumo | null;
   gcStatus: GcStatus;
@@ -54,6 +54,12 @@ export function CortinaOrcamento({
   descontoPct?: number;
   /** % de RT do arquiteto (0 quando não informado) — repassado ao badge minimizado do card. */
   rtPct?: number;
+  /**
+   * Cortinas vindas da medição da Agenda (ambiente + medidas). Entram como cards
+   * NOVOS com só essas informações; modelo, tecido, fixação e instalação seguem
+   * em branco, para o vendedor escolher. `chave` distingue uma geração da
+   * seguinte, para o mesmo lote não entrar duas vezes. */
+  cortinasDaMedicao?: { chave: string; itens: { ambiente: string; largura: number; altura: number }[] };
 }) {
   const { showToast } = useToast();
   const [tecidos, setTecidos] = useState<TecidoOpcao[]>([]);
@@ -116,6 +122,39 @@ export function CortinaOrcamento({
     setSnaps((m) => { const n = { ...m }; delete n[id]; return n; });
     setCalculandoCards((m) => { const n = { ...m }; delete n[id]; return n; });
   };
+
+  // Cortinas geradas a partir da medição da Agenda. Entram pelo mesmo caminho de
+  // "duplicar" (snapshot bruto do formulário), com só ambiente e medidas
+  // preenchidos — modelo, tecido, fixação e instalação ficam em branco e o card
+  // conta como incompleto até o vendedor escolher.
+  const medicaoAplicada = useRef<string | null>(null);
+  useEffect(() => {
+    const g = cortinasDaMedicao;
+    if (!g || g.itens.length === 0 || medicaoAplicada.current === g.chave) return;
+    medicaoAplicada.current = g.chave;
+    const novos = g.itens.map((it) => {
+      const novoId = crypto.randomUUID();
+      const snap: CortinaCardSnap = {
+        ambiente: it.ambiente,
+        modelo: '', fixacao: '', largura: String(it.largura), altura: String(it.altura),
+        tamanhoBarra: '', tipoBarra: '', camadas: [], acessorioSel: {}, qtdManual: {},
+      };
+      restauros.current[novoId] = snap;
+      return { novoId, snap };
+    });
+    setSnaps((m) => {
+      const n = { ...m };
+      for (const { novoId, snap } of novos) n[novoId] = snap;
+      return n;
+    });
+    setIds((xs) => {
+      // Card em branco recém-aberto é substituído, não empurrado para cima dos novos.
+      const soUmVazio = xs.length === 1 && !snaps[xs[0]]?.largura && !snaps[xs[0]]?.ambiente;
+      const gerados = novos.map((n) => n.novoId);
+      return soUmVazio ? gerados : [...xs, ...gerados];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cortinasDaMedicao]);
 
   const duplicarCortina = (id: string, idx: number) => {
     const origSnap = snaps[id];

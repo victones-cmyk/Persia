@@ -21,7 +21,7 @@ import { TrilhosEspeciaisOrcamento } from '../components/TrilhosEspeciaisOrcamen
 import { ClienteSearch } from '../components/ClienteSearch';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { AtribuirVendedorModal } from '../components/AtribuirVendedorModal';
-import { MedicaoAgendaModal, type ItemGeradoMedicao } from '../components/MedicaoAgendaModal';
+import { MedicaoAgendaModal, type GeracaoMedicao, type ItemGeradoMedicao } from '../components/MedicaoAgendaModal';
 import { formatBRL, roundHalfUp } from '../lib/formatacao';
 import type { CortinaInicial } from '../components/CortinaCard';
 import type { OrcamentoCalculado, ClienteResumo, ItemInput, TipoPersiana, Cor, Acionamento, OrcamentoSalvo } from '../lib/calcTypes';
@@ -154,6 +154,8 @@ export function OrcamentoNovo() {
   // o orçamento tiver id (o vínculo não existe antes de o orçamento ser salvo).
   const [medicaoAberta, setMedicaoAberta] = useState(false);
   const [itensDaMedicao, setItensDaMedicao] = useState<{ chave: string; itens: ItemGeradoMedicao[] } | undefined>();
+  const [cortinasDaMedicao, setCortinasDaMedicao] = useState<{ chave: string; itens: ItemGeradoMedicao[] } | undefined>();
+  const [trilhosDaMedicao, setTrilhosDaMedicao] = useState<{ chave: string; itens: { ambiente: string; largura: number }[] } | undefined>();
   const [osMedicao, setOsMedicao] = useState<number | null>(null);
 
   const [enviando, setEnviando] = useState(false);
@@ -549,14 +551,19 @@ export function OrcamentoNovo() {
     setAcaoAposVendedor(null);
   }
 
-  function aoGerarDaMedicao(itens: ItemGeradoMedicao[], appointmentId: number) {
-    // Marca a seção de persianas (se ainda não estiver) e injeta os itens; a
-    // chave distingue esta geração da próxima, para o formulário não reinserir.
-    setOrdem((prev) => (prev.includes('persiana') ? prev : [...prev, 'persiana']));
-    setItensDaMedicao({ chave: crypto.randomUUID(), itens });
+  function aoGerarDaMedicao(g: GeracaoMedicao, appointmentId: number) {
+    // Uma chave por geração: cada seção usa a dela para não reinserir o mesmo lote.
+    const chave = crypto.randomUUID();
+    const secoes: Secao[] = [];
+    if (g.persianas.length > 0) { setItensDaMedicao({ chave, itens: g.persianas }); secoes.push('persiana'); }
+    if (g.cortinas.length > 0) { setCortinasDaMedicao({ chave, itens: g.cortinas }); secoes.push('cortina'); }
+    if (g.trilhos.length > 0) { setTrilhosDaMedicao({ chave, itens: g.trilhos }); secoes.push('trilho'); }
+    // Liga só as seções que receberam algo, preservando a ordem já escolhida.
+    setOrdem((prev) => [...prev, ...secoes.filter((s) => !prev.includes(s))]);
     setOsMedicao(appointmentId);
     setMedicaoAberta(false);
-    showToast('success', `${itens.length} ${itens.length === 1 ? 'item gerado' : 'itens gerados'} da medição`, 'Escolha produto, tecido e instalação em cada um.');
+    const total = g.persianas.length + g.cortinas.length + g.trilhos.length;
+    showToast('success', `${total} ${total === 1 ? 'item gerado' : 'itens gerados'} da medição`, 'Escolha produto, tecido e instalação em cada um.');
   }
 
   function descartarRecuperado() {
@@ -742,6 +749,7 @@ export function OrcamentoNovo() {
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faLayerGroup} className="text-neutral-500" /> Cortinas</h2>
                 {prontoEdicao && (
                   <CortinaOrcamento
+                    cortinasDaMedicao={cortinasDaMedicao}
                     embutido
                     cliente={cliente}
                     gcStatus={gcStatus}
@@ -764,7 +772,7 @@ export function OrcamentoNovo() {
               <section key={`trilho-${editarId ?? 'novo'}`}>
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faGripLines} className="text-neutral-500" /> Trilhos especiais</h2>
                 {prontoEdicao && (
-                  <TrilhosEspeciaisOrcamento inicial={rascunhoLocal?.trilhos_especiais ?? trilhoSnapRef.current ?? undefined} onEstado={setTrilhoEstado} onSnapshot={onSnapTrilho} onDirtyChange={onDirtyTrilho} descontoPct={descontoNum} ehRevenda={ehRevenda} />
+                  <TrilhosEspeciaisOrcamento trilhosDaMedicao={trilhosDaMedicao} inicial={rascunhoLocal?.trilhos_especiais ?? trilhoSnapRef.current ?? undefined} onEstado={setTrilhoEstado} onSnapshot={onSnapTrilho} onDirtyChange={onDirtyTrilho} descontoPct={descontoNum} ehRevenda={ehRevenda} />
                 )}
               </section>
             );

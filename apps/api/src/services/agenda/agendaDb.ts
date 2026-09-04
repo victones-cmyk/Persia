@@ -43,6 +43,13 @@ export interface EventoAgenda {
 export interface AmbienteAgenda {
   id: string | null;
   nome: string;
+  /**
+   * O que vai neste ambiente, quando alguém marcou. É SUGESTÃO: o técnico nem
+   * sempre sabe, e quem decide é o vendedor ao montar o orçamento — mesma
+   * divisão de papéis das folhas sugeridas.
+   */
+  tipo_produto: 'persiana' | 'cortina' | null;
+  trilho_especial: boolean;
   largura: number | null;
   altura: number | null;
   folhas_sugeridas: number | null;
@@ -155,9 +162,12 @@ export function normalizarAmbiente(bruto: unknown): AmbienteAgenda | null {
   if (!nome) return null;
   const largura = numeroOuNulo(a.largura);
   const altura = numeroOuNulo(a.altura);
+  const tipo = a.tipo_produto === 'persiana' || a.tipo_produto === 'cortina' ? a.tipo_produto : null;
   return {
     id: typeof a.id === 'string' && a.id.trim() !== '' ? a.id.trim() : null,
     nome,
+    tipo_produto: tipo,
+    trilho_especial: tipo === 'cortina' && a.trilho_especial === true,
     largura,
     altura,
     folhas_sugeridas: numeroOuNulo(a.folhas_sugeridas),
