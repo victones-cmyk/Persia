@@ -20,6 +20,7 @@ import calcularRouter from './routes/calcular';
 import orcamentosRouter from './routes/orcamentos';
 import adminRouter from './routes/admin';
 import gcRouter from './routes/gc';
+import agendaRouter from './routes/agenda';
 import { getGcHealth } from './services/gc/health';
 import { carregarRegras } from './services/calc/regras';
 import { carregarCalculadoras } from './services/calc/calculadoras';
@@ -134,6 +135,9 @@ app.use('/api/admin', adminRouter);
 
 // Rotas de leitura GestãoClick — clientes etc. (Fase 4).
 app.use('/api/gc', gcRouter);
+
+// Consulta ao app Agenda sem orçamento no meio — montar orçamento a partir da medição.
+app.use('/api/agenda', agendaRouter);
 
 // ---------------------------------------------------------------------------
 // Frontend estático (produção) — arquitetura "App Node.js único" no Railway.

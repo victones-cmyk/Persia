@@ -58,6 +58,12 @@ interface CacheAcessorios {
 let cache: { dados: CacheAcessorios; expira: number } | null = null;
 const TTL_MS = 60 * 1000; // 1 min — novos acessórios do GC aparecem rápido sem refetch a cada form
 
+/** Limpa as listas derivadas do catálogo local após uma sincronização. */
+export function invalidarCacheAcessoriosCortina(): void {
+  cache = null;
+  cacheWave = null;
+}
+
 /** Lê todos os grupos de acessório + serviços de instalação (com cache de 1 min). */
 export async function listarAcessoriosCortina(): Promise<CacheAcessorios> {
   if (cache && cache.expira > Date.now()) return cache.dados;

@@ -169,6 +169,7 @@ export function PersianaForm({
   onCalculandoChange,
   permitirInstalacao = true,
   descontoPct = 0,
+  itensDaMedicao,
 }: {
   onResult: (dados: OrcamentoCalculado | null) => void;
   inicial?: { tipo: TipoPersiana; itens: ItemInput[] };
@@ -176,6 +177,12 @@ export function PersianaForm({
   onDirtyChange?: (sujo: boolean) => void;
   onSnapshot?: (snap: PersianaSnapshot) => void;
   onCalculandoChange?: (calculando: boolean) => void;
+  /**
+   * Itens vindos da medição da Agenda (ambiente + medidas já divididas em folhas).
+   * Entram como itens NOVOS, não como restauro: o vendedor ainda precisa escolher
+   * produto, tecido e instalação em cada um. Vem com `chave` para o formulário
+   * distinguir uma geração da seguinte e não reinserir a mesma duas vezes. */
+  itensDaMedicao?: { chave: string; itens: Pick<ItemInput, 'ambiente' | 'largura' | 'altura'>[] };
   /** false p/ revenda: sem serviço de instalação — o seletor some e o item conta como "sem instalação". */
   permitirInstalacao?: boolean;
   /** % de desconto da revenda (0 p/ vendedor/admin) — só afeta o "Subtotal do item" exibido aqui. */
@@ -195,6 +202,31 @@ export function PersianaForm({
         : [criarItemVazio()],
   );
   const [mesmoAmbiente, setMesmoAmbiente] = useState(false);
+
+  // Itens gerados a partir da medição da Agenda. Entram como itens NOVOS (via
+  // criarItemVazio) e não pelo caminho de `inicial`/restauro — este converte
+  // instalação vazia em "sem instalação", o que faria o item passar como
+  // completo sem ninguém ter escolhido, e o orçamento sair sem instalação.
+  // Aqui o campo continua vazio e o vendedor é obrigado a decidir.
+  const medicaoAplicada = useRef<string | null>(null);
+  useEffect(() => {
+    const g = itensDaMedicao;
+    if (!g || g.itens.length === 0 || medicaoAplicada.current === g.chave) return;
+    medicaoAplicada.current = g.chave;
+    const novos = g.itens.map((it) => ({
+      ...criarItemVazio(),
+      ambiente: it.ambiente ?? '',
+      largura: it.largura != null ? String(it.largura) : '',
+      altura: it.altura != null ? String(it.altura) : '',
+    }));
+    // Um formulário recém-aberto tem uma linha em branco; ela é substituída em
+    // vez de sobrar acima dos itens da medição.
+    setItens((prev) => {
+      const soUmaVazia = prev.length === 1 && !prev[0].tecido_id && !prev[0].largura && !prev[0].ambiente;
+      return soUmaVazia ? novos : [...prev, ...novos];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itensDaMedicao]);
 
   // Lista de calculadoras de persianas carregadas dinamicamente
   const [calculadoras, setCalculadoras] = useState<CalculadoraPersiana[]>([]);

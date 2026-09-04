@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArrowsRotate, faDatabase, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../../lib/api';
+import { invalidarCacheado, invalidarCacheadosPorPrefixo } from '../../lib/dadosCache';
 import { useToast } from '../../hooks/useToast';
 
 interface StatusCatalogoLocal {
@@ -88,6 +89,11 @@ export function AdminMateriasPrimas() {
       const r = await api.post<{ resumo: ResumoSync; status: StatusCatalogoLocal }>('/admin/gc/catalogo-local/sincronizar');
       setStatus(r.status);
       setUltimoResumo(r.resumo);
+      invalidarCacheado('cortina-tecidos');
+      invalidarCacheado('cortina-acessorios');
+      invalidarCacheado('instalacoes');
+      invalidarCacheadosPorPrefixo('persiana-tecidos:');
+      invalidarCacheadosPorPrefixo('componentes:');
       showToast('success', 'Matérias-primas atualizadas', `${r.resumo.produtos_salvos} produtos sincronizados.`);
     } catch (e) {
       showToast('error', 'Falha ao atualizar', e instanceof ApiError ? e.message : '');

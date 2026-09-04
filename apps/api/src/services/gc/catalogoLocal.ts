@@ -1,8 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { listarProdutosRemoto, type GcProduto } from './catalogos';
-import { GRUPO_TECIDOS_PERSIANA, GRUPO_TECIDO_CORTINA } from './tecidos';
-import { GRUPOS_ACESSORIO_CORTINA } from './acessorios';
+import { GRUPO_TECIDOS_PERSIANA, GRUPO_TECIDO_CORTINA, invalidarCacheTecidos } from './tecidos';
+import { GRUPOS_ACESSORIO_CORTINA, invalidarCacheAcessoriosCortina } from './acessorios';
+import { invalidarCachePrecosComponentes } from './componentesPersiana';
+import { invalidarCacheInstalacoes } from './instalacao';
 import { getCalculadoras } from '../calc/calculadoras';
 
 const CHAVE_STATUS = 'gc_catalogo_local_status';
@@ -202,6 +204,15 @@ export function invalidarCacheCatalogoLocal(): void {
   geracaoCatalogoLocal++;
 }
 
+/** Limpa todas as visões derivadas do catálogo após uma sincronização. */
+function invalidarCachesDerivadosCatalogo(): void {
+  invalidarCacheCatalogoLocal();
+  invalidarCacheTecidos();
+  invalidarCacheAcessoriosCortina();
+  invalidarCachePrecosComponentes();
+  invalidarCacheInstalacoes();
+}
+
 export async function listarProdutosLocais(filtros: { grupo_id?: string; ativo?: 0 | 1 } = {}): Promise<GcProduto[] | null> {
   const itens = await carregarCatalogoLocal();
   if (!itens) return null;
@@ -359,7 +370,7 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
       grupos: grupos.length,
       erro: null,
     });
-    invalidarCacheCatalogoLocal();
+    invalidarCachesDerivadosCatalogo();
     return resumo;
   } catch (err) {
     const resumo: ResumoSyncCatalogo = {
@@ -382,7 +393,7 @@ async function executarSync(): Promise<ResumoSyncCatalogo> {
       erro: resumo.erro ?? null,
     });
     // Uma falha pode ocorrer depois de parte dos lotes ter sido atualizada.
-    invalidarCacheCatalogoLocal();
+    invalidarCachesDerivadosCatalogo();
     return resumo;
   }
 }

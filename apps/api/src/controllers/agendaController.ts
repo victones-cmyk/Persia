@@ -148,6 +148,55 @@ export async function buscarEventosAgenda(req: Request, res: Response): Promise<
   res.json({ modo: 'pedido', pedido, eventos: await buscarEventosPorPedido(pedido) });
 }
 
+/** Medição é assunto de admin/vendedor; revenda não monta orçamento a partir de OS. */
+function exigirVendedorOuAdmin(req: Request): void {
+  if (req.session.usuario!.perfil === 'revenda') {
+    throw new AppError(403, 'ACESSO_NEGADO', 'Não disponível para o perfil revenda.');
+  }
+}
+
+/**
+ * GET /api/agenda/eventos/buscar?cliente=|os= — busca de OS SEM orçamento no meio.
+ * Existe porque o vendedor pode partir da medição: quando a visita técnica veio
+ * antes da venda, não há orçamento ainda a que escopar a busca.
+ */
+export async function buscarEventosAgendaAvulso(req: Request, res: Response): Promise<void> {
+  exigirAgenda();
+  exigirVendedorOuAdmin(req);
+  const termoOs = String(req.query.os ?? '').trim();
+  const termoCliente = String(req.query.cliente ?? '').trim();
+
+  if (termoOs) {
+    const id = Number(termoOs);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new AppError(400, 'OS_INVALIDA', 'Informe um número de OS válido.');
+    }
+    res.json({ modo: 'os', eventos: await buscarEventosPorIds([id]) });
+    return;
+  }
+  if (termoCliente.length < 3) {
+    throw new AppError(400, 'BUSCA_CURTA', 'Informe ao menos 3 letras do nome do cliente.');
+  }
+  res.json({ modo: 'cliente', eventos: await buscarEventosPorCliente(termoCliente) });
+}
+
+/**
+ * GET /api/agenda/eventos/:id/ambientes — ambientes medidos de uma OS específica,
+ * para montar o orçamento a partir dela antes de o vínculo existir.
+ */
+export async function listarAmbientesDeEvento(req: Request, res: Response): Promise<void> {
+  exigirAgenda();
+  exigirVendedorOuAdmin(req);
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new AppError(400, 'OS_INVALIDA', 'Informe um número de OS válido.');
+  }
+  const [evento] = await buscarEventosPorIds([id]);
+  if (!evento) throw new AppError(404, 'NAO_ENCONTRADO', 'OS não encontrada no Agenda.');
+  const [ambientes] = await buscarAmbientesDosEventos([id]);
+  res.json({ evento, ambientes: ambientes?.ambientes ?? [] });
+}
+
 function idsValidos(body: unknown): number[] {
   const raw = (body as { appointment_ids?: unknown } | null)?.appointment_ids;
   const ids = Array.isArray(raw) ? raw.map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0) : [];

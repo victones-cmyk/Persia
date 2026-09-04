@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTriangleExclamation, faSpinner, faXmark, faRotateLeft, faPaperPlane, faFloppyDisk, faScroll, faLayerGroup, faGripLines, faBoxOpen } from '@fortawesome/free-solid-svg-icons';
+import { faTriangleExclamation, faSpinner, faXmark, faRotateLeft, faPaperPlane, faFloppyDisk, faScroll, faLayerGroup, faGripLines, faBoxOpen, faRulerCombined } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useGcHealth } from '../hooks/useGcHealth';
 import { useToast } from '../hooks/useToast';
@@ -21,6 +21,7 @@ import { TrilhosEspeciaisOrcamento } from '../components/TrilhosEspeciaisOrcamen
 import { ClienteSearch } from '../components/ClienteSearch';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { AtribuirVendedorModal } from '../components/AtribuirVendedorModal';
+import { MedicaoAgendaModal, type ItemGeradoMedicao } from '../components/MedicaoAgendaModal';
 import { formatBRL, roundHalfUp } from '../lib/formatacao';
 import type { CortinaInicial } from '../components/CortinaCard';
 import type { OrcamentoCalculado, ClienteResumo, ItemInput, TipoPersiana, Cor, Acionamento, OrcamentoSalvo } from '../lib/calcTypes';
@@ -147,6 +148,13 @@ export function OrcamentoNovo() {
   const [persianaInicial, setPersianaInicial] = useState<{ tipo: TipoPersiana; itens: ItemInput[] } | undefined>();
   const [cortinaInicial, setCortinaInicial] = useState<{ cortinas: CortinaInicial[]; instalacao_valor: number } | undefined>();
   const [focoEdicaoItem, setFocoEdicaoItem] = useState<FocoEdicaoItem>(null);
+
+  // Orçamento montado a partir de uma medição da Agenda. `itensDaMedicao` vai
+  // para o PersianaForm; `osMedicao` fica guardado para virar vínculo assim que
+  // o orçamento tiver id (o vínculo não existe antes de o orçamento ser salvo).
+  const [medicaoAberta, setMedicaoAberta] = useState(false);
+  const [itensDaMedicao, setItensDaMedicao] = useState<{ chave: string; itens: ItemGeradoMedicao[] } | undefined>();
+  const [osMedicao, setOsMedicao] = useState<number | null>(null);
 
   const [enviando, setEnviando] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -480,6 +488,16 @@ export function OrcamentoNovo() {
         };
       }
       const r = await api.post<{ orcamento: OrcamentoSalvo }>(endpoint, body);
+      // Só agora existe id para vincular a OS de medição que originou o orçamento.
+      // Falha aqui não invalida o orçamento — ele foi salvo; o vínculo pode ser
+      // refeito na tela de detalhe.
+      if (osMedicao && r.orcamento?.id) {
+        try {
+          await api.post(`/orcamentos/${r.orcamento.id}/agenda`, { appointment_ids: [osMedicao] });
+        } catch {
+          showToast('info', 'Orçamento salvo', 'Não foi possível vincular a OS de medição — dá para vincular na tela do orçamento.');
+        }
+      }
       const mensagemSucesso = apenasSalvar
         ? 'Orçamento salvo (rascunho)'
         : ehRevenda
@@ -529,6 +547,16 @@ export function OrcamentoNovo() {
   function fecharPerguntaVendedor() {
     setPerguntaVendedorAberta(false);
     setAcaoAposVendedor(null);
+  }
+
+  function aoGerarDaMedicao(itens: ItemGeradoMedicao[], appointmentId: number) {
+    // Marca a seção de persianas (se ainda não estiver) e injeta os itens; a
+    // chave distingue esta geração da próxima, para o formulário não reinserir.
+    setOrdem((prev) => (prev.includes('persiana') ? prev : [...prev, 'persiana']));
+    setItensDaMedicao({ chave: crypto.randomUUID(), itens });
+    setOsMedicao(appointmentId);
+    setMedicaoAberta(false);
+    showToast('success', `${itens.length} ${itens.length === 1 ? 'item gerado' : 'itens gerados'} da medição`, 'Escolha produto, tecido e instalação em cada um.');
   }
 
   function descartarRecuperado() {
@@ -646,6 +674,20 @@ export function OrcamentoNovo() {
         </div>
       </div>
 
+      {/* Partir da medição: só faz sentido em orçamento novo (em edição os itens
+          já existem) e não vale para revenda, que não tem visita técnica. */}
+      {!editarId && !ehRevenda && (
+        <div className="card p-4 mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="form-label mb-0">Já existe medição do técnico?</div>
+            <div className="helper-text">Traga as medidas da OS do Agenda e escolha em quantas folhas cada ambiente vira.</div>
+          </div>
+          <button type="button" className="btn btn-default" onClick={() => setMedicaoAberta(true)}>
+            <FontAwesomeIcon icon={faRulerCombined} /> Partir de uma medição
+          </button>
+        </div>
+      )}
+
       {/* Seletor: o vendedor decide o que entra no orçamento. */}
       <div className="card p-4 mb-4">
         <div className="form-label mb-2">O que incluir neste orçamento?</div>
@@ -691,7 +733,7 @@ export function OrcamentoNovo() {
               <section key={`persiana-${editarId ?? 'novo'}`}>
                 <h2 className="text-lg-ui font-semibold text-neutral-800 mb-2 flex items-center gap-2"><FontAwesomeIcon icon={faScroll} className="text-neutral-500" /> Persianas</h2>
                 {prontoEdicao && (
-                  <PersianaForm onResult={setResultado} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} onCalculandoChange={setPersianaCalculando} permitirInstalacao={!ehRevenda} descontoPct={descontoNum} />
+                  <PersianaForm onResult={setResultado} itensDaMedicao={itensDaMedicao} inicial={persianaInicial} restauro={rascunhoLocal?.persiana} onDirtyChange={onDirtyPersiana} onSnapshot={onSnapPersiana} onCalculandoChange={setPersianaCalculando} permitirInstalacao={!ehRevenda} descontoPct={descontoNum} />
                 )}
               </section>
             );
@@ -849,6 +891,12 @@ export function OrcamentoNovo() {
         </div>
       </div>
 
+      <MedicaoAgendaModal
+        aberto={medicaoAberta}
+        clienteSugerido={cliente?.nome}
+        onGerar={aoGerarDaMedicao}
+        onFechar={() => setMedicaoAberta(false)}
+      />
       <AtribuirVendedorModal
         aberto={perguntaVendedorAberta}
         vendedores={vendedores}
