@@ -354,7 +354,11 @@ export function OrcamentoDetalhe() {
 
         {/* OS do Agenda: aqui cobre também o orçamento que ainda não virou pedido
             (ex.: medição feita antes da venda), que não aparece na tela de Vendas. */}
-        {!eRascunho && <div className="mt-4"><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} gcClienteId={orc.gc_cliente_id} /></div>}
+        {/* Vale também em rascunho: marcar a visita costuma acontecer ANTES de o
+            orçamento virar pedido, e era aí que o vendedor tinha de abrir o outro
+            app. A busca por pedido lida sozinha com o rascunho que ainda não tem
+            número, caindo na busca por cliente. */}
+        <div className="mt-4"><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} gcClienteId={orc.gc_cliente_id} /></div>
 
         {/* Cliente — erro: seletor (retentativa); demais: exibe o cliente atual */}
         {emEdicao ? (
