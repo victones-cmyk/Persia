@@ -36,6 +36,7 @@ import {
 import {
   buscarEventosAgenda,
   desvincularEventoAgenda,
+  listarAmbientesAgenda,
   listarVinculosAgenda,
   listarVinculosAgendaEmLote,
   vincularEventosAgenda,
@@ -63,6 +64,7 @@ router.post('/:id/ordens-producao/imprimir-etiquetas', imprimirEtiquetasOrcament
 router.get('/:id/estoque-saida/preview', preverSaidaEstoque);
 router.post('/:id/estoque-saida', confirmarSaidaEstoque);
 router.get('/:id/agenda', listarVinculosAgenda);
+router.get('/:id/agenda/ambientes', listarAmbientesAgenda);
 router.get('/:id/agenda/buscar', buscarEventosAgenda);
 router.post('/:id/agenda', vincularEventosAgenda);
 router.delete('/:id/agenda/:appointmentId', desvincularEventoAgenda);

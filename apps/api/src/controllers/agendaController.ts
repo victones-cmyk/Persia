@@ -11,6 +11,7 @@ import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import {
   agendaHabilitado,
+  buscarAmbientesDosEventos,
   buscarEventosPorCliente,
   buscarEventosPorIds,
   buscarEventosPorPedido,
@@ -47,6 +48,22 @@ export async function listarVinculosAgenda(req: Request, res: Response): Promise
   // Um vínculo cujo evento sumiu do Agenda (excluído por lá) simplesmente não
   // aparece — a lista reflete o que existe hoje, não o histórico do vínculo.
   const eventos = await buscarEventosPorIds(ids);
+  res.json({ habilitado: true, eventos });
+}
+
+/**
+ * GET /api/orcamentos/:id/agenda/ambientes — ambientes medidos nas OS vinculadas
+ * a este orçamento. É daqui que sai a medida do técnico para montar/conferir o
+ * orçamento, em vez de alguém reabrir a OS no outro app e redigitar.
+ */
+export async function listarAmbientesAgenda(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  if (!agendaHabilitado()) {
+    res.json({ habilitado: false, eventos: [] });
+    return;
+  }
+  const ids = orc.agenda_vinculos.map((v) => v.agenda_appointment_id);
+  const eventos = await buscarAmbientesDosEventos(ids);
   res.json({ habilitado: true, eventos });
 }
 
