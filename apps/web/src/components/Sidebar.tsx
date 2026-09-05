@@ -20,7 +20,7 @@ import {
   faDatabase,
   faPercent,
   faEllipsis,
-  faXmark,
+  faXmark, faListCheck,
 } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { useAuth } from '../hooks/useAuth';
@@ -39,6 +39,7 @@ interface Item {
 }
 
 const ITENS_GERAIS: Item[] = [
+  { to: '/proximas-acoes', label: 'Próximas Ações', icon: faListCheck, end: true },
   { to: '/orcamentos', label: 'Orçamentos', icon: faFileLines, end: true },
   { to: '/orcamentos/novo', label: 'Novo Orçamento', icon: faPlus },
   { to: '/vendas', label: 'Vendas', icon: faFileInvoiceDollar, end: true },

@@ -9,6 +9,7 @@ import { Layout } from './components/Layout';
 import { ProtectedRoute, AdminRoute, RevendaRoute, SenhaDefinitivaRoute } from './components/ProtectedRoute';
 import { OrcamentoNovo } from './pages/OrcamentoNovo';
 import { Orcamentos, Vendas } from './pages/Orcamentos';
+import { ProximasAcoes } from './pages/ProximasAcoes';
 import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
 import { Producao } from './pages/Producao';
 import { BaixaEstoque } from './pages/BaixaEstoque';
@@ -32,6 +33,7 @@ function App() {
         <Route element={<SenhaDefinitivaRoute />}>
           <Route element={<Layout />}>
             <Route index element={<Navigate to="/orcamentos" replace />} />
+            <Route path="/proximas-acoes" element={<ProximasAcoes />} />
             <Route path="/orcamentos" element={<Orcamentos />} />
             <Route path="/orcamentos/novo" element={<OrcamentoNovo />} />
             <Route path="/orcamentos/:id" element={<OrcamentoDetalhe />} />
