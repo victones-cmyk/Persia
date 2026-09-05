@@ -47,6 +47,9 @@ export function CadastroClienteModal({
   // criaria duplicata — e duplicata de cliente espalha histórico em dois lugares.
   const [duplicado, setDuplicado] = useState<ClienteResumo | null>(null);
   const [verificandoDoc, setVerificandoDoc] = useState(false);
+  // Guardam o que já foi consultado, para não repetir a chamada a cada tecla.
+  const cepBuscado = useRef('');
+  const docVerificado = useRef('');
 
   // Reseta o formulário toda vez que o modal abre (evita sobrar dado de uma
   // tentativa anterior se o vendedor abrir de novo pra outro cliente).
@@ -59,11 +62,15 @@ export function CadastroClienteModal({
     setErros({});
     setErroGeral(null);
     setDuplicado(null);
+    // O componente não desmonta ao fechar (renderiza null), então os refs de
+    // "já consultei isto" sobrevivem. Sem zerar aqui, uma consulta que falhou
+    // nunca era refeita — nem fechando e reabrindo o modal.
+    cepBuscado.current = '';
+    docVerificado.current = '';
   }, [aberto, nomeInicial]);
 
   // Busca o endereço assim que o CEP fica completo — esperar o vendedor sair do
   // campo fazia parecer que não funcionava, que é como isto foi reportado.
-  const cepBuscado = useRef('');
   useEffect(() => {
     const limpo = campos.cep.replace(/\D/g, '');
     if (limpo.length !== 8 || cepBuscado.current === limpo) return;
@@ -74,7 +81,6 @@ export function CadastroClienteModal({
 
   // Procura no GestãoClick assim que o documento fica válido: cadastrar de novo
   // alguém que já existe espalha o histórico do cliente em dois cadastros.
-  const docVerificado = useRef('');
   useEffect(() => {
     const doc = campos.documento.replace(/\D/g, '');
     const valido = tipoPessoa === 'PF' ? cpfValido(doc) : cnpjValido(doc);
