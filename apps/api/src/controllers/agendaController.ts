@@ -312,10 +312,17 @@ export async function compararComMedicao(req: Request, res: Response): Promise<v
   }
   const ids = orc.agenda_vinculos.map((v) => v.agenda_appointment_id);
   const eventos = await buscarAmbientesDosEventos(ids);
-  // Vários eventos podem trazer o mesmo ambiente (medição e depois retorno):
-  // vale o último que tiver medida, que é a informação mais recente.
+  // Vários eventos podem trazer o mesmo ambiente (uma medição, depois um retorno
+  // que remediu). Vale a medição CONCLUÍDA mais recente — não a última da lista,
+  // que vinha ordenada por data de agendamento e podia ser a mais antiga a ter
+  // sido de fato executada.
+  const detalhes = await buscarEventosPorIds(ids);
+  const concluidoEm = new Map(detalhes.map((e) => [e.id, e.concluido_em ? new Date(e.concluido_em).getTime() : 0]));
+  const ordenados = [...eventos].sort(
+    (a, b) => (concluidoEm.get(a.appointment_id) ?? 0) - (concluidoEm.get(b.appointment_id) ?? 0),
+  );
   const porNome = new Map<string, (typeof eventos)[number]['ambientes'][number]>();
-  for (const ev of eventos) {
+  for (const ev of ordenados) {
     for (const amb of ev.ambientes) {
       if (amb.medido) porNome.set(amb.nome.trim().toLowerCase(), amb);
     }
