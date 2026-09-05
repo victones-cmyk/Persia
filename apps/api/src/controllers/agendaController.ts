@@ -473,14 +473,14 @@ export async function recalcularComMedicao(req: Request, res: Response): Promise
   // orçamento no GC para marcar como substituído. É o caso mais comum, aliás — a
   // medição costuma voltar antes de o orçamento ser fechado.
   if (orc.status === 'rascunho') {
+    // itens_json fica como está, mesmo sendo o cálculo das medidas antigas. É
+    // rascunho: o preço aí sempre foi provisório e é refeito no salvar/enviar.
+    // Apagá-lo deixaria a tela do orçamento sem item nenhum, que lê como dado
+    // perdido — susto pior que um valor provisório desatualizado por alguns
+    // minutos, já que daqui o vendedor vai direto para a calculadora.
     const atualizado = await prisma.orcamento.update({
       where: { id: orc.id },
-      data: {
-        entrada_json: novaEntrada as Prisma.InputJsonValue,
-        // Os valores calculados eram das medidas antigas: guardá-los agora seria
-        // mostrar preço que não corresponde mais ao que está no formulário.
-        itens_json: Prisma.DbNull,
-      },
+      data: { entrada_json: novaEntrada as Prisma.InputJsonValue },
     });
     await prisma.logAcao.create({
       data: {
@@ -523,8 +523,11 @@ export async function recalcularComMedicao(req: Request, res: Response): Promise
         rolamento: orc.rolamento,
         valor_bruto: orc.valor_bruto,
         valor_final: orc.valor_final,
-        // Sem itens_json: os valores só valem depois que a calculadora rodar de
-        // novo no envio. Guardar os antigos aqui seria guardar preço mentiroso.
+        // Leva o itens_json do original, como "Duplicar" já faz: são as medidas
+        // antigas, mas a cópia é rascunho e o preço é refeito no envio. Sem ele,
+        // o novo orçamento apareceria sem item nenhum até o vendedor salvar, o
+        // que lê como se a cópia tivesse dado errado.
+        itens_json: orc.itens_json === null ? Prisma.DbNull : (orc.itens_json as Prisma.InputJsonValue),
         entrada_json: novaEntrada as Prisma.InputJsonValue,
         substitui_orcamento_id: orc.id,
       },
