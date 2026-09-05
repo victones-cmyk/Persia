@@ -53,6 +53,9 @@ export function ProximasAcoes() {
   const [aprovacoes, setAprovacoes] = useState(0);
   const [semOs, setSemOs] = useState(0);
   const [etiquetas, setEtiquetas] = useState(0);
+  // A listagem de ordens para em 500 registros. Se vier cheia, a contagem é um
+  // piso, não o total — e dizer "500" como se fosse exato seria mentir.
+  const [etiquetasNoLimite, setEtiquetasNoLimite] = useState(false);
   const [estoque, setEstoque] = useState(0);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -76,7 +79,9 @@ export function ProximasAcoes() {
     setVisitas(numero(v?.total));
     setAprovacoes(numero(a?.total));
     setSemOs(numero(s?.total));
-    setEtiquetas(Array.isArray(o?.ordens) ? o.ordens.length : 0);
+    const qtdOrdens = Array.isArray(o?.ordens) ? o.ordens.length : 0;
+    setEtiquetas(qtdOrdens);
+    setEtiquetasNoLimite(qtdOrdens >= 500);
     setEstoque(numero(e?.total));
     if ([v, s, o, e].some((r) => r === null)) {
       setErro('Alguma das listas não carregou. O que aparece abaixo está correto; recarregue para tentar de novo.');
@@ -101,10 +106,13 @@ export function ProximasAcoes() {
   const acoes: Acao[] = [
     {
       chave: 'visitas',
-      titulo: 'Visitas feitas',
+      titulo: 'Visitas feitas sem venda',
       icone: faRulerCombined,
       total: visitas,
-      explicacao: 'O técnico já mediu e o orçamento parou aí. É onde se compara o medido com o vendido e, se precisar, se refaz o orçamento.',
+      // A contagem é mais estreita que o filtro de destino: aqui só entram os
+      // que ainda não viraram pedido, enquanto a lista mostra toda visita feita,
+      // inclusive as já vendidas. Dizer isso evita a impressão de número errado.
+      explicacao: 'O técnico já mediu e o orçamento não virou pedido. É onde se compara o medido com o vendido e, se precisar, se refaz o orçamento. A lista abre com todas as visitas feitas, inclusive as já vendidas.',
       acaoLabel: 'Ver orçamentos com visita feita',
       ir: () => irParaOrcamentos('visita_feita'),
     },
@@ -188,7 +196,7 @@ export function ProximasAcoes() {
           >
             <div className="flex items-baseline gap-2">
               <span className="font-mono tabular-nums" style={{ fontSize: 28, fontWeight: 700, lineHeight: 1 }}>
-                {a.total}
+                {a.chave === 'etiquetas' && etiquetasNoLimite ? '500+' : a.total}
               </span>
               <span className="text-md-ui font-bold text-neutral-800">
                 <FontAwesomeIcon icon={a.icone} className="text-neutral-500" /> {a.titulo}
