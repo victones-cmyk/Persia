@@ -47,9 +47,11 @@ function Delta({ v }: { v: number | null }) {
   );
 }
 
-export function ComparacaoMedicao({ orcamentoId, status, recarregarEm }: {
+export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm }: {
   orcamentoId: string;
   status?: string;
+  /** Já existe pedido/venda gerado a partir deste orçamento no GestãoClick. */
+  temVenda?: boolean;
   /**
    * Muda de valor quando as OS vinculadas mudam, para este painel buscar de
    * novo. Sem isso, quem vinculava a OS com a página já aberta continuava
@@ -234,6 +236,15 @@ export function ComparacaoMedicao({ orcamentoId, status, recarregarEm }: {
                 </li>
               ))}
             </ul>
+            {temVenda && (
+              <p className="text-sm-ui" style={{ color: 'var(--color-error)' }}>
+                <FontAwesomeIcon icon={faTriangleExclamation} />{' '}
+                <strong>Este orçamento já virou venda.</strong> O recálculo não desfaz nada no GestãoClick:
+                a venda antiga continua lá, e enviar o novo orçamento vai gerar uma <strong>segunda venda</strong>.
+                Se a intenção é só corrigir a medida do que já foi vendido, o caminho é a tela de Produção,
+                que trata a diferença sem duplicar a venda.
+              </p>
+            )}
             {comFacesJuntas.length > 0 && (
               <p className="text-sm-ui" style={{ color: 'var(--color-warning-text)' }}>
                 <FontAwesomeIcon icon={faTriangleExclamation} />{' '}
