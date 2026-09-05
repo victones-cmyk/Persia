@@ -10,6 +10,15 @@
 
 import { env } from '../../config/env';
 
+export interface SugestaoVisita {
+  data: string;
+  tecnico_id: number;
+  tecnico_nome: string;
+  carga_no_dia: number;
+  distancia_km: number | null;
+  motivo: string;
+}
+
 export interface TecnicoAgenda {
   id: number;
   name: string;
@@ -31,6 +40,7 @@ export interface AmbienteParaAgenda {
 export interface NovaOsAgenda {
   tipo: 'measurement' | 'installation' | 'return' | 'warranty';
   tecnico_id?: number | null;
+  periodo?: string | null;
   cliente_nome: string;
   cliente_endereco?: string | null;
   cliente_telefone?: string | null;
@@ -113,6 +123,7 @@ export function criarOsNoAgenda(os: NovaOsAgenda): Promise<OsCriada> {
       client_complement: os.cliente_complemento ?? '',
       seller: os.vendedor ?? '',
       assigned_to: os.tecnico_id ?? null,
+      period: os.periodo ?? '',
       order_number: os.pedido_codigo ?? '',
       scheduled_at: os.agendado_para ?? '',
       notes: os.observacoes ?? '',
@@ -134,4 +145,14 @@ export function criarOsNoAgenda(os: NovaOsAgenda): Promise<OsCriada> {
 export async function listarTecnicosDoAgenda(): Promise<TecnicoAgenda[]> {
   const r = await chamar<{ tecnicos: TecnicoAgenda[] }>('/api/integracao/tecnicos', { method: 'GET' });
   return r.tecnicos ?? [];
+}
+
+/**
+ * Sugere quando marcar a visita. A conta é do Agenda, que é quem sabe a agenda
+ * dos técnicos e onde cada OS fica — a Pérsia só apresenta.
+ */
+export async function sugerirDatasDeVisita(endereco: string, dias = 7): Promise<SugestaoVisita[]> {
+  const q = new URLSearchParams({ dias: String(dias), endereco });
+  const r = await chamar<{ sugestoes: SugestaoVisita[] }>(`/api/integracao/sugestoes-visita?${q}`, { method: 'GET' });
+  return r.sugestoes ?? [];
 }

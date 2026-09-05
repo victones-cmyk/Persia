@@ -16,6 +16,14 @@ type TipoOs = 'measurement' | 'installation';
 type TipoProduto = 'persiana' | 'cortina';
 
 interface Tecnico { id: number; name: string }
+interface Sugestao { data: string; tecnico_id: number; tecnico_nome: string; motivo: string }
+interface AmbienteDoOrcamento { nome: string; tipos_produto: TipoProduto[]; largura: number | null; altura: number | null }
+
+const PERIODOS: { valor: string; label: string }[] = [
+  { valor: 'morning', label: 'Manhã' },
+  { valor: 'afternoon', label: 'Tarde' },
+  { valor: 'business_hours', label: 'Comercial' },
+];
 
 interface AmbienteLinha {
   id: string;
@@ -57,9 +65,14 @@ export function AgendarOsModal({
   onAgendado: () => void;
   onFechar: () => void;
 }) {
+  // OS ativas que este orçamento já tem, para não marcar a mesma visita duas
+  // vezes — o que manda dois técnicos ao mesmo endereço.
+  const [jaAgendadas, setJaAgendadas] = useState<{ id: number; tipo: string; agendado_para: string | null; status: string }[]>([]);
   const [tipo, setTipo] = useState<TipoOs>('measurement');
   const [data, setData] = useState('');
   const [tecnicoId, setTecnicoId] = useState('');
+  const [periodo, setPeriodo] = useState('');
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([]);
   const [tecnicos, setTecnicos] = useState<Tecnico[]>([]);
   const [cliente, setCliente] = useState('');
   const [endereco, setEndereco] = useState('');
@@ -78,7 +91,8 @@ export function AgendarOsModal({
     const amanha = new Date();
     amanha.setDate(amanha.getDate() + 1);
     setData(amanha.toISOString().slice(0, 10));
-    setTecnicoId(''); setCliente(nomeCliente === '(sem cliente)' ? '' : nomeCliente);
+    setTecnicoId(''); setPeriodo(''); setSugestoes([]);
+    setCliente(nomeCliente === '(sem cliente)' ? '' : nomeCliente);
     setEndereco(''); setTelefone(''); setCep(''); setObservacoes('');
     setAmbientes([linhaVazia()]); setErro(null);
 
@@ -89,16 +103,37 @@ export function AgendarOsModal({
     Promise.allSettled([
       api.get<{ tecnicos: Tecnico[] }>('/agenda/tecnicos'),
       gcClienteId ? api.get<{ cliente: ClienteCompleto }>(`/gc/clientes/${encodeURIComponent(gcClienteId)}/completo`) : Promise.reject(),
-    ]).then(([rt, rc]) => {
+      // Os ambientes já foram digitados ao montar o orçamento; pedir de novo é
+      // trabalho repetido e fonte de nome divergente entre os dois lados.
+      api.get<{ ambientes: AmbienteDoOrcamento[] }>(`/orcamentos/${orcamentoId}/ambientes`),
+    ]).then(([rt, rc, ra]) => {
       if (!vivo) return;
       if (rt.status === 'fulfilled') setTecnicos(rt.value.tecnicos);
+      let enderecoDoCliente = '';
       if (rc.status === 'fulfilled') {
         const c = rc.value.cliente;
         setCliente(c.nome || nomeCliente);
-        setEndereco(enderecoEmTexto(c.endereco));
+        enderecoDoCliente = enderecoEmTexto(c.endereco);
+        setEndereco(enderecoDoCliente);
         setTelefone(c.celular || c.telefone || '');
         setCep(c.endereco?.cep ?? '');
       }
+      if (ra.status === 'fulfilled' && ra.value.ambientes.length > 0) {
+        setAmbientes(ra.value.ambientes.map((a) => ({
+          id: crypto.randomUUID(),
+          nome: a.nome,
+          tipos: a.tipos_produto,
+          trilho: false,
+        })));
+      }
+      // OS já vinculadas: se houver uma ativa do mesmo tipo, o modal avisa.
+      api.get<{ eventos: { id: number; tipo: string; agendado_para: string | null; status: string }[] }>(`/orcamentos/${orcamentoId}/agenda`)
+        .then((rv) => { if (vivo) setJaAgendadas(rv.eventos.filter((e) => e.status !== 'cancelled' && e.status !== 'completed')); })
+        .catch(() => { /* sem isto o aviso some, mas o agendamento segue */ });
+      // Sugestão de data depende do endereço, então vem depois dele.
+      api.get<{ sugestoes: Sugestao[] }>(`/agenda/sugestoes?endereco=${encodeURIComponent(enderecoDoCliente)}`)
+        .then((rs) => { if (vivo) setSugestoes(rs.sugestoes); })
+        .catch(() => { /* sugestão é conveniência */ });
     }).finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
   }, [aberto, nomeCliente, gcClienteId]);
@@ -114,7 +149,10 @@ export function AgendarOsModal({
   };
 
   const nomeados = ambientes.filter((a) => a.nome.trim() !== '');
-  const podeAgendar = cliente.trim() !== '' && !salvando && !carregando;
+  const duplicada = jaAgendadas.find((e) => e.tipo === tipo);
+  // Técnico e período viram obrigatórios: OS sem dono ou sem turno vira
+  // trabalho de alguém depois no outro app — o que a integração veio tirar.
+  const podeAgendar = cliente.trim() !== '' && tecnicoId !== '' && periodo !== '' && !salvando && !carregando;
 
   async function agendar() {
     if (!podeAgendar) return;
@@ -124,7 +162,8 @@ export function AgendarOsModal({
         tipo,
         // Meio-dia evita que o fuso jogue o agendamento para o dia anterior.
         agendado_para: data ? `${data}T12:00:00` : undefined,
-        tecnico_id: tecnicoId ? Number(tecnicoId) : undefined,
+        tecnico_id: Number(tecnicoId),
+        periodo,
         cliente_nome: cliente.trim(),
         cliente_endereco: endereco.trim(),
         cliente_telefone: telefone.trim(),
@@ -182,10 +221,58 @@ export function AgendarOsModal({
               <input id="os-data" className="input" type="date" value={data} onChange={(e) => setData(e.target.value)} />
             </div>
             <div className="col-span-6 md:col-span-4">
-              <label className="form-label" htmlFor="os-tecnico">Técnico <span className="label-optional">(opcional)</span></label>
-              <select id="os-tecnico" className="input" value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}>
-                <option value="">A definir</option>
+              <label className="form-label" htmlFor="os-tecnico">Técnico<span className="label-required">*</span></label>
+              <select
+                id="os-tecnico"
+                className={tecnicoId ? 'input' : 'input input-error'}
+                value={tecnicoId}
+                onChange={(e) => setTecnicoId(e.target.value)}
+              >
+                <option value="">Escolha…</option>
                 {tecnicos.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {sugestoes.length > 0 && (
+            <div className="mb-3">
+              <div className="form-label mb-1">Sugestões de data</div>
+              <div className="flex flex-wrap gap-2">
+                {sugestoes.map((sg) => {
+                  const escolhida = data === sg.data && tecnicoId === String(sg.tecnico_id);
+                  return (
+                    <button
+                      key={`${sg.data}-${sg.tecnico_id}`}
+                      type="button"
+                      // Preenche data E técnico: a sugestão é o par, não só o dia —
+                      // o motivo depende de quem vai.
+                      onClick={() => { setData(sg.data); setTecnicoId(String(sg.tecnico_id)); }}
+                      className={escolhida ? 'btn btn-success btn-xs' : 'btn btn-default btn-xs'}
+                      title={sg.motivo}
+                      style={{ height: 'auto', padding: '6px 10px', textAlign: 'left' }}
+                    >
+                      <div className="font-semibold">
+                        {new Date(`${sg.data}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                      </div>
+                      <div className="text-2xs-ui" style={{ opacity: 0.85 }}>{sg.motivo}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-12 gap-2 mb-2">
+            <div className="col-span-12 md:col-span-4">
+              <label className="form-label" htmlFor="os-periodo">Período<span className="label-required">*</span></label>
+              <select
+                id="os-periodo"
+                className={periodo ? 'input' : 'input input-error'}
+                value={periodo}
+                onChange={(e) => setPeriodo(e.target.value)}
+              >
+                <option value="">Escolha…</option>
+                {PERIODOS.map((p) => <option key={p.valor} value={p.valor}>{p.label}</option>)}
               </select>
             </div>
           </div>
@@ -255,13 +342,32 @@ export function AgendarOsModal({
           <label className="form-label" htmlFor="os-obs">Observações para o técnico <span className="label-optional">(opcional)</span></label>
           <textarea id="os-obs" className="input" rows={2} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} maxLength={2000} style={{ height: 'auto' }} />
 
+          {duplicada && (
+            <div className="alert alert-warning mt-3 text-sm-ui" style={{ display: 'block' }}>
+              <strong>Este orçamento já tem {tipo === 'measurement' ? 'uma medição' : 'uma instalação'} agendada</strong>
+              {' '}— OS {duplicada.id}
+              {duplicada.agendado_para ? ` em ${new Date(duplicada.agendado_para).toLocaleDateString('pt-BR')}` : ''}.
+              <div className="text-xs-ui mt-1">
+                Criar outra manda dois técnicos ao mesmo endereço. Se a intenção é remarcar, altere a OS existente no Agenda.
+              </div>
+            </div>
+          )}
+
           {erro && <div className="helper-error mt-3">{erro}</div>}
         </div>
 
         <div className="flex justify-end gap-2" style={{ padding: '12px 20px', borderTop: '1px solid var(--neutral-300)' }}>
           <button type="button" className="btn btn-default" disabled={salvando} onClick={onFechar}>Cancelar</button>
-          <button type="button" className="btn btn-success" disabled={!podeAgendar} onClick={() => void agendar()}>
-            {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : <><FontAwesomeIcon icon={faCalendarPlus} /> Criar OS</>}
+          <button
+            type="button"
+            className={duplicada ? 'btn btn-default' : 'btn btn-success'}
+            disabled={!podeAgendar}
+            onClick={() => void agendar()}
+            title={duplicada ? 'Já existe uma OS deste tipo para este orçamento' : undefined}
+          >
+            {salvando ? <FontAwesomeIcon icon={faSpinner} spin /> : (
+              <><FontAwesomeIcon icon={faCalendarPlus} /> {duplicada ? 'Criar mesmo assim' : 'Criar OS'}</>
+            )}
           </button>
         </div>
       </div>

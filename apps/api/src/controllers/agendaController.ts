@@ -11,7 +11,7 @@ import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import { compararMedicao, temDivergencia, type ItemDoOrcamento } from '../services/calc/comparacaoMedicao';
-import { agendaApiHabilitada, criarOsNoAgenda, listarTecnicosDoAgenda, AgendaApiError, type AmbienteParaAgenda } from '../services/agenda/agendaApi';
+import { agendaApiHabilitada, criarOsNoAgenda, listarTecnicosDoAgenda, sugerirDatasDeVisita, AgendaApiError, type AmbienteParaAgenda } from '../services/agenda/agendaApi';
 import {
   agendaHabilitado,
   buscarAmbientesDosEventos,
@@ -216,6 +216,21 @@ export async function listarTecnicosAgenda(req: Request, res: Response): Promise
   }
 }
 
+/** GET /api/agenda/sugestoes?endereco= — quando marcar a visita. */
+export async function sugerirDatas(req: Request, res: Response): Promise<void> {
+  exigirVendedorOuAdmin(req);
+  if (!agendaApiHabilitada()) {
+    res.json({ sugestoes: [] });
+    return;
+  }
+  try {
+    res.json({ sugestoes: await sugerirDatasDeVisita(String(req.query.endereco ?? ''), 7) });
+  } catch {
+    // Sugestão é conveniência: falhar não pode impedir o agendamento manual.
+    res.json({ sugestoes: [] });
+  }
+}
+
 /**
  * POST /api/orcamentos/:id/agenda/agendar — cria a OS no Agenda a partir deste
  * orçamento e já a vincula. Fecha o caminho "vende primeiro, mede depois", em
@@ -241,7 +256,16 @@ export async function agendarOsDoOrcamento(req: Request, res: Response): Promise
     throw new AppError(400, 'CLIENTE_OBRIGATORIO', 'Informe o nome do cliente para agendar.');
   }
 
+  // Técnico e período deixam de ser opcionais: OS sem dono ou sem turno vira
+  // trabalho de alguém depois, no outro app — que é o que a integração veio tirar.
   const tecnicoBruto = Number(b.tecnico_id);
+  if (!Number.isInteger(tecnicoBruto) || tecnicoBruto <= 0) {
+    throw new AppError(400, 'TECNICO_OBRIGATORIO', 'Escolha o técnico que fará a visita.');
+  }
+  const periodo = texto(b.periodo, 20);
+  if (!['morning', 'afternoon', 'business_hours'].includes(periodo)) {
+    throw new AppError(400, 'PERIODO_OBRIGATORIO', 'Escolha o período da visita.');
+  }
   const ambientes: AmbienteParaAgenda[] = (Array.isArray(b.ambientes) ? b.ambientes : [])
     .map((a) => {
       const amb = a as Record<string, unknown>;
@@ -264,7 +288,8 @@ export async function agendarOsDoOrcamento(req: Request, res: Response): Promise
   try {
     os = await criarOsNoAgenda({
       tipo,
-      tecnico_id: Number.isInteger(tecnicoBruto) && tecnicoBruto > 0 ? tecnicoBruto : null,
+      tecnico_id: tecnicoBruto,
+      periodo,
       cliente_nome: clienteNome,
       cliente_endereco: texto(b.cliente_endereco, 500) || null,
       cliente_telefone: texto(b.cliente_telefone, 20) || null,
@@ -297,6 +322,48 @@ export async function agendarOsDoOrcamento(req: Request, res: Response): Promise
   });
 
   res.status(201).json({ os });
+}
+
+/**
+ * GET /api/orcamentos/:id/ambientes — os ambientes que este orçamento já tem,
+ * para o agendamento nascer preenchido. O vendedor digitou isso uma vez ao
+ * montar o orçamento; pedir de novo é trabalho repetido e fonte de nome
+ * divergente entre os dois lados.
+ */
+export async function listarAmbientesDoOrcamento(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  const entrada = (orc.entrada_json ?? null) as { itens?: unknown[]; cortinas?: unknown[] } | null;
+
+  // Um ambiente pode ter persiana e cortina ao mesmo tempo; a lista sai com os
+  // dois marcados, que é o que o técnico precisa saber para medir.
+  const porNome = new Map<string, { nome: string; tipos: Set<'persiana' | 'cortina'>; largura: number | null; altura: number | null }>();
+  const juntar = (lista: unknown[], tipo: 'persiana' | 'cortina') => {
+    for (const bruto of lista) {
+      const it = bruto as Record<string, unknown>;
+      const nome = typeof it.ambiente === 'string' ? it.ambiente.trim() : '';
+      if (!nome) continue;
+      const chave = nome.toLowerCase();
+      const g = porNome.get(chave) ?? { nome, tipos: new Set<'persiana' | 'cortina'>(), largura: 0, altura: null };
+      g.tipos.add(tipo);
+      // Largura acumula (as folhas somam o vão); altura vale a primeira vista.
+      const l = Number(it.largura);
+      if (Number.isFinite(l) && l > 0) g.largura = (g.largura ?? 0) + l;
+      const a = Number(it.altura);
+      if (g.altura === null && Number.isFinite(a) && a > 0) g.altura = a;
+      porNome.set(chave, g);
+    }
+  };
+  juntar(Array.isArray(entrada?.itens) ? entrada.itens : [], 'persiana');
+  juntar(Array.isArray(entrada?.cortinas) ? entrada.cortinas : [], 'cortina');
+
+  res.json({
+    ambientes: [...porNome.values()].map((g) => ({
+      nome: g.nome,
+      tipos_produto: [...g.tipos],
+      largura: g.largura ? Math.round(g.largura * 100) / 100 : null,
+      altura: g.altura,
+    })),
+  });
 }
 
 /**
