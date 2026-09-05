@@ -13,6 +13,7 @@ import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import { compararMedicao, temDivergencia, type ItemDoOrcamento } from '../services/calc/comparacaoMedicao';
 import { recalcularComMedicao as recalcularItensComMedicao, type ItemComMedida } from '../services/calc/recalculoMedicao';
+import { consolidarAmbientesMedidos } from '../services/agenda/consolidacaoMedicao';
 import { agendaApiHabilitada, criarOsNoAgenda, listarTecnicosDoAgenda, sugerirDatasDeVisita, AgendaApiError, type AmbienteParaAgenda } from '../services/agenda/agendaApi';
 import {
   agendaHabilitado,
@@ -376,10 +377,12 @@ export async function listarAmbientesDoOrcamento(req: Request, res: Response): P
 /**
  * Os ambientes medidos que valem para este orçamento.
  *
- * Vários eventos podem trazer o mesmo ambiente (uma medição, depois um retorno
- * que remediu). Vale a medição CONCLUÍDA mais recente — não a última da lista,
- * que vinha ordenada por data de agendamento e podia ser a mais antiga a ter
- * sido de fato executada.
+ * A ordem importa e é por CONCLUSÃO, não por data de agendamento: quem mediu
+ * depois substitui quem mediu antes. Ordenar pelo agendamento fazia a medição
+ * mais antiga ganhar quando um retorno era marcado para uma data anterior.
+ *
+ * O resto — faces do mesmo ambiente medidas em partes na mesma OS — é
+ * responsabilidade de consolidarAmbientesMedidos.
  */
 async function ambientesMedidosDoOrcamento(ids: number[]) {
   const eventos = await buscarAmbientesDosEventos(ids);
@@ -388,13 +391,7 @@ async function ambientesMedidosDoOrcamento(ids: number[]) {
   const ordenados = [...eventos].sort(
     (a, b) => (concluidoEm.get(a.appointment_id) ?? 0) - (concluidoEm.get(b.appointment_id) ?? 0),
   );
-  const porNome = new Map<string, (typeof eventos)[number]['ambientes'][number]>();
-  for (const ev of ordenados) {
-    for (const amb of ev.ambientes) {
-      if (amb.medido) porNome.set(amb.nome.trim().toLowerCase(), amb);
-    }
-  }
-  return [...porNome.values()];
+  return consolidarAmbientesMedidos(ordenados);
 }
 
 /** Itens de entrada do orçamento, persianas e cortinas na mesma lista. */

@@ -27,6 +27,8 @@ export interface AmbienteMedido {
   largura: number | null;
   altura: number | null;
   medido: boolean;
+  /** Em quantas partes o técnico mediu este ambiente (1 = vão contínuo). */
+  faces?: number;
 }
 
 export type SituacaoAmbiente = 'igual' | 'difere' | 'so_no_orcamento' | 'so_na_medicao';
@@ -42,6 +44,12 @@ export interface ComparacaoAmbiente {
    * só, e quem recalcula precisa saber disso antes de confiar na conta.
    */
   larguras_orcadas: number[];
+  /**
+   * Em quantas partes o técnico mediu. Acima de 1, a largura medida é a soma de
+   * faces separadas e não um vão contínuo — repartir isso entre as folhas do
+   * orçamento é palpite, e quem recalcula precisa saber.
+   */
+  faces_medidas: number;
   /** Soma das larguras das folhas — o equivalente ao vão, quando não há transpasse. */
   largura_orcada: number | null;
   /** Altura das folhas; null quando elas divergem entre si (aí não há uma altura só). */
@@ -127,6 +135,7 @@ export function compararMedicao(
       ambiente: g.nome,
       folhas: Math.max(g.larguras.length, g.alturas.length),
       larguras_orcadas: g.larguras,
+      faces_medidas: med?.faces ?? 0,
       largura_orcada: larguraOrcada,
       altura_orcada: alturaOrcada,
       largura_medida: larguraMedida,
@@ -145,6 +154,7 @@ export function compararMedicao(
       ambiente: med.nome,
       folhas: 0,
       larguras_orcadas: [],
+      faces_medidas: med.faces ?? 1,
       largura_orcada: null,
       altura_orcada: null,
       largura_medida: med.largura,

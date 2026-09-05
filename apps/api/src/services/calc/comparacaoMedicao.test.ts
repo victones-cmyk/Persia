@@ -138,3 +138,31 @@ describe('larguras por folha', () => {
     expect(c[0].larguras_orcadas).toEqual([]);
   });
 });
+
+describe('faces medidas', () => {
+  it('leva adiante em quantas partes o técnico mediu', () => {
+    // Caso real da OS 832: a sacada foi medida em duas partes, somando 2,70.
+    // O orçamento tem 2 folhas iguais — então nada denuncia a divisão pelo lado
+    // do orçamento, e é o número de faces que precisa avisar.
+    const itens = [
+      { ambiente: 'Sacada', largura: 1.3, altura: 2.48 },
+      { ambiente: 'Sacada', largura: 1.3, altura: 2.48 },
+    ];
+    const c = compararMedicao(itens, [{ nome: 'Sacada', largura: 2.7, altura: 2.48, medido: true, faces: 2 }]);
+    expect(c[0].faces_medidas).toBe(2);
+    expect(new Set(c[0].larguras_orcadas).size).toBe(1); // folhas iguais: só as faces denunciam
+  });
+
+  it('ambiente medido de uma vez tem uma face', () => {
+    const c = compararMedicao(
+      [{ ambiente: 'Sala', largura: 2, altura: 2 }],
+      [{ nome: 'Sala', largura: 2.5, altura: 2, medido: true, faces: 1 }],
+    );
+    expect(c[0].faces_medidas).toBe(1);
+  });
+
+  it('ambiente do orçamento que o técnico não mediu não tem faces', () => {
+    const c = compararMedicao([{ ambiente: 'Sala', largura: 2, altura: 2 }], []);
+    expect(c[0].faces_medidas).toBe(0);
+  });
+});

@@ -24,6 +24,7 @@ interface ComparacaoAmbiente {
   ambiente: string;
   folhas: number;
   larguras_orcadas: number[];
+  faces_medidas: number;
   largura_orcada: number | null;
   altura_orcada: number | null;
   largura_medida: number | null;
@@ -124,7 +125,9 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
   // nome só — a sacada com 4 folhas na frente e 1 na lateral. Aí o vão medido
   // não é um número só, e repartir tudo proporcionalmente mexe na face que o
   // técnico nem mediu.
-  const comFacesJuntas = aMudar.filter((l) => new Set(l.larguras_orcadas).size > 1);
+  // Dois sinais, a mesma armadilha: folhas de larguras diferentes no orçamento,
+  // ou o técnico tendo medido o ambiente em partes.
+  const comFacesJuntas = aMudar.filter((l) => new Set(l.larguras_orcadas).size > 1 || l.faces_medidas > 1);
   const eRascunho = status === 'rascunho';
   // Cancelado não se refaz: seria ressuscitar uma decisão já tomada.
   // Vendido também não: marcar o antigo como "Substituído" muda a situação do
@@ -251,10 +254,13 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
             {comFacesJuntas.length > 0 && (
               <p className="text-sm-ui" style={{ color: 'var(--color-warning-text)' }}>
                 <FontAwesomeIcon icon={faTriangleExclamation} />{' '}
-                Em <strong>{comFacesJuntas.map((l) => l.ambiente).join(', ')}</strong> as folhas têm larguras
-                diferentes — costuma ser mais de uma face com o mesmo nome. Se o técnico mediu só uma delas,
-                a conta vai mexer na outra também. Quando for o caso, cadastre cada face como um ambiente
-                (ex.: <em>sacada frente</em> e <em>sacada lateral</em>) para o técnico medir separado.
+                <strong>{comFacesJuntas.map((l) => l.ambiente).join(', ')}</strong>: este ambiente parece ter
+                mais de uma face sob o mesmo nome{comFacesJuntas.some((l) => l.faces_medidas > 1)
+                  ? ' — o técnico chegou a medir em partes separadas'
+                  : ' — as folhas têm larguras diferentes'}. Repartir a medida entre todas as folhas é palpite:
+                se só uma face mudou, a conta vai mexer na outra também. Confira folha a folha, e para as
+                próximas cadastre cada face como um ambiente (ex.: <em>sacada frente</em> e
+                <em>sacada lateral</em>) para o técnico medir separado.
               </p>
             )}
             <p className="text-sm-ui">
