@@ -413,7 +413,9 @@ export async function compararComMedicao(req: Request, res: Response): Promise<v
 
   const comparacao = compararMedicao(
     itensDaEntrada(orc.entrada_json),
-    medidos.map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura, medido: a.medido })),
+    // `faces` vai junto: é o que avisa a tela quando a largura medida é a soma
+    // de partes separadas em vez de um vão contínuo.
+    medidos.map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura, medido: a.medido, faces: a.faces })),
   );
   res.json({ habilitado: true, comparacao, divergente: temDivergencia(comparacao) });
 }
