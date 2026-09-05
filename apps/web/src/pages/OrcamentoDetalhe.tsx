@@ -13,6 +13,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { ClienteSearch } from '../components/ClienteSearch';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { AgendaVinculo } from '../components/AgendaVinculo';
+import { ComparacaoMedicao } from '../components/ComparacaoMedicao';
 import type { OrcamentoDetalhe as Orc, ItemSnapshot } from '../lib/orcamentoTypes';
 import type { ClienteResumo } from '../lib/calcTypes';
 import { TIPOS_PERSIANA, ACIONAMENTOS } from '../lib/calcTypes';
@@ -358,7 +359,8 @@ export function OrcamentoDetalhe() {
             orçamento virar pedido, e era aí que o vendedor tinha de abrir o outro
             app. A busca por pedido lida sozinha com o rascunho que ainda não tem
             número, caindo na busca por cliente. */}
-        <div className="mt-4"><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} gcClienteId={orc.gc_cliente_id} /></div>
+        <div className="mt-4"><ComparacaoMedicao orcamentoId={orc.id} /></div>
+        <div><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} gcClienteId={orc.gc_cliente_id} /></div>
 
         {/* Cliente — erro: seletor (retentativa); demais: exibe o cliente atual */}
         {emEdicao ? (
