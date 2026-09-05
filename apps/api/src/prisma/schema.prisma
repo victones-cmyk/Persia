@@ -121,6 +121,13 @@ model Orcamento {
   payload_gc_enviado    Json?
   resposta_gc           Json?
   erro_gc               String?
+  // Orcamento que este veio substituir, quando o vendedor recalculou com as
+  // medidas do tecnico. Guarda o rastro que o cliente pediu: o antigo nao some,
+  // vai para "Substituido" no GestaoClick e continua apontando para o que o
+  // sucedeu. So e preenchido no recalculo — duplicar continua sendo copia solta.
+  substitui_orcamento_id String?        @db.Uuid
+  substitui              Orcamento?     @relation("OrcamentoSubstituicao", fields: [substitui_orcamento_id], references: [id])
+  substituido_por        Orcamento[]    @relation("OrcamentoSubstituicao")
   criado_em             DateTime        @default(now()) @db.Timestamptz
   atualizado_em         DateTime        @updatedAt @db.Timestamptz
   ordens_producao       OrdemProducao[]
@@ -129,6 +136,7 @@ model Orcamento {
   @@index([usuario_id, criado_em(sort: Desc)])
   @@index([status])
   @@index([gc_orcamento_id])
+  @@index([substitui_orcamento_id])
   @@map("orcamentos")
 }
 

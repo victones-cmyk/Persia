@@ -7,10 +7,12 @@
 
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
 import { compararMedicao, temDivergencia, type ItemDoOrcamento } from '../services/calc/comparacaoMedicao';
+import { recalcularComMedicao as recalcularItensComMedicao, type ItemComMedida } from '../services/calc/recalculoMedicao';
 import { agendaApiHabilitada, criarOsNoAgenda, listarTecnicosDoAgenda, sugerirDatasDeVisita, AgendaApiError, type AmbienteParaAgenda } from '../services/agenda/agendaApi';
 import {
   agendaHabilitado,
@@ -371,18 +373,16 @@ export async function listarAmbientesDoOrcamento(req: Request, res: Response): P
  * técnico mediu, ambiente a ambiente. É leitura: mostra a diferença e quem
  * decide o que fazer com ela é o vendedor.
  */
-export async function compararComMedicao(req: Request, res: Response): Promise<void> {
-  const orc = await carregarOrcamentoAutorizado(req);
-  if (!agendaHabilitado()) {
-    res.json({ habilitado: false, comparacao: [], divergente: false });
-    return;
-  }
-  const ids = orc.agenda_vinculos.map((v) => v.agenda_appointment_id);
+/**
+ * Os ambientes medidos que valem para este orçamento.
+ *
+ * Vários eventos podem trazer o mesmo ambiente (uma medição, depois um retorno
+ * que remediu). Vale a medição CONCLUÍDA mais recente — não a última da lista,
+ * que vinha ordenada por data de agendamento e podia ser a mais antiga a ter
+ * sido de fato executada.
+ */
+async function ambientesMedidosDoOrcamento(ids: number[]) {
   const eventos = await buscarAmbientesDosEventos(ids);
-  // Vários eventos podem trazer o mesmo ambiente (uma medição, depois um retorno
-  // que remediu). Vale a medição CONCLUÍDA mais recente — não a última da lista,
-  // que vinha ordenada por data de agendamento e podia ser a mais antiga a ter
-  // sido de fato executada.
   const detalhes = await buscarEventosPorIds(ids);
   const concluidoEm = new Map(detalhes.map((e) => [e.id, e.concluido_em ? new Date(e.concluido_em).getTime() : 0]));
   const ordenados = [...eventos].sort(
@@ -394,18 +394,141 @@ export async function compararComMedicao(req: Request, res: Response): Promise<v
       if (amb.medido) porNome.set(amb.nome.trim().toLowerCase(), amb);
     }
   }
+  return [...porNome.values()];
+}
 
-  const entrada = (orc.entrada_json ?? null) as { itens?: unknown[]; cortinas?: unknown[] } | null;
-  const itens = [
+/** Itens de entrada do orçamento, persianas e cortinas na mesma lista. */
+function itensDaEntrada(entradaJson: unknown): ItemDoOrcamento[] {
+  const entrada = (entradaJson ?? null) as { itens?: unknown[]; cortinas?: unknown[] } | null;
+  return [
     ...(Array.isArray(entrada?.itens) ? entrada.itens : []),
     ...(Array.isArray(entrada?.cortinas) ? entrada.cortinas : []),
   ] as ItemDoOrcamento[];
+}
+
+export async function compararComMedicao(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  if (!agendaHabilitado()) {
+    res.json({ habilitado: false, comparacao: [], divergente: false });
+    return;
+  }
+  const medidos = await ambientesMedidosDoOrcamento(orc.agenda_vinculos.map((v) => v.agenda_appointment_id));
 
   const comparacao = compararMedicao(
-    itens,
-    [...porNome.values()].map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura, medido: a.medido })),
+    itensDaEntrada(orc.entrada_json),
+    medidos.map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura, medido: a.medido })),
   );
   res.json({ habilitado: true, comparacao, divergente: temDivergencia(comparacao) });
+}
+
+/**
+ * POST /api/orcamentos/:id/agenda/recalcular — refaz o orçamento com as medidas
+ * do técnico.
+ *
+ * Nasce como RASCUNHO, não como venda. Recalcular mexe em preço, e a medida nova
+ * não decide sozinha tudo o que o preço depende: transpasse, lado do comando,
+ * instalação. O vendedor abre, confere folha a folha e envia — e é só no envio
+ * que o orçamento antigo vira "Substituído" no GestãoClick, para nada ficar
+ * marcado como substituído por algo que não chegou a existir.
+ *
+ * O antigo não é apagado nem cancelado: continua lá, e o novo aponta para ele.
+ * Era isso que o cliente pediu ao falar em backtrack — poder olhar depois e
+ * entender por que o valor mudou.
+ */
+export async function recalcularComMedicao(req: Request, res: Response): Promise<void> {
+  exigirAgenda();
+  const sessao = req.session.usuario!;
+  const orc = await carregarOrcamentoAutorizado(req);
+
+  const entrada = (orc.entrada_json ?? null) as { itens?: unknown[]; cortinas?: unknown[] } | null;
+  if (!entrada) {
+    throw new AppError(400, 'SEM_ENTRADA', 'Este orçamento é antigo demais para ser recalculado: não guardamos os dados do formulário. Duplique-o e refaça com as medidas do técnico.');
+  }
+
+  const medidos = await ambientesMedidosDoOrcamento(orc.agenda_vinculos.map((v) => v.agenda_appointment_id));
+  if (medidos.length === 0) {
+    throw new AppError(400, 'SEM_MEDICAO', 'Nenhuma OS vinculada tem medição concluída.');
+  }
+
+  // Persianas e cortinas moram em listas separadas, mas o ambiente atravessa as
+  // duas (a mesma parede pode ter as duas coisas): recalcula junto e devolve
+  // cada item para a lista de onde veio.
+  const itens = Array.isArray(entrada.itens) ? entrada.itens : [];
+  const cortinas = Array.isArray(entrada.cortinas) ? entrada.cortinas : [];
+  const resultado = recalcularItensComMedicao(
+    [...itens, ...cortinas] as ItemComMedida[],
+    medidos.map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura })),
+  );
+
+  if (resultado.mudancas.length === 0) {
+    throw new AppError(400, 'SEM_DIFERENCA', 'As medidas do técnico já são as que estão no orçamento — não há o que recalcular.');
+  }
+
+  const novaEntrada: Record<string, unknown> = { ...entrada };
+  if (Array.isArray(entrada.itens)) novaEntrada.itens = resultado.itens.slice(0, itens.length);
+  if (Array.isArray(entrada.cortinas)) novaEntrada.cortinas = resultado.itens.slice(itens.length);
+
+  const copia = await prisma.$transaction(async (tx) => {
+    const nova = await tx.orcamento.create({
+      data: {
+        tipo_produto: orc.tipo_produto,
+        usuario_id: orc.usuario_id,
+        loja_id: orc.loja_id,
+        status: 'rascunho',
+        nome_cliente: orc.nome_cliente,
+        gc_cliente_id: orc.gc_cliente_id,
+        tecido_codigo_gc: orc.tecido_codigo_gc,
+        tecido_nome: orc.tecido_nome,
+        largura_m: orc.largura_m,
+        altura_m: orc.altura_m,
+        dimensao_m: orc.dimensao_m,
+        tc_m: orc.tc_m,
+        acionamento: orc.acionamento,
+        cor_acessorio: orc.cor_acessorio,
+        rolamento: orc.rolamento,
+        valor_bruto: orc.valor_bruto,
+        valor_final: orc.valor_final,
+        // Sem itens_json: os valores só valem depois que a calculadora rodar de
+        // novo no envio. Guardar os antigos aqui seria guardar preço mentiroso.
+        entrada_json: novaEntrada as Prisma.InputJsonValue,
+        substitui_orcamento_id: orc.id,
+      },
+    });
+
+    // Leva junto o vínculo com as OS: é a mesma obra, e sem isso o orçamento
+    // novo apareceria como se nunca tivesse tido visita técnica.
+    if (orc.agenda_vinculos.length > 0) {
+      await tx.orcamentoAgendaVinculo.createMany({
+        data: orc.agenda_vinculos.map((v) => ({
+          orcamento_id: nova.id,
+          agenda_appointment_id: v.agenda_appointment_id,
+          tipo: v.tipo,
+          criado_por: sessao.id,
+        })),
+        skipDuplicates: true,
+      });
+    }
+    return nova;
+  });
+
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: sessao.id,
+      acao: 'orcamento_recalculado_medicao',
+      detalhe: {
+        origem_id: orc.id,
+        copia_id: copia.id,
+        ambientes: resultado.mudancas.map((m) => m.ambiente),
+        so_na_medicao: resultado.so_na_medicao,
+      },
+    },
+  });
+
+  res.status(201).json({
+    orcamento: copia,
+    mudancas: resultado.mudancas,
+    so_na_medicao: resultado.so_na_medicao,
+  });
 }
 
 function idsValidos(body: unknown): number[] {

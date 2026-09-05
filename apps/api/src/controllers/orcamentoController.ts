@@ -31,7 +31,7 @@ import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { marcarSituacaoOrcamentoGc } from '../lib/situacaoOrcamentoGc';
-import { SITUACAO_CONCRETIZADO } from '../services/gc/orcamentos';
+import { SITUACAO_CONCRETIZADO, SITUACAO_SUBSTITUIDO } from '../services/gc/orcamentos';
 import { criarOrcamento as gcCriarOrcamento, montarPayload, type LinhaProdutoGc, type NovoOrcamentoGc } from '../services/gc/orcamentos';
 import { criarVendaDePayload } from '../services/gc/vendas';
 import { roundHalfUp } from '../services/calc/arredondamento';
@@ -406,6 +406,21 @@ export function snapshotsDe(preparados: ItemPreparado[], gcProdutoIds: string[])
   }));
 }
 
+/**
+ * Marca como "Substituído" no GestãoClick o orçamento que este veio refazer.
+ *
+ * Acabamento, como toda mudança de situação: serve para quem olha o GC entender
+ * por que existem dois orçamentos do mesmo cliente com valores diferentes. Se
+ * falhar, o orçamento novo continua válido e a venda segue — por isso nada aqui
+ * derruba a operação principal.
+ */
+async function marcarSubstituidoSeHouver(orcamento: { substitui_orcamento_id: string | null }, usuarioId: string): Promise<void> {
+  if (!orcamento.substitui_orcamento_id) return;
+  const anterior = await prisma.orcamento.findUnique({ where: { id: orcamento.substitui_orcamento_id } });
+  if (!anterior) return;
+  await marcarSituacaoOrcamentoGc(prisma, anterior, SITUACAO_SUBSTITUIDO, 'substituido_por_remedicao', usuarioId);
+}
+
 export async function criarOrcamento(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
   const b = req.body ?? {};
@@ -568,6 +583,12 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     if (envio.gc_pedido_id) {
       await inativarProdutosSinteticosDoOrcamento(prisma, orcamento, sessao.id, 'venda_gerada');
     }
+
+    // Este orçamento nasceu de um recálculo com as medidas do técnico: agora que
+    // ele existe de verdade no GC, o que ele veio substituir pode ser marcado
+    // como tal. Só aqui — marcar antes deixaria um orçamento "substituído" por
+    // outro que talvez nunca fosse enviado.
+    await marcarSubstituidoSeHouver(orcamento, sessao.id);
 
     await prisma.logAcao.create({
       data: {

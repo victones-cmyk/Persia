@@ -359,7 +359,7 @@ export function OrcamentoDetalhe() {
             orçamento virar pedido, e era aí que o vendedor tinha de abrir o outro
             app. A busca por pedido lida sozinha com o rascunho que ainda não tem
             número, caindo na busca por cliente. */}
-        <div className="mt-4"><ComparacaoMedicao orcamentoId={orc.id} /></div>
+        <div className="mt-4"><ComparacaoMedicao orcamentoId={orc.id} status={orc.status} /></div>
         <div><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} gcClienteId={orc.gc_cliente_id} /></div>
 
         {/* Cliente — erro: seletor (retentativa); demais: exibe o cliente atual */}

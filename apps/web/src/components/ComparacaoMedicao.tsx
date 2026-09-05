@@ -10,10 +10,13 @@
 // não só por remedição. Quem lê e resolve é gente.
 
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faRulerCombined, faCheck, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
-import { api } from '../lib/api';
+import { faRulerCombined, faCheck, faTriangleExclamation, faCalculator, faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { api, ApiError } from '../lib/api';
 import { formatNum } from '../lib/formatacao';
+import { useToast } from '../hooks/useToast';
+import { ConfirmModal } from './ConfirmModal';
 
 type Situacao = 'igual' | 'difere' | 'so_no_orcamento' | 'so_na_medicao';
 
@@ -43,11 +46,15 @@ function Delta({ v }: { v: number | null }) {
   );
 }
 
-export function ComparacaoMedicao({ orcamentoId }: { orcamentoId: string }) {
+export function ComparacaoMedicao({ orcamentoId, status }: { orcamentoId: string; status?: string }) {
+  const navigate = useNavigate();
+  const { showToast } = useToast();
   const [linhas, setLinhas] = useState<ComparacaoAmbiente[]>([]);
   const [divergente, setDivergente] = useState(false);
   const [habilitado, setHabilitado] = useState(true);
   const [carregando, setCarregando] = useState(true);
+  const [confirmando, setConfirmando] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -67,10 +74,38 @@ export function ComparacaoMedicao({ orcamentoId }: { orcamentoId: string }) {
 
   useEffect(() => { void carregar(); }, [carregar]);
 
+  async function recalcular() {
+    setConfirmando(false);
+    setRecalculando(true);
+    try {
+      const r = await api.post<{ orcamento: { id: string }; so_na_medicao: string[] }>(
+        `/orcamentos/${orcamentoId}/agenda/recalcular`,
+      );
+      if (r.so_na_medicao.length > 0) {
+        showToast(
+          'info',
+          'Ambientes só na medição',
+          `${r.so_na_medicao.join(', ')} — o técnico mediu, mas não estão no orçamento. Se entrarem, adicione você mesmo: quantas folhas o vão vira é decisão de venda.`,
+        );
+      }
+      showToast('success', 'Orçamento recalculado', 'Confira folha a folha — inclusive o transpasse — antes de enviar.');
+      navigate(`/orcamentos/novo?editar=${r.orcamento.id}`);
+    } catch (e) {
+      showToast('error', 'Não deu para recalcular', e instanceof ApiError ? e.message : 'Tente novamente.');
+    } finally {
+      setRecalculando(false);
+    }
+  }
+
   // Sem medição vinculada não há o que comparar: o painel some em vez de ocupar
   // espaço dizendo que não tem nada.
   const temMedicao = linhas.some((l) => l.largura_medida !== null);
   if (carregando || !habilitado || !temMedicao) return null;
+
+  const aMudar = linhas.filter((l) => l.situacao === 'difere');
+  // Recalcular só faz sentido em orçamento já fechado. Rascunho o vendedor
+  // simplesmente edita — criar uma segunda cópia dele só faria bagunça.
+  const podeRecalcular = aMudar.length > 0 && status !== 'rascunho' && status !== 'cancelado';
 
   return (
     <div
@@ -137,11 +172,62 @@ export function ComparacaoMedicao({ orcamentoId }: { orcamentoId: string }) {
       </div>
 
       {divergente && (
-        <div className="helper-text" style={{ padding: '4px 12px 12px' }}>
-          A largura pode divergir por transpasse, que é escolha sua — nem toda diferença é remedição.
-          Confira ambiente a ambiente antes de refazer o orçamento.
+        <div style={{ padding: '4px 12px 12px' }}>
+          <div className="helper-text">
+            A largura pode divergir por transpasse, que é escolha sua — nem toda diferença é remedição.
+            Confira ambiente a ambiente antes de refazer o orçamento.
+          </div>
+          {podeRecalcular && (
+            <button
+              className="btn btn-default btn-sm mt-2"
+              disabled={recalculando}
+              onClick={() => setConfirmando(true)}
+            >
+              {recalculando
+                ? <><FontAwesomeIcon icon={faSpinner} spin /> Recalculando…</>
+                : <><FontAwesomeIcon icon={faCalculator} /> Recalcular com as medidas do técnico</>}
+            </button>
+          )}
         </div>
       )}
+
+      <ConfirmModal
+        aberto={confirmando}
+        titulo="Recalcular com as medidas do técnico"
+        mensagem={
+          <>
+            <p>
+              Vou criar um <strong>novo orçamento em rascunho</strong> com as medidas do técnico, já repartidas
+              entre as folhas de cada ambiente:
+            </p>
+            <ul style={{ margin: '8px 0', paddingLeft: 18 }}>
+              {aMudar.map((l) => (
+                <li key={l.ambiente} className="text-sm-ui">
+                  <strong>{l.ambiente}</strong>{' '}
+                  {l.largura_orcada !== null && l.largura_medida !== null && (
+                    <>{formatNum(l.largura_orcada)} → {formatNum(l.largura_medida)} m de largura</>
+                  )}
+                  {l.diferenca_altura !== null && Math.abs(l.diferenca_altura) >= 0.01 && l.altura_orcada !== null && l.altura_medida !== null && (
+                    <>, {formatNum(l.altura_orcada)} → {formatNum(l.altura_medida)} m de altura</>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm-ui">
+              O rascunho abre na calculadora para você conferir <strong>folha a folha</strong> — inclusive o
+              transpasse, que a medida do vão não sabe reproduzir. Nada vai ao GestãoClick até você enviar.
+            </p>
+            <p className="text-sm-ui">
+              Este orçamento continua onde está e, quando o novo for enviado, passa a
+              <strong> Substituído</strong> no GestãoClick.
+            </p>
+          </>
+        }
+        confirmarLabel="Criar rascunho recalculado"
+        cancelarLabel="Voltar"
+        onConfirmar={() => void recalcular()}
+        onCancelar={() => setConfirmando(false)}
+      />
     </div>
   );
 }
