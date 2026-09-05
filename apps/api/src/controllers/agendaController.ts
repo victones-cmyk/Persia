@@ -7,7 +7,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
@@ -468,6 +468,41 @@ export async function recalcularComMedicao(req: Request, res: Response): Promise
   if (Array.isArray(entrada.itens)) novaEntrada.itens = resultado.itens.slice(0, itens.length);
   if (Array.isArray(entrada.cortinas)) novaEntrada.cortinas = resultado.itens.slice(itens.length);
 
+  // Rascunho ainda não foi a lugar nenhum: corrige no próprio registro. Criar uma
+  // cópia aqui só encheria a lista de dois rascunhos quase iguais, e não há
+  // orçamento no GC para marcar como substituído. É o caso mais comum, aliás — a
+  // medição costuma voltar antes de o orçamento ser fechado.
+  if (orc.status === 'rascunho') {
+    const atualizado = await prisma.orcamento.update({
+      where: { id: orc.id },
+      data: {
+        entrada_json: novaEntrada as Prisma.InputJsonValue,
+        // Os valores calculados eram das medidas antigas: guardá-los agora seria
+        // mostrar preço que não corresponde mais ao que está no formulário.
+        itens_json: Prisma.DbNull,
+      },
+    });
+    await prisma.logAcao.create({
+      data: {
+        usuario_id: sessao.id,
+        acao: 'orcamento_recalculado_medicao',
+        detalhe: {
+          orcamento_id: orc.id,
+          no_lugar: true,
+          ambientes: resultado.mudancas.map((m) => m.ambiente),
+          so_na_medicao: resultado.so_na_medicao,
+        },
+      },
+    });
+    res.json({
+      orcamento: atualizado,
+      mudancas: resultado.mudancas,
+      so_na_medicao: resultado.so_na_medicao,
+      no_lugar: true,
+    });
+    return;
+  }
+
   const copia = await prisma.$transaction(async (tx) => {
     const nova = await tx.orcamento.create({
       data: {
@@ -528,6 +563,7 @@ export async function recalcularComMedicao(req: Request, res: Response): Promise
     orcamento: copia,
     mudancas: resultado.mudancas,
     so_na_medicao: resultado.so_na_medicao,
+    no_lugar: false,
   });
 }
 

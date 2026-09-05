@@ -78,7 +78,7 @@ export function ComparacaoMedicao({ orcamentoId, status }: { orcamentoId: string
     setConfirmando(false);
     setRecalculando(true);
     try {
-      const r = await api.post<{ orcamento: { id: string }; so_na_medicao: string[] }>(
+      const r = await api.post<{ orcamento: { id: string }; so_na_medicao: string[]; no_lugar: boolean }>(
         `/orcamentos/${orcamentoId}/agenda/recalcular`,
       );
       if (r.so_na_medicao.length > 0) {
@@ -88,7 +88,11 @@ export function ComparacaoMedicao({ orcamentoId, status }: { orcamentoId: string
           `${r.so_na_medicao.join(', ')} — o técnico mediu, mas não estão no orçamento. Se entrarem, adicione você mesmo: quantas folhas o vão vira é decisão de venda.`,
         );
       }
-      showToast('success', 'Orçamento recalculado', 'Confira folha a folha — inclusive o transpasse — antes de enviar.');
+      showToast(
+        'success',
+        r.no_lugar ? 'Medidas atualizadas' : 'Rascunho recalculado criado',
+        'Confira folha a folha — inclusive o transpasse — antes de enviar.',
+      );
       navigate(`/orcamentos/novo?editar=${r.orcamento.id}`);
     } catch (e) {
       showToast('error', 'Não deu para recalcular', e instanceof ApiError ? e.message : 'Tente novamente.');
@@ -103,9 +107,9 @@ export function ComparacaoMedicao({ orcamentoId, status }: { orcamentoId: string
   if (carregando || !habilitado || !temMedicao) return null;
 
   const aMudar = linhas.filter((l) => l.situacao === 'difere');
-  // Recalcular só faz sentido em orçamento já fechado. Rascunho o vendedor
-  // simplesmente edita — criar uma segunda cópia dele só faria bagunça.
-  const podeRecalcular = aMudar.length > 0 && status !== 'rascunho' && status !== 'cancelado';
+  const eRascunho = status === 'rascunho';
+  // Cancelado não se refaz: seria ressuscitar uma decisão já tomada.
+  const podeRecalcular = aMudar.length > 0 && status !== 'cancelado';
 
   return (
     <div
@@ -197,8 +201,9 @@ export function ComparacaoMedicao({ orcamentoId, status }: { orcamentoId: string
         mensagem={
           <>
             <p>
-              Vou criar um <strong>novo orçamento em rascunho</strong> com as medidas do técnico, já repartidas
-              entre as folhas de cada ambiente:
+              {eRascunho
+                ? <>Vou <strong>atualizar este rascunho</strong> com as medidas do técnico, já repartidas entre as folhas de cada ambiente:</>
+                : <>Vou criar um <strong>novo orçamento em rascunho</strong> com as medidas do técnico, já repartidas entre as folhas de cada ambiente:</>}
             </p>
             <ul style={{ margin: '8px 0', paddingLeft: 18 }}>
               {aMudar.map((l) => (
@@ -214,16 +219,18 @@ export function ComparacaoMedicao({ orcamentoId, status }: { orcamentoId: string
               ))}
             </ul>
             <p className="text-sm-ui">
-              O rascunho abre na calculadora para você conferir <strong>folha a folha</strong> — inclusive o
-              transpasse, que a medida do vão não sabe reproduzir. Nada vai ao GestãoClick até você enviar.
+              Abre na calculadora para você conferir <strong>folha a folha</strong> — inclusive o transpasse,
+              que a medida do vão não sabe reproduzir. Nada vai ao GestãoClick até você enviar.
             </p>
-            <p className="text-sm-ui">
-              Este orçamento continua onde está e, quando o novo for enviado, passa a
-              <strong> Substituído</strong> no GestãoClick.
-            </p>
+            {!eRascunho && (
+              <p className="text-sm-ui">
+                Este orçamento continua onde está e, quando o novo for enviado, passa a
+                <strong> Substituído</strong> no GestãoClick.
+              </p>
+            )}
           </>
         }
-        confirmarLabel="Criar rascunho recalculado"
+        confirmarLabel={eRascunho ? 'Atualizar as medidas' : 'Criar rascunho recalculado'}
         cancelarLabel="Voltar"
         onConfirmar={() => void recalcular()}
         onCancelar={() => setConfirmando(false)}
