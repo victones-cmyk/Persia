@@ -5,12 +5,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEye, faPen, faRotateRight, faXmark, faCopy, faIndustry, faFileInvoiceDollar, faCircleExclamation } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faEye, faPen, faRotateRight, faXmark, faCopy, faIndustry, faFileInvoiceDollar, faCircleExclamation, faCalendarPlus } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { formatBRL } from '../lib/formatacao';
 import { StatusBadge } from '../components/StatusBadge';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { AgendarOsModal } from '../components/AgendarOsModal';
 import type { OrcamentoListItem, Paginacao, StatusOrcamento } from '../lib/orcamentoTypes';
 import { lerFiltrosOrcamento, salvarFiltrosOrcamento } from '../lib/filtrosSessao';
 import { parseBR } from '../lib/dataBR';
@@ -228,6 +229,10 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
     }
   }
 
+  // Agendar visita direto da lista: sem isso o vendedor precisava abrir o
+  // orçamento só para chegar ao painel de OS.
+  const [agendarOrc, setAgendarOrc] = useState<OrcamentoListItem | null>(null);
+
   async function duplicar(id: string) {
     setAcaoEmId(id);
     try {
@@ -412,7 +417,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
 
       {/* Tabela */}
       <div className="card p-0 table-scroll">
-        <table className="data-table" style={{ minWidth: isAdmin ? 1210 : 1080 }}>
+        <table className="data-table" style={{ minWidth: isAdmin ? 1260 : 1130 }}>
           <colgroup>
             <col style={{ width: 180 }} />
             <col style={{ width: 120 }} />
@@ -422,7 +427,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
             <col style={{ width: 130 }} />
             <col style={{ width: 120 }} />
             <col style={{ width: 100 }} />
-            <col style={{ width: 220 }} />
+            <col style={{ width: 270 }} />
           </colgroup>
           <thead>
             <tr style={{ borderBottom: '2px solid #dee2e6' }}>
@@ -524,6 +529,11 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                           <FontAwesomeIcon icon={faCopy} />
                         </button>
                       )}
+                      {!somenteVendas && o.status !== 'cancelado' && (
+                        <button className="btn btn-default btn-xs text-primary" onClick={() => setAgendarOrc(o)} title="Agendar visita técnica no Agenda">
+                          <FontAwesomeIcon icon={faCalendarPlus} />
+                        </button>
+                      )}
                       {!somenteVendas && (
                         <button
                           className="btn btn-warning btn-xs"
@@ -585,6 +595,14 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
         </div>
       )}
 
+      <AgendarOsModal
+        aberto={agendarOrc !== null}
+        orcamentoId={agendarOrc?.id ?? ''}
+        nomeCliente={agendarOrc?.nome_cliente ?? ''}
+        gcClienteId={agendarOrc?.gc_cliente_id ?? null}
+        onAgendado={() => { setAgendarOrc(null); showToast('success', 'Visita agendada', 'A OS foi criada no Agenda e vinculada a este orçamento.'); }}
+        onFechar={() => setAgendarOrc(null)}
+      />
       <ConfirmModal
         aberto={cancelarId !== null}
         titulo="Cancelar orçamento"
