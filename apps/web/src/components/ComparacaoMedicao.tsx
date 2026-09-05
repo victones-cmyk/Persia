@@ -259,7 +259,7 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
                   ? ' — o técnico chegou a medir em partes separadas'
                   : ' — as folhas têm larguras diferentes'}. Repartir a medida entre todas as folhas é palpite:
                 se só uma face mudou, a conta vai mexer na outra também. Confira folha a folha, e para as
-                próximas cadastre cada face como um ambiente (ex.: <em>sacada frente</em> e
+                próximas cadastre cada face como um ambiente (ex.: <em>sacada frente</em> e{' '}
                 <em>sacada lateral</em>) para o técnico medir separado.
               </p>
             )}
