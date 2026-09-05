@@ -8,6 +8,8 @@ import { env } from '../config/env';
 import { roundHalfUp } from '../services/calc/arredondamento';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
 import { criarProduto, deletarProduto, inativarProduto } from '../services/gc/produtos';
+import { relatorioPedidoOriginal, relatorioPedidoDiferenca, type ItemConferido } from '../services/gc/relatorioMedicao';
+import { gravarObservacaoInternaVenda } from '../services/gc/observacaoVenda';
 import { criarVendaComPayload } from '../services/gc/vendas';
 import { resolverLoja } from '../lib/resolverLoja';
 import {
@@ -880,7 +882,71 @@ export async function decidirAbsorcaoMedicao(req: Request, res: Response): Promi
       detalhe: { orcamento_id: orc.id, gc_pedido_codigo: pedidoCodigo(orc), medicao_absorcao: decisao } as unknown as Prisma.InputJsonValue,
     },
   });
+
+  // Absorvida: não nasce pedido nenhum, então o único lugar onde a medida certa
+  // pode ficar registrada no GestãoClick é o próprio pedido original. Reprovada
+  // não anota — nada foi decidido ainda.
+  if (decisao.status === 'aprovada') {
+    const dados = await dadosDoRelatorioMedicao(orc.id, decisao.previa.detalhes);
+    await anotarMedicaoNoPedidoOriginal(
+      orc,
+      dados,
+      { absorvida: true, valor: decisao.previa.diferenca },
+      req.session.usuario.id,
+    );
+  }
+
   res.json({ orcamento: atualizado, medicao_absorcao: decisao });
+}
+
+/**
+ * Reúne o que o relatório de medição precisa: o de-para item a item e de qual OS
+ * do Agenda a medida veio.
+ */
+async function dadosDoRelatorioMedicao(
+  orcamentoId: string,
+  detalhes: { ambiente: string; largura_vendida: number; altura_vendida: number; largura_final: number; altura_final: number; alterado: boolean }[],
+) {
+  const vinculos = await prisma.orcamentoAgendaVinculo.findMany({
+    where: { orcamento_id: orcamentoId },
+    select: { agenda_appointment_id: true },
+  });
+  return {
+    itens: detalhes.map((d): ItemConferido => ({
+      ambiente: d.ambiente,
+      largura_vendida: d.largura_vendida,
+      altura_vendida: d.altura_vendida,
+      largura_final: d.largura_final,
+      altura_final: d.altura_final,
+      alterado: d.alterado,
+    })),
+    os_agenda: vinculos.map((v) => v.agenda_appointment_id),
+    agenda_base_url: env.AGENDA_BASE_URL,
+  };
+}
+
+/**
+ * Anota no pedido ORIGINAL as medidas do técnico e o desfecho da diferença.
+ *
+ * Melhor esforço, como toda anotação: a venda já aconteceu e não pode ser
+ * desfeita porque o GestãoClick recusou um texto. O que não pode é falhar em
+ * silêncio — daí o log com o motivo.
+ */
+async function anotarMedicaoNoPedidoOriginal(
+  orc: Orcamento,
+  dados: Awaited<ReturnType<typeof dadosDoRelatorioMedicao>>,
+  desfecho: { pedido_diferenca: string } | { absorvida: true; valor: number },
+  usuarioId: string,
+): Promise<void> {
+  if (!orc.gc_pedido_id) return;
+  const r = await gravarObservacaoInternaVenda(orc.gc_pedido_id, relatorioPedidoOriginal(dados, desfecho));
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: usuarioId,
+      acao: r.ok ? 'medicao_anotada_no_pedido_gc' : 'medicao_anotada_no_pedido_gc_falhou',
+      detalhe: { orcamento_id: orc.id, gc_pedido_id: orc.gc_pedido_id, ...(r.ok ? {} : { motivo: r.motivo }) },
+    },
+  }).catch(() => { /* nem o log derruba a operação principal */ });
 }
 
 export async function gerarVendaAjusteMedicao(req: Request, res: Response): Promise<void> {
@@ -908,6 +974,9 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
     `Diferenca: R$ ${previa.diferenca.toFixed(2)}`,
   ].join(' | ');
   const loja = await resolverLoja(orc.loja_id);
+  // O relatório entra no POST: o pedido da diferença já nasce sabendo de qual
+  // pedido ele veio e quais medidas o originaram, sem precisar de um PUT depois.
+  const dadosRelatorio = await dadosDoRelatorioMedicao(orc.id, previa.detalhes);
   let produtoId: string | null = null;
   try {
     const produto = await criarProduto({
@@ -928,6 +997,7 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
         valor_custo: 0,
       }],
     };
+    payload.observacoes_interna = relatorioPedidoDiferenca(dadosRelatorio, pedido, previa.diferenca);
     if (env.GC_USUARIO_INTEGRACAO_ID) payload.usuario_id = env.GC_USUARIO_INTEGRACAO_ID;
     if (req.session.usuario?.gc_usuario_id) payload.vendedor_id = req.session.usuario.gc_usuario_id;
     if (loja.gc_loja_id) payload.loja_id = loja.gc_loja_id;
@@ -957,6 +1027,15 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
         detalhe: { orcamento_id: orc.id, pedido, diferenca: previa.diferenca, gc_pedido_id: venda.gc_pedido_id, gc_pedido_codigo: venda.gc_pedido_codigo },
       },
     });
+    // Agora que a venda da diferença tem número, o pedido original pode apontar
+    // para ela. Só aqui: antes disso não haveria número para escrever.
+    await anotarMedicaoNoPedidoOriginal(
+      orc,
+      dadosRelatorio,
+      { pedido_diferenca: venda.gc_pedido_codigo ?? venda.gc_pedido_id ?? '(sem número)' },
+      req.session.usuario!.id,
+    );
+
     // O produto "Diferença de valores..." é de uso único: some da busca do PDV
     // assim que a venda complementar existe (best-effort).
     if (produtoId) {
