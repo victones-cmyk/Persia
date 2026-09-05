@@ -122,6 +122,9 @@ export function OrcamentoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  // Sobe a cada mudança nas OS vinculadas, para a comparação com a medição
+  // buscar os dados de novo em vez de ficar com o resultado do carregamento.
+  const [vinculosMudaramEm, setVinculosMudaramEm] = useState(0);
   const [orc, setOrc] = useState<Orc | null>(null);
   const [cliente, setCliente] = useState<ClienteResumo | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -359,8 +362,8 @@ export function OrcamentoDetalhe() {
             orçamento virar pedido, e era aí que o vendedor tinha de abrir o outro
             app. A busca por pedido lida sozinha com o rascunho que ainda não tem
             número, caindo na busca por cliente. */}
-        <div className="mt-4"><ComparacaoMedicao orcamentoId={orc.id} status={orc.status} /></div>
-        <div><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} gcClienteId={orc.gc_cliente_id} /></div>
+        <div className="mt-4"><ComparacaoMedicao orcamentoId={orc.id} status={orc.status} recarregarEm={vinculosMudaramEm} /></div>
+        <div><AgendaVinculo orcamentoId={orc.id} nomeCliente={orc.nome_cliente} gcClienteId={orc.gc_cliente_id} onVinculosMudaram={() => setVinculosMudaramEm(Date.now())} /></div>
 
         {/* Cliente — erro: seletor (retentativa); demais: exibe o cliente atual */}
         {emEdicao ? (

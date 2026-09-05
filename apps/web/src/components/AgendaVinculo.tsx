@@ -88,7 +88,18 @@ function EventoLinha({ evento, acao }: { evento: EventoAgenda; acao?: React.Reac
   );
 }
 
-export function AgendaVinculo({ orcamentoId, nomeCliente, gcClienteId }: { orcamentoId: string; nomeCliente: string; gcClienteId?: string | null }) {
+export function AgendaVinculo({ orcamentoId, nomeCliente, gcClienteId, onVinculosMudaram }: {
+  orcamentoId: string;
+  nomeCliente: string;
+  gcClienteId?: string | null;
+  /**
+   * Avisa que a lista de OS vinculadas mudou. Existe porque a comparação com a
+   * medição vive num painel irmão que busca os dados só ao abrir a página:
+   * quem vinculava a OS depois não via a comparação aparecer, e não tinha como
+   * adivinhar que bastava recarregar.
+   */
+  onVinculosMudaram?: () => void;
+}) {
   const [agendarAberto, setAgendarAberto] = useState(false);
   const [vinculados, setVinculados] = useState<EventoAgenda[]>([]);
   const [habilitado, setHabilitado] = useState(true);
@@ -172,6 +183,7 @@ export function AgendaVinculo({ orcamentoId, nomeCliente, gcClienteId }: { orcam
         { appointment_ids: selecionados },
       );
       setVinculados(r.eventos);
+      onVinculosMudaram?.();
       setCandidatos(null);
       setSelecionados([]);
       setAviso(r.pedido_gravado_em.length > 0
@@ -190,6 +202,7 @@ export function AgendaVinculo({ orcamentoId, nomeCliente, gcClienteId }: { orcam
     try {
       const r = await api.del<{ eventos: EventoAgenda[] }>(`/orcamentos/${orcamentoId}/agenda/${id}`);
       setVinculados(r.eventos);
+      onVinculosMudaram?.();
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao desvincular a OS.');
     } finally {
@@ -327,7 +340,7 @@ export function AgendaVinculo({ orcamentoId, nomeCliente, gcClienteId }: { orcam
         orcamentoId={orcamentoId}
         nomeCliente={nomeCliente}
         gcClienteId={gcClienteId ?? null}
-        onAgendado={() => { setAgendarAberto(false); void carregar(); }}
+        onAgendado={() => { setAgendarAberto(false); void carregar(); onVinculosMudaram?.(); }}
         onFechar={() => setAgendarAberto(false)}
       />
     </div>

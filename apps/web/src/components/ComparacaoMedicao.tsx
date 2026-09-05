@@ -46,7 +46,17 @@ function Delta({ v }: { v: number | null }) {
   );
 }
 
-export function ComparacaoMedicao({ orcamentoId, status }: { orcamentoId: string; status?: string }) {
+export function ComparacaoMedicao({ orcamentoId, status, recarregarEm }: {
+  orcamentoId: string;
+  status?: string;
+  /**
+   * Muda de valor quando as OS vinculadas mudam, para este painel buscar de
+   * novo. Sem isso, quem vinculava a OS com a página já aberta continuava
+   * vendo o resultado de antes — que era "não há medição" — e o painel
+   * simplesmente não aparecia.
+   */
+  recarregarEm?: number;
+}) {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [linhas, setLinhas] = useState<ComparacaoAmbiente[]>([]);
@@ -70,7 +80,7 @@ export function ComparacaoMedicao({ orcamentoId, status }: { orcamentoId: string
     } finally {
       setCarregando(false);
     }
-  }, [orcamentoId]);
+  }, [orcamentoId, recarregarEm]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
