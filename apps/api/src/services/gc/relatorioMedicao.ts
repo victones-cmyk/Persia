@@ -46,22 +46,29 @@ const dinheiro = (v: number): string =>
   `R$ ${Math.abs(v).toFixed(2).replace('.', ',')}`;
 
 /**
- * O bloco comum aos dois pedidos: o que mudou, ambiente a ambiente, e de onde
- * veio a medida.
+ * O bloco comum aos dois pedidos: as medidas do técnico e de onde elas vieram.
  *
- * Lista só os itens alterados. Repetir os que ficaram iguais faria o leitor
- * caçar a diferença no meio do que não mudou.
+ * Lista TODAS as peças, não só as que mudaram. O propósito deste texto é ser o
+ * arquivo do que foi realmente fabricado — quem abrir o pedido daqui a um ano
+ * precisa das medidas inteiras, não de um errata. As que mudaram mostram também
+ * o que havia sido vendido, para a diferença ficar visível sem precisar caçar.
+ *
+ * Vale igual quando a diferença é absorvida: não ter cobrado não torna a medida
+ * do técnico menos oficial, e é justamente aí que ela não existe em nenhum outro
+ * lugar do GestãoClick.
  */
 function corpo(d: DadosRelatorio): string[] {
   const linhas: string[] = [`MEDIÇÃO TÉCNICA — conferida em ${dataBr(d.data ?? new Date())}`, ''];
 
-  const alterados = d.itens.filter((i) => i.alterado);
-  if (alterados.length === 0) {
-    linhas.push('Medidas conferidas sem alteração.');
+  if (d.itens.length === 0) {
+    linhas.push('Sem itens conferidos.');
   } else {
-    linhas.push('Medidas corrigidas (vendido → medido):');
-    for (const i of alterados) {
-      linhas.push(`  ${i.ambiente || 'Item'}: ${medida(i.largura_vendida, i.altura_vendida)} → ${medida(i.largura_final, i.altura_final)}`);
+    linhas.push('Medidas do técnico (todas as peças):');
+    for (const i of d.itens) {
+      const base = `  ${i.ambiente || 'Item'}: ${medida(i.largura_final, i.altura_final)}`;
+      linhas.push(i.alterado
+        ? `${base}   (vendido ${medida(i.largura_vendida, i.altura_vendida)})`
+        : base);
     }
   }
 
