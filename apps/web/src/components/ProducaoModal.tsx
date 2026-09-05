@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBoxOpen, faEye, faFilePdf, faRotateLeft, faTag } from '@fortawesome/free-solid-svg-icons';
+import { faBoxOpen, faEye, faFilePdf, faRotateLeft, faTag, faCheck, faCircle, faCircleArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import type { ItemSnapshot, OrcamentoListItem } from '../lib/orcamentoTypes';
 import { useAuth } from '../hooks/useAuth';
@@ -441,6 +441,56 @@ export function ProducaoModal({
     return dados?.itens.filter(({ ordem }) => ordem && ordem.status !== 'cancelada' && !ordem.baixado_estoque_em).length ?? 0;
   }, [dados?.itens]);
 
+  /**
+   * Em que ponto do caminho este pedido está.
+   *
+   * As quatro etapas já existiam como botões espalhados por três blocos, mas
+   * nada dizia o que já foi feito nem o que falta: gerar as OS terminava num
+   * "3 ordem(ns) gerada(s)" e quem não conhecesse o processo não descobria que
+   * ainda havia etiqueta e estoque pela frente — e o estoque estava em outra
+   * tela. Aqui a etapa pendente fica visível, e a próxima fica em destaque.
+   *
+   * Não executa nada: só mostra e aponta. Cada ação continua sendo um clique
+   * consciente, porque etiqueta imprime papel e baixa de estoque mexe no
+   * GestãoClick.
+   */
+  const etapas = useMemo(() => {
+    const totalItens = dados?.itens.length ?? 0;
+    const comOrdem = dados?.itens.filter(({ ordem }) => ordem && ordem.status !== 'cancelada').length ?? 0;
+    const etiquetasPendentes = pendentesOrdens.persiana + pendentesOrdens.cortina + pendentesOrdens.trilho;
+    const temPedido = Boolean(dados?.orcamento.gc_pedido_codigo?.trim());
+
+    return [
+      {
+        chave: 'venda',
+        titulo: 'Venda',
+        feito: temPedido,
+        pendente: temPedido ? '' : 'informe o nº do pedido',
+      },
+      {
+        chave: 'os',
+        titulo: 'Ordens de produção',
+        feito: totalItens > 0 && comOrdem === totalItens,
+        pendente: comOrdem === totalItens ? '' : `${totalItens - comOrdem} de ${totalItens} sem OS`,
+      },
+      {
+        chave: 'etiqueta',
+        titulo: 'Etiquetas',
+        feito: comOrdem > 0 && etiquetasPendentes === 0,
+        pendente: etiquetasPendentes > 0 ? `${etiquetasPendentes} a imprimir` : '',
+      },
+      {
+        chave: 'estoque',
+        titulo: 'Baixa de estoque',
+        feito: comOrdem > 0 && pendentesEstoque === 0,
+        pendente: pendentesEstoque > 0 ? `${pendentesEstoque} a baixar` : '',
+      },
+    ];
+  }, [dados?.itens, dados?.orcamento.gc_pedido_codigo, pendentesOrdens, pendentesEstoque]);
+
+  // A primeira etapa não concluída — é ela que ganha destaque.
+  const proximaEtapa = etapas.find((e) => !e.feito) ?? null;
+
   function ordemParaPrevia(ordem: OrdemProducao): EtiquetaPreviewOrdem {
     return {
       id: ordem.id,
@@ -821,6 +871,45 @@ export function ProducaoModal({
 
         {erro && <div className="alert alert-danger mb-3">{erro}</div>}
         {sucesso && <div className="alert alert-success mb-3">{sucesso}</div>}
+
+        {dados && (
+          <div
+            className="mb-4"
+            style={{ border: '1px solid var(--neutral-300)', borderRadius: 3, background: 'var(--neutral-50)', padding: '10px 12px' }}
+          >
+            <div className="flex flex-wrap items-center" style={{ gap: 0 }}>
+              {etapas.map((e, i) => {
+                const ehProxima = proximaEtapa?.chave === e.chave;
+                const cor = e.feito
+                  ? 'var(--color-success-text)'
+                  : ehProxima ? 'var(--color-warning-text)' : 'var(--neutral-400)';
+                return (
+                  <div key={e.chave} className="flex items-center">
+                    {i > 0 && <span aria-hidden style={{ color: 'var(--neutral-300)', padding: '0 10px' }}>›</span>}
+                    <div style={{ color: cor }}>
+                      <div className="text-sm-ui" style={{ fontWeight: ehProxima || e.feito ? 700 : 500 }}>
+                        <FontAwesomeIcon icon={e.feito ? faCheck : ehProxima ? faCircleArrowRight : faCircle} />{' '}
+                        {e.titulo}
+                      </div>
+                      {e.pendente && <div className="text-2xs-ui" style={{ paddingLeft: 20 }}>{e.pendente}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {proximaEtapa && (
+              <div className="text-xs-ui text-neutral-600 mt-1">
+                Próximo passo: <strong>{proximaEtapa.titulo}</strong>
+                {proximaEtapa.pendente ? ` — ${proximaEtapa.pendente}` : ''}.
+              </div>
+            )}
+            {!proximaEtapa && (
+              <div className="text-xs-ui mt-1" style={{ color: 'var(--color-success-text)' }}>
+                Pedido concluído: OS geradas, etiquetas impressas e estoque baixado.
+              </div>
+            )}
+          </div>
+        )}
 
         {orcamento.status !== 'enviado' && (
           <div className="alert alert-warning mb-3">
