@@ -421,6 +421,79 @@ export async function compararComMedicao(req: Request, res: Response): Promise<v
 }
 
 /**
+ * GET /api/orcamentos/:id/agenda/medidas-itens — a medida do técnico traduzida
+ * para os ITENS vendidos, um por item.
+ *
+ * A tela de Produção trabalha item a item (folha a folha) e a medição fala em
+ * vão, então até aqui alguém tinha que abrir a OS no outro app e redigitar —
+ * justamente o que este projeto vem eliminando em todo o resto do caminho.
+ *
+ * Usa itens_json, não entrada_json: em Produção o que vale é o que foi VENDIDO.
+ * A repartição entre as folhas é a mesma do recálculo, então os dois caminhos não
+ * podem divergir.
+ */
+export async function medidasDosItensPelaAgenda(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  if (!agendaHabilitado()) {
+    res.json({ habilitado: false, medidas: [], so_na_medicao: [] });
+    return;
+  }
+
+  const snapshots = Array.isArray(orc.itens_json) ? (orc.itens_json as unknown[]) : [];
+  if (snapshots.length === 0) {
+    res.json({ habilitado: true, medidas: [], so_na_medicao: [] });
+    return;
+  }
+
+  const medidos = await ambientesMedidosDoOrcamento(orc.agenda_vinculos.map((v) => v.agenda_appointment_id));
+  if (medidos.length === 0) {
+    res.json({ habilitado: true, medidas: [], so_na_medicao: [] });
+    return;
+  }
+
+  // O snapshot guarda as medidas como largura_m/altura_m; o recálculo fala
+  // largura/altura. Traduz na ida e na volta, preservando o índice, que é como a
+  // Produção identifica cada item.
+  const paraCalculo = snapshots.map((s) => {
+    const it = (s ?? {}) as Record<string, unknown>;
+    return {
+      ambiente: typeof it.ambiente === 'string' ? it.ambiente : null,
+      largura: Number(it.largura_m),
+      altura: Number(it.altura_m),
+    };
+  });
+
+  const r = recalcularItensComMedicao(
+    paraCalculo as ItemComMedida[],
+    medidos.map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura })),
+  );
+
+  // Devolve só os itens que de fato mudaram: preencher o resto seria reescrever
+  // com o mesmo valor e sujar a conferência do que o técnico alterou.
+  const ambientesMudados = new Set(r.mudancas.map((m) => m.ambiente.trim().toLowerCase()));
+  const facesPorAmbiente = new Map(medidos.map((a) => [a.nome.trim().toLowerCase(), a.faces]));
+
+  const medidas = r.itens
+    .map((it, index) => ({ index, it, original: paraCalculo[index] }))
+    .filter(({ it, original }) => {
+      const amb = (original.ambiente ?? '').trim().toLowerCase();
+      if (!ambientesMudados.has(amb)) return false;
+      return it.largura !== original.largura || it.altura !== original.altura;
+    })
+    .map(({ index, it, original }) => ({
+      index,
+      ambiente: original.ambiente,
+      largura: it.largura,
+      altura: it.altura,
+      largura_vendida: original.largura,
+      altura_vendida: original.altura,
+      faces_medidas: facesPorAmbiente.get((original.ambiente ?? '').trim().toLowerCase()) ?? 1,
+    }));
+
+  res.json({ habilitado: true, medidas, so_na_medicao: r.so_na_medicao });
+}
+
+/**
  * POST /api/orcamentos/:id/agenda/recalcular — refaz o orçamento com as medidas
  * do técnico.
  *

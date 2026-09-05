@@ -4,6 +4,7 @@ import { faBoxOpen, faEye, faFilePdf, faRotateLeft, faTag } from '@fortawesome/f
 import { api, ApiError } from '../lib/api';
 import type { ItemSnapshot, OrcamentoListItem } from '../lib/orcamentoTypes';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../hooks/useToast';
 import { EtiquetaPreviewModal, type EtiquetaPreviewOrdem } from './EtiquetaPreviewModal';
 import { EstoqueSaidaModal } from './EstoqueSaidaModal';
 import { AgendaVinculo } from './AgendaVinculo';
@@ -173,12 +174,17 @@ export function ProducaoModal({
   onAtualizar: () => void;
 }) {
   const { usuario } = useAuth();
+  const { showToast } = useToast();
   const isAdmin = usuario?.perfil === 'admin';
   const [dados, setDados] = useState<ProducaoPayload | null>(null);
   const [pedido, setPedido] = useState('');
   const [entrega, setEntrega] = useState('');
   const [selecionados, setSelecionados] = useState<number[]>([]);
   const [medidasFinais, setMedidasFinais] = useState<Record<number, MedidaFinal>>({});
+  const [puxandoAgenda, setPuxandoAgenda] = useState(false);
+  // Quantos itens a Agenda tem para oferecer. 0 = nada a puxar (sem OS medida,
+  // ou a medida do técnico bate com o que foi vendido).
+  const [medidasAgenda, setMedidasAgenda] = useState(0);
   const [previa, setPrevia] = useState<PreviaMedicao | null>(null);
   const [diferencaAbsorvida, setDiferencaAbsorvida] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -247,6 +253,12 @@ export function ProducaoModal({
       setMedidasFinais(medidasComSolicitacao);
       setPrevia(absorcao && absorcao.status !== 'reprovada' ? absorcao.previa : vendaAjuste ? vendaAjuste.previa : null);
       setDiferencaAbsorvida(absorcao?.status === 'aprovada');
+      // Só oferece o botão se houver o que puxar — botão que não faz nada é pior
+      // que botão nenhum. Falha aqui não atrapalha: o modal funciona sem ele.
+      try {
+        const ag = await api.get<{ medidas: unknown[] }>(`/orcamentos/${orcamento.id}/agenda/medidas-itens`);
+        setMedidasAgenda(ag.medidas.length);
+      } catch { setMedidasAgenda(0); }
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : 'Falha ao carregar os itens.');
     } finally {
@@ -258,6 +270,7 @@ export function ProducaoModal({
     if (aberto) void carregar();
     if (!aberto) {
       setDados(null);
+      setMedidasAgenda(0);
       setPedido('');
       setEntrega('');
       setSelecionados([]);
@@ -269,6 +282,63 @@ export function ProducaoModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, orcamento?.id]);
+
+  interface MedidaAgenda {
+    index: number;
+    ambiente: string | null;
+    largura: number;
+    altura: number;
+    faces_medidas: number;
+  }
+
+  /**
+   * Traz a medida do técnico para os campos, sem gravar nada.
+   *
+   * Preenche e para por aí: o valor muda, a diferença precisa ser recalculada e
+   * quem decide cobrar, absorver ou corrigir continua sendo o vendedor. O ganho
+   * é não ter que abrir a OS no outro app e redigitar número por número.
+   */
+  async function puxarMedidasDaAgenda() {
+    if (!orcamento) return;
+    setPuxandoAgenda(true);
+    try {
+      const r = await api.get<{ medidas: MedidaAgenda[]; so_na_medicao: string[] }>(
+        `/orcamentos/${orcamento.id}/agenda/medidas-itens`,
+      );
+      if (r.medidas.length === 0) {
+        showToast('info', 'Nada a puxar', 'A medida do técnico é a mesma que foi vendida.');
+        return;
+      }
+      setMedidasFinais((prev) => {
+        const novo = { ...prev };
+        for (const m of r.medidas) {
+          const atual = novo[m.index] ?? {
+            largura: '', altura: '', desconto: '', tamanhoBarra: '', tipoBarra: '',
+          };
+          novo[m.index] = { ...atual, largura: numeroInput(m.largura), altura: numeroInput(m.altura) };
+        }
+        return novo;
+      });
+      // A prévia guardada era das medidas antigas: some para ninguém decidir
+      // olhando uma diferença que já não corresponde aos campos.
+      setPrevia(null);
+      const emPartes = r.medidas.filter((m) => m.faces_medidas > 1).map((m) => m.ambiente).filter(Boolean);
+      if (emPartes.length > 0) {
+        showToast('warning', 'Ambiente medido em partes',
+          `${[...new Set(emPartes)].join(', ')}: o técnico mediu em faces separadas e a medida foi repartida entre as folhas. Confira uma a uma.`);
+      }
+      if (r.so_na_medicao.length > 0) {
+        showToast('info', 'Ambientes só na medição',
+          `${r.so_na_medicao.join(', ')} — medidos pelo técnico, mas não estão nesta venda.`);
+      }
+      showToast('success', `${r.medidas.length} ${r.medidas.length === 1 ? 'item preenchido' : 'itens preenchidos'}`,
+        'Confira e use "Recalcular diferença".');
+    } catch (e) {
+      showToast('error', 'Não deu para puxar as medidas', e instanceof ApiError ? e.message : 'Tente novamente.');
+    } finally {
+      setPuxandoAgenda(false);
+    }
+  }
 
   const medicoes = useMemo<MedicaoItem[]>(() => {
     if (!dados) return [];
@@ -1029,6 +1099,17 @@ export function ProducaoModal({
             Selecionar pendentes
           </button>
           <div className="flex flex-wrap gap-2 justify-end">
+            {medidasAgenda > 0 && (
+              <button
+                type="button"
+                className="btn btn-default"
+                disabled={orcamento.status !== 'enviado' || puxandoAgenda || !dados}
+                onClick={() => void puxarMedidasDaAgenda()}
+                title="Preenche as medidas finais com o que o técnico mediu na OS vinculada"
+              >
+                {puxandoAgenda ? 'Puxando...' : 'Usar as medidas do técnico'}
+              </button>
+            )}
             <button type="button" className="btn btn-default" disabled={orcamento.status !== 'enviado' || recalculando || !dados} onClick={() => void recalcularMedicao()}>
               {recalculando ? 'Recalculando...' : 'Recalcular diferença'}
             </button>
