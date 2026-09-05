@@ -10,6 +10,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { AppError } from '../middleware/errorHandler';
+import { compararMedicao, temDivergencia, type ItemDoOrcamento } from '../services/calc/comparacaoMedicao';
 import { agendaApiHabilitada, criarOsNoAgenda, listarTecnicosDoAgenda, AgendaApiError, type AmbienteParaAgenda } from '../services/agenda/agendaApi';
 import {
   agendaHabilitado,
@@ -296,6 +297,41 @@ export async function agendarOsDoOrcamento(req: Request, res: Response): Promise
   });
 
   res.status(201).json({ os });
+}
+
+/**
+ * GET /api/orcamentos/:id/agenda/comparacao — o que foi orçado contra o que o
+ * técnico mediu, ambiente a ambiente. É leitura: mostra a diferença e quem
+ * decide o que fazer com ela é o vendedor.
+ */
+export async function compararComMedicao(req: Request, res: Response): Promise<void> {
+  const orc = await carregarOrcamentoAutorizado(req);
+  if (!agendaHabilitado()) {
+    res.json({ habilitado: false, comparacao: [], divergente: false });
+    return;
+  }
+  const ids = orc.agenda_vinculos.map((v) => v.agenda_appointment_id);
+  const eventos = await buscarAmbientesDosEventos(ids);
+  // Vários eventos podem trazer o mesmo ambiente (medição e depois retorno):
+  // vale o último que tiver medida, que é a informação mais recente.
+  const porNome = new Map<string, (typeof eventos)[number]['ambientes'][number]>();
+  for (const ev of eventos) {
+    for (const amb of ev.ambientes) {
+      if (amb.medido) porNome.set(amb.nome.trim().toLowerCase(), amb);
+    }
+  }
+
+  const entrada = (orc.entrada_json ?? null) as { itens?: unknown[]; cortinas?: unknown[] } | null;
+  const itens = [
+    ...(Array.isArray(entrada?.itens) ? entrada.itens : []),
+    ...(Array.isArray(entrada?.cortinas) ? entrada.cortinas : []),
+  ] as ItemDoOrcamento[];
+
+  const comparacao = compararMedicao(
+    itens,
+    [...porNome.values()].map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura, medido: a.medido })),
+  );
+  res.json({ habilitado: true, comparacao, divergente: temDivergencia(comparacao) });
 }
 
 function idsValidos(body: unknown): number[] {

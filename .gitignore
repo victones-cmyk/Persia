@@ -52,7 +52,12 @@ coverage/
 !apps/web/public/favicon.png
 
 # Configuração local de ferramentas de desenvolvimento (não versionar)
-.claude/
+.claude/*
+# Exceção: skills são conhecimento do projeto (como o ERP se comporta, ids desta
+# conta, armadilhas da API), não configuração de máquina — redescobrir isso custa
+# sondar o ERP de produção. Precisa ser .claude/* acima: o git não reinclui
+# arquivo dentro de um diretório excluído.
+!.claude/skills/
 
 # Documentos internos do projeto — não versionar no repositório (ficam só locais)
 _material_projeto/

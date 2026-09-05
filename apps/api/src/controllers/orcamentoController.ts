@@ -30,6 +30,8 @@ import { descricaoProdutoPersiana, nomeProdutoPersiana } from '../services/calc/
 import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
+import { marcarSituacaoOrcamentoGc } from '../lib/situacaoOrcamentoGc';
+import { SITUACAO_CONCRETIZADO } from '../services/gc/orcamentos';
 import { criarOrcamento as gcCriarOrcamento, montarPayload, type LinhaProdutoGc, type NovoOrcamentoGc } from '../services/gc/orcamentos';
 import { criarVendaDePayload } from '../services/gc/vendas';
 import { roundHalfUp } from '../services/calc/arredondamento';
@@ -823,6 +825,8 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
         },
       },
     });
+    // Venda digitada à mão (nasceu no GC) conta igual: o orçamento se concretizou.
+    await marcarSituacaoOrcamentoGc(prisma, orc, SITUACAO_CONCRETIZADO, 'venda_gerada', sessao.id);
     if (!jaTemPedido) {
       // Venda existe: os produtos sintéticos deste orçamento cumpriram o papel —
       // inativa no GC para não poluírem a busca do PDV (best-effort).
@@ -872,6 +876,9 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
         },
       },
     });
+    // O orçamento virou venda: marca no GC para o histórico de lá contar a
+    // mesma história. Acabamento — falhar aqui não invalida a venda.
+    await marcarSituacaoOrcamentoGc(prisma, orc, SITUACAO_CONCRETIZADO, 'venda_gerada', sessao.id);
     // Venda gerada: os produtos sintéticos deste orçamento cumpriram o papel —
     // inativa no GC para não poluírem a busca do PDV (best-effort).
     await inativarProdutosSinteticosDoOrcamento(prisma, orc, sessao.id, 'venda_gerada');

@@ -38,6 +38,7 @@ import {
   buscarEventosAgenda,
   desvincularEventoAgenda,
   agendarOsDoOrcamento,
+  compararComMedicao,
   listarAmbientesAgenda,
   listarVinculosAgenda,
   listarVinculosAgendaEmLote,
@@ -68,6 +69,7 @@ router.get('/:id/estoque-saida/preview', preverSaidaEstoque);
 router.post('/:id/estoque-saida', confirmarSaidaEstoque);
 router.get('/:id/agenda', listarVinculosAgenda);
 router.get('/:id/agenda/ambientes', listarAmbientesAgenda);
+router.get('/:id/agenda/comparacao', compararComMedicao);
 router.get('/:id/agenda/buscar', buscarEventosAgenda);
 router.post('/:id/agenda', vincularEventosAgenda);
 router.post('/:id/agenda/agendar', agendarOsDoOrcamento);

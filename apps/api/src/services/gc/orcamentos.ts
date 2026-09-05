@@ -7,6 +7,10 @@ import { gcRequest, type GcEnvelope } from './client';
 
 // Situação "Em aberto" (GET /api/situacoes_orcamentos — verificado 11/06/2026).
 export const SITUACAO_EM_ABERTO = '92112';
+/** Virou venda. */
+export const SITUACAO_CONCRETIZADO = '92114';
+/** Refeito após remedição — distinto de cancelado, que é desistência do cliente. */
+export const SITUACAO_SUBSTITUIDO = '9442250';
 
 /** Uma linha de produto do orçamento. */
 export interface LinhaProdutoGc {
@@ -92,6 +96,37 @@ export async function criarOrcamento(o: NovoOrcamentoGc): Promise<ResultadoOrcam
     throw new Error('GestãoClick não retornou o id do orçamento.');
   }
   return { gc_orcamento_id, gc_codigo: env.data?.codigo ?? null, payload, resposta: env };
+}
+
+/**
+ * Muda a situação de um orçamento já criado no GestãoClick.
+ *
+ * O PUT do GC não aceita alteração parcial: exige o orçamento inteiro, e recusa
+ * (com um 404 que na verdade é validação) se o total dos produtos não bater com o
+ * das parcelas. Por isso reenviamos o payload original — o mesmo que criou o
+ * orçamento, guardado em `payload_gc_enviado` — trocando só a situação.
+ *
+ * Sem o payload original não há como montar o PUT; nesse caso devolve false em
+ * vez de estourar, porque marcar situação é acabamento e não pode derrubar a
+ * operação de verdade (gerar venda, por exemplo).
+ */
+export async function atualizarSituacaoOrcamento(args: {
+  gc_orcamento_id: string;
+  gc_codigo: string | null;
+  situacao_id: string;
+  payload_original: unknown;
+}): Promise<boolean> {
+  const original = args.payload_original;
+  if (!original || typeof original !== 'object' || Array.isArray(original)) return false;
+  if (!args.gc_codigo) return false;
+
+  const payload = { ...(original as Record<string, unknown>), codigo: args.gc_codigo, situacao_id: args.situacao_id };
+  await gcRequest({
+    method: 'PUT',
+    url: `/api/orcamentos/${encodeURIComponent(args.gc_orcamento_id)}`,
+    data: payload,
+  });
+  return true;
 }
 
 export async function deletarOrcamento(id: string): Promise<void> {
