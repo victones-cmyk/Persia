@@ -23,6 +23,7 @@ type Situacao = 'igual' | 'difere' | 'so_no_orcamento' | 'so_na_medicao';
 interface ComparacaoAmbiente {
   ambiente: string;
   folhas: number;
+  larguras_orcadas: number[];
   largura_orcada: number | null;
   altura_orcada: number | null;
   largura_medida: number | null;
@@ -117,6 +118,11 @@ export function ComparacaoMedicao({ orcamentoId, status, recarregarEm }: {
   if (carregando || !habilitado || !temMedicao) return null;
 
   const aMudar = linhas.filter((l) => l.situacao === 'difere');
+  // Ambientes com folhas de larguras diferentes costumam ser duas faces sob um
+  // nome só — a sacada com 4 folhas na frente e 1 na lateral. Aí o vão medido
+  // não é um número só, e repartir tudo proporcionalmente mexe na face que o
+  // técnico nem mediu.
+  const comFacesJuntas = aMudar.filter((l) => new Set(l.larguras_orcadas).size > 1);
   const eRascunho = status === 'rascunho';
   // Cancelado não se refaz: seria ressuscitar uma decisão já tomada.
   const podeRecalcular = aMudar.length > 0 && status !== 'cancelado';
@@ -228,6 +234,15 @@ export function ComparacaoMedicao({ orcamentoId, status, recarregarEm }: {
                 </li>
               ))}
             </ul>
+            {comFacesJuntas.length > 0 && (
+              <p className="text-sm-ui" style={{ color: 'var(--color-warning-text)' }}>
+                <FontAwesomeIcon icon={faTriangleExclamation} />{' '}
+                Em <strong>{comFacesJuntas.map((l) => l.ambiente).join(', ')}</strong> as folhas têm larguras
+                diferentes — costuma ser mais de uma face com o mesmo nome. Se o técnico mediu só uma delas,
+                a conta vai mexer na outra também. Quando for o caso, cadastre cada face como um ambiente
+                (ex.: <em>sacada frente</em> e <em>sacada lateral</em>) para o técnico medir separado.
+              </p>
+            )}
             <p className="text-sm-ui">
               Abre na calculadora para você conferir <strong>folha a folha</strong> — inclusive o transpasse,
               que a medida do vão não sabe reproduzir. Nada vai ao GestãoClick até você enviar.

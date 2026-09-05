@@ -35,6 +35,13 @@ export interface ComparacaoAmbiente {
   ambiente: string;
   /** Quantas folhas o orçamento tem neste ambiente. */
   folhas: number;
+  /**
+   * A largura de cada folha, na ordem. Serve para reconhecer o ambiente que na
+   * verdade junta DUAS FACES sob um nome só — a sacada com 4 folhas de 1,24 na
+   * frente e 1 de 1,06 na lateral. Nesse caso a medida do vão não é um número
+   * só, e quem recalcula precisa saber disso antes de confiar na conta.
+   */
+  larguras_orcadas: number[];
   /** Soma das larguras das folhas — o equivalente ao vão, quando não há transpasse. */
   largura_orcada: number | null;
   /** Altura das folhas; null quando elas divergem entre si (aí não há uma altura só). */
@@ -119,6 +126,7 @@ export function compararMedicao(
     saida.push({
       ambiente: g.nome,
       folhas: Math.max(g.larguras.length, g.alturas.length),
+      larguras_orcadas: g.larguras,
       largura_orcada: larguraOrcada,
       altura_orcada: alturaOrcada,
       largura_medida: larguraMedida,
@@ -136,6 +144,7 @@ export function compararMedicao(
     saida.push({
       ambiente: med.nome,
       folhas: 0,
+      larguras_orcadas: [],
       largura_orcada: null,
       altura_orcada: null,
       largura_medida: med.largura,

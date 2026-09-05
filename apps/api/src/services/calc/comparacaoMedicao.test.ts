@@ -109,3 +109,32 @@ describe('temDivergencia', () => {
     expect(temDivergencia(compararMedicao([{ ambiente: 'Sala', largura: 2, altura: 2 }], [medido('Sala', 2, 2), medido('Quarto', 3, 2)]))).toBe(true);
   });
 });
+
+describe('larguras por folha', () => {
+  it('devolve a largura de cada folha, para reconhecer duas faces no mesmo nome', () => {
+    // Sacada real: 4 folhas de 1,24 na frente e 1 de 1,06 na lateral. Somadas dão
+    // 6,02, mas isso não é um vão só — e é justamente o que a tela precisa avisar
+    // antes de repartir uma medida nova entre as cinco.
+    const itens = [
+      { ambiente: 'SACADA', largura: 1.24, altura: 2.27 },
+      { ambiente: 'SACADA', largura: 1.24, altura: 2.27 },
+      { ambiente: 'SACADA', largura: 1.24, altura: 2.27 },
+      { ambiente: 'SACADA', largura: 1.24, altura: 2.27 },
+      { ambiente: 'SACADA', largura: 1.06, altura: 2.27 },
+    ];
+    const c = compararMedicao(itens, [{ nome: 'SACADA', largura: 6.2, altura: 2.27, medido: true }]);
+    expect(c[0].larguras_orcadas).toEqual([1.24, 1.24, 1.24, 1.24, 1.06]);
+    expect(new Set(c[0].larguras_orcadas).size).toBe(2); // é o sinal de duas faces
+  });
+
+  it('folhas iguais dão um conjunto de um valor só', () => {
+    const itens = Array.from({ length: 3 }, () => ({ ambiente: 'Sala', largura: 1.5, altura: 2 }));
+    const c = compararMedicao(itens, [{ nome: 'Sala', largura: 4.8, altura: 2, medido: true }]);
+    expect(new Set(c[0].larguras_orcadas).size).toBe(1);
+  });
+
+  it('ambiente que só existe na medição não tem folhas', () => {
+    const c = compararMedicao([], [{ nome: 'Lavabo', largura: 1, altura: 2, medido: true }]);
+    expect(c[0].larguras_orcadas).toEqual([]);
+  });
+});
