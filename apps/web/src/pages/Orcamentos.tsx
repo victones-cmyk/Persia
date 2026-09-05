@@ -23,11 +23,20 @@ import { useAprovacoesPendentes } from '../hooks/useAprovacoesPendentes';
 import { AgendaImprimirBotoes } from '../components/AgendaImprimirBotoes';
 import type { EventoAgenda } from '../components/AgendaVinculo';
 
-const FILTROS: { valor: '' | StatusOrcamento; label: string }[] = [
+/** Filtro da listagem: além dos status do orçamento, a situação da visita técnica. */
+type FiltroLista = '' | StatusOrcamento | 'visita_agendada' | 'visita_feita';
+
+// Erro e Cancelado saem da barra principal: são exceção, e ocupavam espaço que o
+// vendedor usa o dia todo. Continuam alcançáveis em "Mais".
+const FILTROS: { valor: FiltroLista; label: string }[] = [
   { valor: '', label: 'Todos' },
   { valor: 'enviado', label: 'Enviado' },
-  { valor: 'erro', label: 'Erro' },
   { valor: 'rascunho', label: 'Rascunho' },
+  { valor: 'visita_agendada', label: 'Visita agendada' },
+  { valor: 'visita_feita', label: 'Visita feita' },
+];
+const FILTROS_OCULTOS: { valor: FiltroLista; label: string }[] = [
+  { valor: 'erro', label: 'Erro' },
   { valor: 'cancelado', label: 'Cancelado' },
 ];
 
@@ -92,9 +101,9 @@ function intervaloDoPeriodo(p: Periodo, de: string, ate: string): { inicio: Date
 function periodoValido(v: string | null): Periodo {
   return PERIODOS.some((p) => p.valor === v) ? (v as Periodo) : 'todos';
 }
-function statusValido(v: string | null): '' | StatusOrcamento {
+function statusValido(v: string | null): FiltroLista {
   const s = v ?? '';
-  return FILTROS.some((f) => f.valor === s) ? (s as '' | StatusOrcamento) : '';
+  return [...FILTROS, ...FILTROS_OCULTOS].some((f) => f.valor === s) ? (s as FiltroLista) : '';
 }
 
 interface OrcamentosProps {
@@ -111,7 +120,13 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
   // Filtros persistidos na SESSÃO (sessionStorage): mantêm-se ao atualizar a página,
   // mas zeram no login/logout (limpos por limparFiltrosOrcamento em useAuth).
   const salvos = lerFiltrosOrcamento();
-  const [status, setStatus] = useState<'' | StatusOrcamento>(() => statusValido(salvos?.status ?? null));
+  const [status, setStatus] = useState<FiltroLista>(() => statusValido(salvos?.status ?? null));
+  // Abre já expandido quando o filtro salvo é um dos ocultos, senão ele some da tela.
+  const [maisFiltros, setMaisFiltros] = useState(() => FILTROS_OCULTOS.some((f) => f.valor === statusValido(salvos?.status ?? null)));
+  const [visitasPendentes, setVisitasPendentes] = useState(0);
+  // Agendar visita direto da lista: sem isso o vendedor precisava abrir o
+  // orçamento só para chegar ao painel de OS.
+  const [agendarOrc, setAgendarOrc] = useState<OrcamentoListItem | null>(null);
   const [cliente, setCliente] = useState(() => salvos?.cliente ?? '');
   const [periodo, setPeriodo] = useState<Periodo>(() => periodoValido(salvos?.periodo ?? null));
   const [dataDe, setDataDe] = useState(() => salvos?.dataDe ?? '');
@@ -165,6 +180,17 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
       setCarregando(false);
     }
   }, [pagina, status, cliente, periodo, dataDe, dataAte, somenteVendas]);
+
+  // Contador do aviso em "Visita feita". Recarrega junto da lista para refletir o
+  // que acabou de mudar (agendar, gerar venda) sem o vendedor atualizar a página.
+  useEffect(() => {
+    if (somenteVendas) return;
+    let vivo = true;
+    api.get<{ total: number }>('/orcamentos/visitas-pendentes')
+      .then((r) => { if (vivo) setVisitasPendentes(r.total); })
+      .catch(() => { if (vivo) setVisitasPendentes(0); });
+    return () => { vivo = false; };
+  }, [somenteVendas, pagina, status, agendarOrc]);
 
   // Debounce 300ms na busca por cliente; status/página recarregam na hora.
   useEffect(() => {
@@ -228,10 +254,6 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
       setAcaoEmId(null);
     }
   }
-
-  // Agendar visita direto da lista: sem isso o vendedor precisava abrir o
-  // orçamento só para chegar ao painel de OS.
-  const [agendarOrc, setAgendarOrc] = useState<OrcamentoListItem | null>(null);
 
   async function duplicar(id: string) {
     setAcaoEmId(id);
@@ -337,9 +359,10 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
       <div className="card p-4 mb-4">
         <div className="flex flex-wrap items-center gap-3 justify-between">
           {!somenteVendas ? (
-            <div className="flex gap-0">
-              {FILTROS.map((f, i) => {
+            <div className="flex gap-0 flex-wrap">
+              {(maisFiltros ? [...FILTROS, ...FILTROS_OCULTOS] : FILTROS).map((f, i, lista) => {
                 const ativo = status === f.valor;
+                const aviso = f.valor === 'visita_feita' && visitasPendentes > 0;
                 return (
                   <button
                     key={f.valor || 'todos'}
@@ -349,20 +372,59 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                       setPagina(1);
                     }}
                     className="text-sm-ui"
+                    title={aviso ? `${visitasPendentes} ${visitasPendentes === 1 ? 'orçamento aguarda' : 'orçamentos aguardam'} continuidade após a visita` : undefined}
                     style={{
                       height: 30,
                       padding: '0 14px',
                       border: '1px solid ' + (ativo ? '#008d4c' : '#dee2e6'),
                       background: ativo ? '#00a65a' : '#fff',
                       color: ativo ? '#fff' : '#6c757d',
-                      borderRadius: i === 0 ? '3px 0 0 3px' : i === FILTROS.length - 1 ? '0 3px 3px 0' : 0,
+                      borderRadius: i === 0 ? '3px 0 0 3px' : i === lista.length - 1 ? '0 3px 3px 0' : 0,
                       borderLeft: i === 0 ? undefined : 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
                     }}
                   >
                     {f.label}
+                    {aviso && (
+                      // Lembrete de dar continuidade: o técnico mediu e o orçamento parou ali.
+                      <span
+                        style={{
+                          background: ativo ? '#fff' : '#dd4b39',
+                          color: ativo ? '#00a65a' : '#fff',
+                          borderRadius: 10,
+                          padding: '0 6px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          lineHeight: '16px',
+                          minWidth: 18,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {visitasPendentes}
+                      </span>
+                    )}
                   </button>
                 );
               })}
+              <button
+                type="button"
+                className="text-sm-ui"
+                onClick={() => {
+                  // Ao recolher, um filtro oculto ativo sairia da tela sem aviso:
+                  // volta para "Todos" junto.
+                  if (maisFiltros && FILTROS_OCULTOS.some((f) => f.valor === status)) { setStatus(''); setPagina(1); }
+                  setMaisFiltros((v) => !v);
+                }}
+                title={maisFiltros ? 'Esconder erro e cancelado' : 'Mostrar erro e cancelado'}
+                style={{
+                  height: 30, padding: '0 10px', marginLeft: 8,
+                  border: '1px solid #dee2e6', background: '#fff', color: '#6c757d', borderRadius: 3,
+                }}
+              >
+                {maisFiltros ? 'Menos' : 'Mais'}
+              </button>
             </div>
           ) : (
             <div className="text-sm-ui text-neutral-600">

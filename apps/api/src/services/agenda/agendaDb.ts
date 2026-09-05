@@ -221,3 +221,27 @@ export async function vincularPedidoNoEvento(appointmentId: number, pedidoCodigo
   );
   return (rowCount ?? 0) > 0;
 }
+
+/**
+ * Separa os eventos informados entre "visita já feita" e "visita marcada".
+ * Recebe só os ids que a Pérsia realmente vinculou — em vez de varrer a agenda
+ * inteira — porque o filtro da listagem parte dos vínculos, não do outro lado.
+ */
+export async function classificarEventosPorStatus(
+  ids: number[],
+): Promise<{ feitos: number[]; agendados: number[] }> {
+  if (ids.length === 0) return { feitos: [], agendados: [] };
+  const { rows } = await getPool().query<{ id: number; status: string }>(
+    `SELECT a.id, a.status FROM appointments a WHERE a.id = ANY($1::int[])`,
+    [ids],
+  );
+  const feitos: number[] = [];
+  const agendados: number[] = [];
+  for (const r of rows) {
+    if (r.status === 'completed') feitos.push(r.id);
+    // Cancelada não é visita pendente: some dos dois grupos em vez de virar
+    // cobrança de uma visita que ninguém vai fazer.
+    else if (r.status !== 'cancelled') agendados.push(r.id);
+  }
+  return { feitos, agendados };
+}

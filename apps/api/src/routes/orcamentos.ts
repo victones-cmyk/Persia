@@ -8,6 +8,7 @@ import {
   listarOrcamentos,
   cancelarOrcamento,
   atualizarOrcamento,
+  contarVisitasFeitasPendentes,
   duplicarOrcamento,
   gerarVendaOrcamento,
 } from '../controllers/orcamentoController';
@@ -54,6 +55,7 @@ router.get('/ordens-producao/:id/pdf', baixarPdfOrdem);
 router.get('/ordens-producao/:id/etiqueta.zpl', baixarZplEtiqueta);
 router.post('/ordens-producao/:id/imprimir-etiqueta', imprimirEtiquetaOrdem);
 router.get('/ordens-producao', listarOrdensProducao);
+router.get('/visitas-pendentes', contarVisitasFeitasPendentes);
 router.get('/pedidos-sem-os', listarPedidosSemOs);
 router.get('/pendentes-estoque', listarPedidosPendentesEstoque);
 router.get('/producao/aprovacoes-pendentes', listarAprovacoesPendentesMedicao);

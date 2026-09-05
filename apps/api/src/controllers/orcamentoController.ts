@@ -16,6 +16,7 @@ import { valorComDesconto, componenteDesconto } from '../services/calc/descontoC
 import { encontrarCalculadora, exigeLarguraTecido } from '../services/calc/calculadoras';
 import { verificarAcessoCalculadora, clienteGcDaRevenda, resolverDescontoPct } from '../lib/permissaoRevenda';
 import { resolverVendedorAtribuido } from '../lib/atribuicaoVendedor';
+import { agendaHabilitado, classificarEventosPorStatus } from '../services/agenda/agendaDb';
 
 import { indiceInstalacoes } from '../services/gc/instalacao';
 import {
@@ -891,6 +892,36 @@ export async function gerarVendaOrcamento(req: Request, res: Response): Promise<
 }
 
 /** GET /api/orcamentos — lista paginada (20/pág), filtros status e cliente. Vendedor vê só os seus. */
+/**
+ * GET /api/orcamentos/visitas-pendentes — quantos orçamentos tiveram a visita
+ * feita e ainda não viraram venda. É o lembrete de dar continuidade: o técnico
+ * mediu e o orçamento parou ali.
+ */
+export async function contarVisitasFeitasPendentes(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario!;
+  if (!agendaHabilitado()) {
+    res.json({ total: 0 });
+    return;
+  }
+  const vinculos = await prisma.orcamentoAgendaVinculo.findMany({ select: { agenda_appointment_id: true } });
+  const { feitos } = await classificarEventosPorStatus([...new Set(vinculos.map((v) => v.agenda_appointment_id))]);
+  if (feitos.length === 0) {
+    res.json({ total: 0 });
+    return;
+  }
+  const total = await prisma.orcamento.count({
+    where: {
+      ...(sessao.perfil !== 'admin' ? { usuario_id: sessao.id } : {}),
+      agenda_vinculos: { some: { agenda_appointment_id: { in: feitos } } },
+      status: { notIn: ['cancelado'] },
+      // Já virou pedido = seguiu adiante; não é mais pendência do vendedor.
+      gc_pedido_id: null,
+      gc_pedido_codigo: null,
+    },
+  });
+  res.json({ total });
+}
+
 export async function listarOrcamentos(req: Request, res: Response): Promise<void> {
   const sessao = req.session.usuario!;
   const pagina = Math.max(1, Number(req.query.pagina ?? 1));
@@ -902,6 +933,28 @@ export async function listarOrcamentos(req: Request, res: Response): Promise<voi
   if (sessao.perfil !== 'admin') where.usuario_id = sessao.id;
   if (['rascunho', 'enviado', 'erro', 'cancelado'].includes(status)) {
     where.status = status as Prisma.EnumStatusOrcamentoFilter['equals'];
+  }
+  // Filtros por situação da visita técnica. Vivem em outro banco (o do Agenda),
+  // então o caminho é: pegar os eventos que a Pérsia vinculou, perguntar ao
+  // Agenda o status deles, e filtrar por vínculo. Parte-se dos vínculos e não da
+  // agenda inteira para a consulta não crescer com o volume do outro app.
+  if (status === 'visita_agendada' || status === 'visita_feita') {
+    if (!agendaHabilitado()) {
+      res.json({ orcamentos: [], paginacao: { pagina, porPagina, total: 0, totalPaginas: 0 } });
+      return;
+    }
+    const vinculos = await prisma.orcamentoAgendaVinculo.findMany({ select: { agenda_appointment_id: true } });
+    const { feitos, agendados } = await classificarEventosPorStatus(
+      [...new Set(vinculos.map((v) => v.agenda_appointment_id))],
+    );
+    const alvo = status === 'visita_feita' ? feitos : agendados;
+    if (alvo.length === 0) {
+      res.json({ orcamentos: [], paginacao: { pagina, porPagina, total: 0, totalPaginas: 0 } });
+      return;
+    }
+    where.agenda_vinculos = { some: { agenda_appointment_id: { in: alvo } } };
+    // Cancelado não interessa em nenhuma das duas listas de trabalho.
+    where.status = { not: 'cancelado' };
   }
   // "vendas" (só confirmados) e "cliente" (busca por cliente/pedido/orçamento)
   // são dois filtros OR independentes — combinados em AND pra não se pisarem
