@@ -3,9 +3,9 @@
 // de cliente (ClienteSearch) quando o vendedor/admin não encontra o cliente. Envia
 // pra API real do GC; a Pérsia não guarda cliente nenhum por conta própria.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner, faLocationDot } from '@fortawesome/free-solid-svg-icons';
+import { faSpinner, faLocationDot, faTriangleExclamation } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { mascaraCpf, mascaraCnpj, mascaraTelefone, mascaraCep, cpfValido, cnpjValido } from '../lib/documentoBR';
 import type { ClienteResumo } from '../lib/calcTypes';
@@ -43,6 +43,10 @@ export function CadastroClienteModal({
   const [salvando, setSalvando] = useState(false);
   const [erros, setErros] = useState<Erros>({});
   const [erroGeral, setErroGeral] = useState<string | null>(null);
+  // Cliente que já existe no GestãoClick com este documento. Cadastrar de novo
+  // criaria duplicata — e duplicata de cliente espalha histórico em dois lugares.
+  const [duplicado, setDuplicado] = useState<ClienteResumo | null>(null);
+  const [verificandoDoc, setVerificandoDoc] = useState(false);
 
   // Reseta o formulário toda vez que o modal abre (evita sobrar dado de uma
   // tentativa anterior se o vendedor abrir de novo pra outro cliente).
@@ -54,7 +58,45 @@ export function CadastroClienteModal({
     setMostrarEndereco(false);
     setErros({});
     setErroGeral(null);
+    setDuplicado(null);
   }, [aberto, nomeInicial]);
+
+  // Busca o endereço assim que o CEP fica completo — esperar o vendedor sair do
+  // campo fazia parecer que não funcionava, que é como isto foi reportado.
+  const cepBuscado = useRef('');
+  useEffect(() => {
+    const limpo = campos.cep.replace(/\D/g, '');
+    if (limpo.length !== 8 || cepBuscado.current === limpo) return;
+    cepBuscado.current = limpo;
+    void buscarCep();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campos.cep]);
+
+  // Procura no GestãoClick assim que o documento fica válido: cadastrar de novo
+  // alguém que já existe espalha o histórico do cliente em dois cadastros.
+  const docVerificado = useRef('');
+  useEffect(() => {
+    const doc = campos.documento.replace(/\D/g, '');
+    const valido = tipoPessoa === 'PF' ? cpfValido(doc) : cnpjValido(doc);
+    if (!valido) { setDuplicado(null); return; }
+    if (docVerificado.current === doc) return;
+    docVerificado.current = doc;
+
+    let vivo = true;
+    setVerificandoDoc(true);
+    api.get<{ clientes: ClienteResumo[] }>(`/gc/clientes?q=${encodeURIComponent(doc)}`)
+      .then((r) => {
+        if (!vivo) return;
+        // A busca por documento é por prefixo no GC, então confirma que o
+        // documento realmente bate antes de acusar duplicata.
+        const igual = r.clientes.find((c) => (c.documento ?? '').replace(/\D/g, '') === doc);
+        setDuplicado(igual ?? null);
+      })
+      .catch(() => { if (vivo) setDuplicado(null); })
+      .finally(() => { if (vivo) setVerificandoDoc(false); });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campos.documento, tipoPessoa]);
 
   if (!aberto) return null;
 
@@ -64,16 +106,19 @@ export function CadastroClienteModal({
 
   async function buscarCep() {
     const cepLimpo = campos.cep.replace(/\D/g, '');
-    if (cepLimpo.length !== 8) return;
+    if (cepLimpo.length !== 8 || buscandoCep) return;
     setBuscandoCep(true);
     try {
-      const r = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`).then((res) => res.json());
-      if (!r?.erro) {
+      // Pelo backend: a CSP do app não deixa o navegador falar com serviço externo.
+      const r = await api.get<{ endereco: { logradouro: string; bairro: string; cidade: string; estado: string } | null }>(
+        `/cep/${cepLimpo}`,
+      );
+      if (r.endereco) {
         alterar({
-          logradouro: r.logradouro || campos.logradouro,
-          bairro: r.bairro || campos.bairro,
-          cidade: r.localidade || campos.cidade,
-          estado: r.uf || campos.estado,
+          logradouro: r.endereco.logradouro || campos.logradouro,
+          bairro: r.endereco.bairro || campos.bairro,
+          cidade: r.endereco.cidade || campos.cidade,
+          estado: r.endereco.estado || campos.estado,
         });
       }
     } catch {
@@ -197,6 +242,7 @@ export function CadastroClienteModal({
               placeholder={tipoPessoa === 'PF' ? '000.000.000-00' : '00.000.000/0000-00'}
             />
             {erros.documento && <div className="helper-error">{erros.documento}</div>}
+            {verificandoDoc && <div className="helper-text"><FontAwesomeIcon icon={faSpinner} spin /> Procurando no GestãoClick…</div>}
           </div>
           <div className="col-span-12 md:col-span-6">
             <label className="form-label" htmlFor="cc-email">E-mail <span className="label-optional">(opcional)</span></label>
@@ -273,12 +319,35 @@ export function CadastroClienteModal({
           </div>
         )}
 
+        {duplicado && (
+          <div className="alert alert-warning mb-3 text-sm-ui" style={{ display: 'block' }}>
+            <div className="font-semibold mb-1">
+              <FontAwesomeIcon icon={faTriangleExclamation} /> Este {tipoPessoa === 'PF' ? 'CPF' : 'CNPJ'} já tem cadastro
+            </div>
+            <div className="text-xs-ui mb-2">
+              <strong>{duplicado.nome}</strong>
+              {duplicado.documento ? ` · ${duplicado.documento}` : ''}
+              {' '}— cadastrar de novo criaria um cliente duplicado, e o histórico dele ficaria dividido em dois.
+            </div>
+            <button type="button" className="btn btn-success btn-xs" onClick={() => onCriado(duplicado)}>
+              Usar este cliente
+            </button>
+          </div>
+        )}
+
         {erroGeral && <div className="helper-error mb-2">{erroGeral}</div>}
 
         <div className="flex justify-end gap-2 mt-2">
           <button type="button" className="btn btn-default" disabled={salvando} onClick={onFechar}>Cancelar</button>
-          <button type="button" className="btn btn-success" disabled={salvando} onClick={salvar}>
-            {salvando && <FontAwesomeIcon icon={faSpinner} spin />} Cadastrar
+          <button
+            type="button"
+            className={duplicado ? 'btn btn-default' : 'btn btn-success'}
+            disabled={salvando}
+            onClick={salvar}
+            title={duplicado ? 'Vai criar um segundo cadastro com este mesmo documento' : undefined}
+          >
+            {salvando && <FontAwesomeIcon icon={faSpinner} spin />}
+            {duplicado ? ' Cadastrar mesmo assim' : ' Cadastrar'}
           </button>
         </div>
       </div>

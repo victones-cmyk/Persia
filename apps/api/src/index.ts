@@ -21,6 +21,7 @@ import orcamentosRouter from './routes/orcamentos';
 import adminRouter from './routes/admin';
 import gcRouter from './routes/gc';
 import agendaRouter from './routes/agenda';
+import cepRouter from './routes/cep';
 import { getGcHealth } from './services/gc/health';
 import { carregarRegras } from './services/calc/regras';
 import { carregarCalculadoras } from './services/calc/calculadoras';
@@ -49,7 +50,11 @@ app.use(
         // 'unsafe-inline' em estilos: React/Tailwind aplicam estilos inline em runtime.
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-        imgSrc: ["'self'", 'data:'],
+        // As fotos da medição são servidas pelo app Agenda (nosso, mesma VPS).
+        // Sem isto o navegador bloqueia e o vendedor vê moldura vazia.
+        imgSrc: ["'self'", 'data:', env.AGENDA_BASE_URL],
+        // Fechado de propósito: consulta a serviço externo (ViaCEP) passa pelo
+        // nosso backend, não pelo navegador — ver rotas /api/cep.
         connectSrc: ["'self'"],
         objectSrc: ["'none'"],
         frameAncestors: ["'self'"],
@@ -138,6 +143,9 @@ app.use('/api/gc', gcRouter);
 
 // Consulta ao app Agenda sem orçamento no meio — montar orçamento a partir da medição.
 app.use('/api/agenda', agendaRouter);
+
+// Consulta de CEP via backend — a CSP fecha connect-src, o navegador não chama fora.
+app.use('/api/cep', cepRouter);
 
 // ---------------------------------------------------------------------------
 // Frontend estático (produção) — arquitetura "App Node.js único" no Railway.
