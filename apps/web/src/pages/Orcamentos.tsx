@@ -391,8 +391,8 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                       // Lembrete de dar continuidade: o técnico mediu e o orçamento parou ali.
                       <span
                         style={{
-                          background: ativo ? '#fff' : '#dd4b39',
-                          color: ativo ? '#00a65a' : '#fff',
+                          background: ativo ? '#fff' : 'var(--color-error)',
+                          color: ativo ? 'var(--action-add, #00a65a)' : '#fff',
                           borderRadius: 10,
                           padding: '0 6px',
                           fontSize: 11,
