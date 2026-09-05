@@ -127,7 +127,11 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
   const comFacesJuntas = aMudar.filter((l) => new Set(l.larguras_orcadas).size > 1);
   const eRascunho = status === 'rascunho';
   // Cancelado não se refaz: seria ressuscitar uma decisão já tomada.
-  const podeRecalcular = aMudar.length > 0 && status !== 'cancelado';
+  // Vendido também não: marcar o antigo como "Substituído" muda a situação do
+  // ORÇAMENTO e não desfaz a VENDA, então enviar o recalculado deixaria duas
+  // vendas de pé para o mesmo cliente. Depois da venda, quem trata diferença de
+  // medida é a tela de Produção, que ajusta sem duplicar.
+  const podeRecalcular = aMudar.length > 0 && status !== 'cancelado' && !temVenda;
 
   return (
     <div
@@ -199,6 +203,14 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
             A largura pode divergir por transpasse, que é escolha sua — nem toda diferença é remedição.
             Confira ambiente a ambiente antes de refazer o orçamento.
           </div>
+          {temVenda && aMudar.length > 0 && (
+            <div className="text-xs-ui text-neutral-600 mt-2">
+              <FontAwesomeIcon icon={faTriangleExclamation} className="text-neutral-400" />{' '}
+              Este orçamento já virou venda, então não dá para recalculá-lo — sairia uma segunda venda no
+              GestãoClick com a primeira ainda de pé. Diferença de medida em venda já fechada se resolve
+              em <strong>Produção</strong>.
+            </div>
+          )}
           {podeRecalcular && (
             <button
               className="btn btn-default btn-sm mt-2"
@@ -236,15 +248,6 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
                 </li>
               ))}
             </ul>
-            {temVenda && (
-              <p className="text-sm-ui" style={{ color: 'var(--color-error)' }}>
-                <FontAwesomeIcon icon={faTriangleExclamation} />{' '}
-                <strong>Este orçamento já virou venda.</strong> O recálculo não desfaz nada no GestãoClick:
-                a venda antiga continua lá, e enviar o novo orçamento vai gerar uma <strong>segunda venda</strong>.
-                Se a intenção é só corrigir a medida do que já foi vendido, o caminho é a tela de Produção,
-                que trata a diferença sem duplicar a venda.
-              </p>
-            )}
             {comFacesJuntas.length > 0 && (
               <p className="text-sm-ui" style={{ color: 'var(--color-warning-text)' }}>
                 <FontAwesomeIcon icon={faTriangleExclamation} />{' '}

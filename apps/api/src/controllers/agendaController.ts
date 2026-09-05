@@ -440,6 +440,19 @@ export async function recalcularComMedicao(req: Request, res: Response): Promise
   const sessao = req.session.usuario!;
   const orc = await carregarOrcamentoAutorizado(req);
 
+  // Vendido não se recalcula. Marcar o antigo como "Substituído" muda a situação
+  // do ORÇAMENTO e não desfaz a VENDA: enviar o recalculado deixaria duas vendas
+  // de pé para o mesmo cliente, que é o banco torto que este fluxo todo existe
+  // para evitar. Depois da venda, quem trata diferença de medida é a Produção,
+  // que ajusta sem duplicar. A tela já esconde o botão; isto é a trava de verdade.
+  if (orc.gc_pedido_id || orc.gc_pedido_codigo) {
+    throw new AppError(
+      409,
+      'ORCAMENTO_JA_VENDIDO',
+      'Este orçamento já virou venda e não pode ser recalculado — sairia uma segunda venda no GestãoClick. Diferença de medida em venda já fechada se resolve na tela de Produção.',
+    );
+  }
+
   const entrada = (orc.entrada_json ?? null) as { itens?: unknown[]; cortinas?: unknown[] } | null;
   if (!entrada) {
     throw new AppError(400, 'SEM_ENTRADA', 'Este orçamento é antigo demais para ser recalculado: não guardamos os dados do formulário. Duplique-o e refaça com as medidas do técnico.');
