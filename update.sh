@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-APP_DIR="${APP_DIR:-/home/ubuntu/Persia}"
+# O caminho e o servico saem de ONDE ESTE SCRIPT ESTA, nunca de um valor fixo.
+#
+# Ja estavam fixos em /home/ubuntu/Persia e "persia", e a copia do script que
+# vive em ~/Persia-staging herdou esses valores: rodar ./update.sh de dentro do
+# staging fez um deploy de producao, com o codigo de producao, sem tocar no
+# staging. Ninguem percebe pela saida do script — ela parece um deploy normal.
+APP_DIR="${APP_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 BRANCH="${BRANCH:-main}"
-SERVICE_NAME="${PERSIA_SERVICE:-persia}"
+# ~/Persia -> "persia", ~/Persia-staging -> "persia-staging".
+SERVICE_NAME="${PERSIA_SERVICE:-$(basename "$APP_DIR" | tr '[:upper:]' '[:lower:]')}"
 RUN_SEED="${RUN_SEED:-0}"
 
 log() {
@@ -76,6 +83,15 @@ fi
 
 log "Reiniciando servico"
 if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" >/dev/null 2>&1; then
+  # O systemd sabe de que pasta cada servico roda. Conferir isso antes de
+  # reiniciar e a unica trava que nao depende de nomear as coisas direito: se o
+  # servico aponta para outra arvore, este deploy nao e dele.
+  UNIT_DIR="$(systemctl show "$SERVICE_NAME" -p WorkingDirectory --value 2>/dev/null || true)"
+  case "$UNIT_DIR" in
+    "$APP_DIR"|"$APP_DIR"/*) : ;;
+    *) die "Servico '$SERVICE_NAME' roda de '$UNIT_DIR', nao de '$APP_DIR'. Deploy abortado para nao reiniciar o app errado." ;;
+  esac
+
   sudo systemctl restart "$SERVICE_NAME"
   sudo systemctl --no-pager --full status "$SERVICE_NAME" || true
 else
