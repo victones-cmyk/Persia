@@ -97,3 +97,23 @@ describe('pecasSemPareamento', () => {
     expect(pecasSemPareamento({}, 3)).toEqual([0, 1, 2]);
   });
 });
+
+describe('sugestão reparte em vez de o primeiro levar tudo', () => {
+  it('três vãos e três peças de mesmo nome viram 1:1', () => {
+    // Caso real (pedido 76127): as três peças se chamam "SALA" e "SALA" cabe no
+    // nome dos três vãos. Sem repartir, o primeiro levava as três e os outros
+    // dois ficavam órfãos — palpite pior que nenhum.
+    const s = sugerirPareamento(ambientesReais, pecasReais);
+    expect(Object.keys(s)).toHaveLength(3);
+    expect(Object.values(s).every((l) => l.length === 1)).toBe(true);
+    expect(Object.values(s).flat().sort()).toEqual([0, 1, 2]);
+  });
+
+  it('um vão só continua levando todas as folhas (sacada)', () => {
+    const s = sugerirPareamento(
+      [{ id: 'x', nome: 'Sacada' }],
+      [0, 1, 2, 3, 4].map((index) => ({ index, ambiente: 'Sacada' })),
+    );
+    expect(s['x']).toEqual([0, 1, 2, 3, 4]);
+  });
+});

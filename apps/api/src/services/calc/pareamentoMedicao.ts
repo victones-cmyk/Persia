@@ -56,23 +56,35 @@ export function sugerirPareamento(
   // Nome igual primeiro; só depois o "um contém o outro". Sem esta ordem, um
   // ambiente de nome curto abocanharia peças que pertencem ao de nome exato.
   for (const passo of ['exato', 'contem'] as const) {
-    for (const amb of ambientes) {
-      if (!amb.id) continue;
-      const alvo = semAcento(amb.nome);
-      if (!alvo) continue;
-      for (const peca of pecas) {
-        if (!pecasLivres.has(peca.index)) continue;
-        const nome = semAcento(peca.ambiente);
-        if (!nome) continue;
-        const casa = passo === 'exato'
-          ? nome === alvo
-          : alvo.includes(nome) || nome.includes(alvo);
-        if (!casa) continue;
+    const casa = (nomeAmbiente: string, nomePeca: string) =>
+      passo === 'exato'
+        ? nomePeca === nomeAmbiente
+        : nomeAmbiente.includes(nomePeca) || nomePeca.includes(nomeAmbiente);
+
+    // Uma peça por rodada, e não o primeiro ambiente levando tudo.
+    //
+    // No caso real havia três vãos medidos e três peças todas chamadas "SALA":
+    // como "SALA" cabe no nome dos três, o primeiro abocanhava as três e os
+    // outros dois ficavam órfãos — palpite pior do que nenhum. Em rodadas, cada
+    // vão leva uma, o que acerta a forma mais comum (um vão, uma peça) sem
+    // atrapalhar a sacada (um vão só, que continua levando todas as folhas nas
+    // rodadas seguintes).
+    let avancou = true;
+    while (avancou) {
+      avancou = false;
+      for (const amb of ambientes) {
+        if (!amb.id) continue;
+        const alvo = semAcento(amb.nome);
+        if (!alvo) continue;
+        const peca = pecas.find((p) => pecasLivres.has(p.index) && p.ambiente.trim() !== '' && casa(alvo, semAcento(p.ambiente)));
+        if (!peca) continue;
         (sugestao[amb.id] ??= []).push(peca.index);
         pecasLivres.delete(peca.index);
+        avancou = true;
       }
     }
   }
+
   return sugestao;
 }
 
