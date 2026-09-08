@@ -592,7 +592,7 @@ export function Orcamentos({ modo = 'orcamentos' }: OrcamentosProps) {
                         </button>
                       )}
                       {!somenteVendas && o.status !== 'cancelado' && (
-                        <button className="btn btn-default btn-xs text-primary" onClick={() => setAgendarOrc(o)} title="Agendar visita técnica no Agenda">
+                        <button className="btn btn-default btn-xs text-primary" onClick={() => setAgendarOrc(o)} title="Agendar visita no Agenda — medição ou instalação">
                           <FontAwesomeIcon icon={faCalendarPlus} />
                         </button>
                       )}
