@@ -1222,6 +1222,13 @@ function imprimirRawTcp(zpl: string): Promise<void> {
   }
 
   return new Promise((resolve, reject) => {
+    // Cronometra as três fases separadamente. A etiqueta atravessa VPS →
+    // borda Cloudflare → túnel na loja → impressora, e sem essa medição não dá
+    // para saber se a demora é abrir a conexão (túnel frio), empurrar os bytes,
+    // ou a impressora demorar a fechar. Uma linha por impressão no journal.
+    const t0 = Date.now();
+    let tConectou = 0;
+    let tEnviou = 0;
     const socket = net.createConnection({ host, port });
     let finalizado = false;
 
@@ -1234,7 +1241,8 @@ function imprimirRawTcp(zpl: string): Promise<void> {
 
     socket.setTimeout(env.ZEBRA_TCP_TIMEOUT_MS);
     socket.on('connect', () => {
-      socket.end(zpl);
+      tConectou = Date.now() - t0;
+      socket.end(zpl, () => { tEnviou = Date.now() - t0; });
     });
     socket.on('timeout', () => {
       encerrarComErro(new Error('tempo limite esgotado'));
@@ -1243,6 +1251,7 @@ function imprimirRawTcp(zpl: string): Promise<void> {
     socket.on('close', (hadError) => {
       if (!finalizado && !hadError) {
         finalizado = true;
+        console.log(`[etiqueta] ${zpl.length} bytes | conectou ${tConectou}ms | enviou ${tEnviou}ms | fechou ${Date.now() - t0}ms`);
         resolve();
       }
     });
