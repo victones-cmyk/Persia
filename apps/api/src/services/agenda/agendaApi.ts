@@ -54,6 +54,10 @@ export interface NovaOsAgenda {
    *  marcada antes da venda. Campo separado de propósito: enviar o orçamento no
    *  campo do pedido fazia o técnico ler "Pedido" para o que não era. */
   orcamento_codigo?: string | null;
+  /** Peças de instalação MANUAL (sem motor). Só vale para tipo instalação. */
+  instalacao_quantidade?: number | null;
+  /** Peças MOTORIZADAS. Contadas à parte porque o técnico recebe outro valor. */
+  motorizadas_quantidade?: number | null;
   agendado_para?: string | null;
   observacoes?: string | null;
   ambientes?: AmbienteParaAgenda[];
@@ -131,6 +135,8 @@ export function criarOsNoAgenda(os: NovaOsAgenda): Promise<OsCriada> {
       period: os.periodo ?? '',
       order_number: os.pedido_codigo ?? '',
       quote_number: os.orcamento_codigo ?? '',
+      ...(os.instalacao_quantidade != null ? { installation_quantity: os.instalacao_quantidade } : {}),
+      ...(os.motorizadas_quantidade != null ? { motorized_quantity: os.motorizadas_quantidade } : {}),
       scheduled_at: os.agendado_para ?? '',
       notes: os.observacoes ?? '',
       ambientes: (os.ambientes ?? []).map((a) => ({

@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSpinner, faPlus, faTrash, faCalendarPlus } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
+import { useToast } from '../hooks/useToast';
 
 type TipoOs = 'measurement' | 'installation';
 type TipoProduto = 'persiana' | 'cortina';
@@ -81,6 +82,7 @@ export function AgendarOsModal({
   const [observacoes, setObservacoes] = useState('');
   const [ambientes, setAmbientes] = useState<AmbienteLinha[]>([linhaVazia()]);
   const [carregando, setCarregando] = useState(false);
+  const { showToast } = useToast();
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -158,7 +160,7 @@ export function AgendarOsModal({
     if (!podeAgendar) return;
     setSalvando(true); setErro(null);
     try {
-      await api.post(`/orcamentos/${orcamentoId}/agenda/agendar`, {
+      const r = await api.post<{ entrega_ajustada: string | null }>(`/orcamentos/${orcamentoId}/agenda/agendar`, {
         tipo,
         // Meio-dia evita que o fuso jogue o agendamento para o dia anterior.
         agendado_para: data ? `${data}T12:00:00` : undefined,
@@ -175,6 +177,14 @@ export function AgendarOsModal({
           trilho_especial: a.trilho,
         })),
       });
+      // A entrega passa a ser a véspera da instalação. Dizer isso é obrigatório:
+      // a data foi mudada sem o vendedor pedir, e descobrir depois na tela de
+      // Produção seria pior do que ler agora.
+      if (r.entrega_ajustada) {
+        const [a, m, d] = r.entrega_ajustada.split('-');
+        showToast('info', 'Data de entrega ajustada',
+          `A entrega do pedido passou para ${d}/${m}/${a} — a véspera da instalação.`);
+      }
       onAgendado();
     } catch (e) {
       setErro(e instanceof ApiError

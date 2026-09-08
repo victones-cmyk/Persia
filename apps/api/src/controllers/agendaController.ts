@@ -14,6 +14,7 @@ import { AppError } from '../middleware/errorHandler';
 import { compararMedicao, temDivergencia, type ItemDoOrcamento } from '../services/calc/comparacaoMedicao';
 import { recalcularComMedicao as recalcularItensComMedicao, type ItemComMedida } from '../services/calc/recalculoMedicao';
 import { consolidarAmbientesMedidos } from '../services/agenda/consolidacaoMedicao';
+import { contarInstalacoes, type ItemInstalavel } from '../services/agenda/quantidadesInstalacao';
 import { agendaApiHabilitada, criarOsNoAgenda, listarTecnicosDoAgenda, sugerirDatasDeVisita, AgendaApiError, type AmbienteParaAgenda } from '../services/agenda/agendaApi';
 import {
   agendaHabilitado,
@@ -269,6 +270,12 @@ export async function agendarOsDoOrcamento(req: Request, res: Response): Promise
   if (!['morning', 'afternoon', 'business_hours'].includes(periodo)) {
     throw new AppError(400, 'PERIODO_OBRIGATORIO', 'Escolha o período da visita.');
   }
+  // Conta as peças que o técnico vai instalar, pela instalação escolhida em cada
+  // item — não pelo tipo do produto. Em peça complexa o vendedor marca
+  // "motorizada" mesmo sendo manual, porque o que se paga ali é a dificuldade.
+  const itensVendidos = (Array.isArray(orc.itens_json) ? orc.itens_json : []) as ItemInstalavel[];
+  const quantidades = contarInstalacoes(itensVendidos);
+
   const ambientes: AmbienteParaAgenda[] = (Array.isArray(b.ambientes) ? b.ambientes : [])
     .map((a) => {
       const amb = a as Record<string, unknown>;
@@ -305,6 +312,12 @@ export async function agendarOsDoOrcamento(req: Request, res: Response): Promise
       // medição, já que ela acontece antes da venda.
       pedido_codigo: orc.gc_pedido_codigo ?? null,
       orcamento_codigo: orc.gc_codigo ?? null,
+      // Quantidades só na instalação: é delas que sai o pagamento do técnico, e
+      // numa medição elas não significam nada.
+      ...(tipo === 'installation' ? {
+        instalacao_quantidade: quantidades.manual,
+        motorizadas_quantidade: quantidades.motorizada,
+      } : {}),
       agendado_para: texto(b.agendado_para, 40) || null,
       observacoes: texto(b.observacoes, 2000) || null,
       ambientes,
@@ -320,15 +333,37 @@ export async function agendarOsDoOrcamento(req: Request, res: Response): Promise
     data: [{ orcamento_id: orc.id, agenda_appointment_id: os.id, tipo, criado_por: sessao.id }],
     skipDuplicates: true,
   });
+  // Instalação marcada define quando a peça precisa estar pronta: um dia antes.
+  //
+  // A data de entrega do pedido era digitada à mão e nada a ligava à instalação,
+  // então dava para agendar a montagem para antes de a peça existir. Um dia de
+  // folga é o mínimo que separa "saiu da produção" de "o técnico levou".
+  //
+  // Sobrescreve o que estiver lá de propósito: se a instalação mudou, a entrega
+  // que valia antes deixou de valer. A tela avisa a nova data.
+  let entregaAjustada: string | null = null;
+  const agendadoPara = texto(b.agendado_para, 40);
+  if (tipo === 'installation' && agendadoPara) {
+    const dia = new Date(agendadoPara);
+    if (!Number.isNaN(dia.getTime())) {
+      const vespera = new Date(dia.getTime() - 24 * 60 * 60 * 1000);
+      entregaAjustada = vespera.toISOString().slice(0, 10);
+      await prisma.orcamento.update({
+        where: { id: orc.id },
+        data: { pedido_entrega_em: new Date(`${entregaAjustada}T00:00:00.000Z`) },
+      }).catch(() => { entregaAjustada = null; /* anotar a data não pode desfazer a OS */ });
+    }
+  }
+
   await prisma.logAcao.create({
     data: {
       usuario_id: sessao.id,
       acao: 'agenda_os_criada',
-      detalhe: { orcamento_id: orc.id, appointment_id: os.id, tipo, ambientes: ambientes.length },
+      detalhe: { orcamento_id: orc.id, appointment_id: os.id, tipo, ambientes: ambientes.length, ...(entregaAjustada ? { entrega_ajustada: entregaAjustada } : {}) },
     },
   });
 
-  res.status(201).json({ os });
+  res.status(201).json({ os, entrega_ajustada: entregaAjustada });
 }
 
 /**
