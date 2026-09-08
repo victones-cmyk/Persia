@@ -328,9 +328,10 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
           {temVenda && aMudar.length > 0 && (
             <div className="text-xs-ui text-neutral-600 mt-2">
               <FontAwesomeIcon icon={faTriangleExclamation} className="text-neutral-400" />{' '}
-              Este orçamento já virou venda, então não dá para recalculá-lo — sairia uma segunda venda no
-              GestãoClick com a primeira ainda de pé. Diferença de medida em venda já fechada se resolve
-              em <strong>Produção</strong>.
+              Este orçamento já virou venda, então não dá para recalculá-lo aqui — sairia uma segunda venda
+              no GestãoClick com a primeira ainda de pé. As medidas do técnico continuam disponíveis: abra o
+              pedido em <strong>Produção</strong> e use o botão <strong>"Usar as medidas do técnico"</strong>,
+              ao lado de "Recalcular diferença".
             </div>
           )}
           {podeRecalcular && (
