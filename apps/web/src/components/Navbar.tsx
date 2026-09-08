@@ -7,6 +7,7 @@ import { faScissors, faRightFromBracket, faKey } from '@fortawesome/free-solid-s
 import { useAuth } from '../hooks/useAuth';
 import { useGcHealth } from '../hooks/useGcHealth';
 import { useNavGuard } from '../hooks/useNavGuard';
+import { rotaInicial } from '../lib/rotaInicial';
 import { GcIndicator } from './GcIndicator';
 
 export function Navbar({ gcStatus }: { gcStatus: ReturnType<typeof useGcHealth>['status'] }) {
@@ -18,8 +19,8 @@ export function Navbar({ gcStatus }: { gcStatus: ReturnType<typeof useGcHealth>[
     <header className="h-header bg-surface-header text-neutral-0 flex items-center justify-between px-5 shrink-0">
       <div
         className="flex items-center gap-2 cursor-pointer select-none"
-        onClick={() => guard(() => navigate('/orcamentos'))}
-        title="Ir para Orçamentos"
+        onClick={() => guard(() => navigate(rotaInicial(usuario?.perfil)))}
+        title="Ir para a página inicial"
         role="link"
       >
         <FontAwesomeIcon icon={faScissors} />

@@ -10,6 +10,8 @@ import { ProtectedRoute, AdminRoute, RevendaRoute, SenhaDefinitivaRoute } from '
 import { OrcamentoNovo } from './pages/OrcamentoNovo';
 import { Orcamentos, Vendas } from './pages/Orcamentos';
 import { ProximasAcoes } from './pages/ProximasAcoes';
+import { rotaInicial } from './lib/rotaInicial';
+import { useAuth } from './hooks/useAuth';
 import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
 import { Producao } from './pages/Producao';
 import { BaixaEstoque } from './pages/BaixaEstoque';
@@ -19,6 +21,12 @@ import { AdminLog } from './pages/admin/AdminLog';
 import { AdminRegras } from './pages/admin/AdminRegras';
 import { AdminCalculadoras } from './pages/admin/AdminCalculadoras';
 import { AdminMateriasPrimas } from './pages/admin/AdminMateriasPrimas';
+
+/** A raiz manda cada perfil para a sua página inicial (ver rotaInicial). */
+function RaizDoApp() {
+  const { usuario } = useAuth();
+  return <Navigate to={rotaInicial(usuario?.perfil)} replace />;
+}
 
 function App() {
   return (
@@ -32,7 +40,7 @@ function App() {
         {/* Demais rotas exigem senha definitiva (não provisória). */}
         <Route element={<SenhaDefinitivaRoute />}>
           <Route element={<Layout />}>
-            <Route index element={<Navigate to="/orcamentos" replace />} />
+            <Route index element={<RaizDoApp />} />
             <Route path="/proximas-acoes" element={<ProximasAcoes />} />
             <Route path="/orcamentos" element={<Orcamentos />} />
             <Route path="/orcamentos/novo" element={<OrcamentoNovo />} />

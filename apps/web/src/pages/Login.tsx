@@ -33,7 +33,9 @@ export function Login() {
     setEnviando(true);
     try {
       await login(email, senha);
-      navigate('/orcamentos', { replace: true });
+      // Vai para a raiz e deixa RaizDoApp escolher pelo perfil, em vez de
+      // repetir a regra aqui — é uma decisão só, num lugar só.
+      navigate('/', { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'USUARIO_INATIVO') {
         setErro('Usuário inativo. Procure o administrador.');

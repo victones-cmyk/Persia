@@ -9,6 +9,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faKey, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { useAuth, type Usuario } from '../hooks/useAuth';
 import { api, ApiError } from '../lib/api';
+import { rotaInicial } from '../lib/rotaInicial';
 import { senhaValida } from '../lib/validacao';
 import { CampoSenha } from '../components/CampoSenha';
 
@@ -42,7 +43,7 @@ export function TrocarSenha() {
         senha_nova: nova,
       });
       atualizarUsuario(r.usuario);
-      navigate('/orcamentos', { replace: true });
+      navigate(rotaInicial(r.usuario.perfil), { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'SENHA_ATUAL_INVALIDA') {
         setErro('Senha atual incorreta.');
