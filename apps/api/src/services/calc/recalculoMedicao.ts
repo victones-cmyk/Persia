@@ -16,6 +16,12 @@
 //   de medida" olhando só os dois números. Quem sabe é o vendedor, então o
 //   resultado sai como RASCUNHO para ele conferir folha a folha antes de enviar
 //   — e a tela avisa que o transpasse precisa ser refeito.
+//
+//   Isto é REGRA DE OPERAÇÃO confirmada pelo Victor, não limitação a contornar:
+//   quem insere o transpasse é o operador, quando for necessário. Se algum dia
+//   alguém sentir vontade de "melhorar" isto preservando o transpasse sozinho,
+//   é para não fazer — seria o app decidindo por conta própria uma medida que
+//   vira preço e vira corte de tecido.
 // - Não cria ambiente que só existe na medição. Quantas folhas aquele vão vira
 //   é decisão de venda, não dado de medição; inventar um número seria inventar
 //   um preço.
