@@ -36,6 +36,8 @@ interface Item {
   end?: boolean;
   badge?: number;
   badgeTitulo?: string;
+  /** Subitem: aparece recuado sob o item acima, como parte dele. */
+  sub?: boolean;
 }
 
 const ITENS_GERAIS: Item[] = [
@@ -45,6 +47,7 @@ const ITENS_GERAIS: Item[] = [
   { to: '/vendas', label: 'Vendas', icon: faFileInvoiceDollar, end: true },
   { to: '/producao', label: 'Produção', icon: faIndustry, end: true },
   { to: '/baixa-estoque', label: 'Baixa de Estoque', icon: faBoxOpen, end: true },
+  { to: '/baixa-estoque/relatorio', label: 'Relatório de baixas', icon: faClockRotateLeft, sub: true },
 ];
 
 const ITENS_ADMIN: Item[] = [
@@ -82,6 +85,9 @@ function LinkLateral({ item, onAvisoNaoSalvo }: { item: Item; onAvisoNaoSalvo: (
       end={item.end}
       className={({ isActive }) => (isActive ? 'sidebar-link active' : 'sidebar-link')}
       onClick={(e) => { e.preventDefault(); ir(item.to); }}
+      // Subitem recua e usa fonte menor: é o que faz "Relatório de baixas" ser
+      // lido como parte de "Baixa de Estoque" em vez de mais uma seção solta.
+      style={item.sub ? { paddingLeft: 34, fontSize: 'var(--text-xs)' } : undefined}
     >
       <FontAwesomeIcon icon={item.icon} fixedWidth />
       <span>{item.label}</span>
@@ -249,7 +255,10 @@ export function Sidebar() {
           style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
           aria-label="Navegação principal"
         >
-          {itensGerais.map((item) => (
+          {/* Subitens ficam fora da barra do celular: são sete abas num espaço que
+              já é apertado, e o subitem é consulta, não caminho principal. Continua
+              alcançável pela sidebar no desktop e pela URL. */}
+          {itensGerais.filter((item) => !item.sub).map((item) => (
             <AbaMobile key={item.to} item={item} onAvisoNaoSalvo={() => setAvisoAberto(true)} />
           ))}
           {itensExtras.length > 0 && (

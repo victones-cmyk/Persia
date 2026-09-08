@@ -1906,3 +1906,104 @@ export async function listarPedidosPendentesEstoque(req: Request, res: Response)
     })),
   });
 }
+
+/**
+ * GET /api/orcamentos/estoque-saida/relatorio — o que saiu do estoque, por dia.
+ *
+ * O GestãoClick não guarda o motivo de uma baixa: a API não expõe ajuste de
+ * estoque (o endpoint simplesmente não existe — o servidor deles responde que a
+ * classe do controlador não foi encontrada), então tudo o que a Pérsia consegue
+ * fazer lá é gravar o novo saldo no produto. O "para onde foi" existe só aqui,
+ * no log — e até agora não tinha tela.
+ *
+ * Por isso esta consulta lê o LogAcao em vez de uma tabela própria: os dados já
+ * estavam sendo gravados desde agosto, com saldo antes e depois de cada material
+ * e a lista de OS que os consumiram. Criar uma tabela nova agora começaria o
+ * histórico do zero e deixaria o que já existe inacessível.
+ */
+export async function relatorioSaidaEstoque(req: Request, res: Response): Promise<void> {
+  const sessao = req.session.usuario;
+  if (!sessao) throw new AppError(401, 'NAO_AUTENTICADO', 'Sessão expirada.');
+
+  const de = dataFiltro(req.query.de);
+  const ate = dataFiltro(req.query.ate);
+  const ateFim = ate ? new Date(ate.getTime() + 24 * 60 * 60 * 1000) : null;
+
+  const logs = await prisma.logAcao.findMany({
+    where: {
+      acao: { startsWith: 'saida_estoque' },
+      ...(de || ateFim ? { criado_em: { ...(de ? { gte: de } : {}), ...(ateFim ? { lt: ateFim } : {}) } } : {}),
+    },
+    orderBy: { criado_em: 'desc' },
+    take: 500,
+    include: { usuario: { select: { nome: true } } },
+  });
+
+  // Vendedor só vê as baixas dos próprios orçamentos. O dono é o do ORÇAMENTO,
+  // não quem apertou o botão: quando a baixa passar a rodar sozinha de
+  // madrugada, quem a executou deixa de identificar de quem é o pedido.
+  const ids = [...new Set(logs.map((l) => (l.detalhe as Record<string, unknown> | null)?.orcamento_id).filter((v): v is string => typeof v === 'string'))];
+  const orcamentos = ids.length > 0
+    ? await prisma.orcamento.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, usuario_id: true, nome_cliente: true, gc_pedido_codigo: true },
+    })
+    : [];
+  const porOrcamento = new Map(orcamentos.map((o) => [o.id, o]));
+
+  interface Material { produto_id: string; nome: string; estoque_antes: number; estoque_depois: number; quantidade: number }
+  interface Baixa {
+    criado_em: string; dia: string; pedido: string | null; cliente: string | null;
+    orcamento_id: string | null; por: string | null; destino: string | null;
+    ordens: string[]; materiais: Material[]; falhas: { produto_id: string; nome: string; erro: string }[];
+  }
+
+  const lista: Baixa[] = [];
+  for (const l of logs) {
+    const d = (l.detalhe ?? {}) as Record<string, unknown>;
+    const orcId = typeof d.orcamento_id === 'string' ? d.orcamento_id : null;
+    const orc = orcId ? porOrcamento.get(orcId) : undefined;
+    if (sessao.perfil !== 'admin' && orc?.usuario_id !== sessao.id) continue;
+
+    const sucesso = Array.isArray(d.sucesso) ? d.sucesso : [];
+    lista.push({
+      criado_em: l.criado_em.toISOString(),
+      dia: l.criado_em.toISOString().slice(0, 10),
+      pedido: typeof d.pedido === 'string' ? d.pedido : orc?.gc_pedido_codigo ?? null,
+      cliente: orc?.nome_cliente ?? null,
+      orcamento_id: orcId,
+      por: l.usuario?.nome ?? null,
+      destino: typeof d.observacao === 'string' ? d.observacao : null,
+      ordens: Array.isArray(d.ordens) ? d.ordens.map(String) : [],
+      materiais: sucesso.map((m) => {
+        const x = (m ?? {}) as Record<string, unknown>;
+        const antes = Number(x.estoque_antes);
+        const depois = Number(x.estoque_depois);
+        return {
+          produto_id: String(x.produto_id ?? ''),
+          nome: String(x.nome ?? ''),
+          estoque_antes: Number.isFinite(antes) ? antes : 0,
+          estoque_depois: Number.isFinite(depois) ? depois : 0,
+          // A quantidade consumida não é gravada: é a diferença entre os saldos.
+          quantidade: Number.isFinite(antes) && Number.isFinite(depois) ? roundHalfUp(antes - depois, 4) : 0,
+        };
+      }),
+      falhas: (Array.isArray(d.falhas) ? d.falhas : []).map((f) => {
+        const x = (f ?? {}) as Record<string, unknown>;
+        return { produto_id: String(x.produto_id ?? ''), nome: String(x.nome ?? ''), erro: String(x.erro ?? '') };
+      }),
+    });
+  }
+
+  // Agrupa por dia mantendo a ordem (mais recente primeiro).
+  const dias: { dia: string; baixas: Baixa[]; total_materiais: number; total_falhas: number }[] = [];
+  for (const b of lista) {
+    let grupo = dias.find((g) => g.dia === b.dia);
+    if (!grupo) { grupo = { dia: b.dia, baixas: [], total_materiais: 0, total_falhas: 0 }; dias.push(grupo); }
+    grupo.baixas.push(b);
+    grupo.total_materiais += b.materiais.length;
+    grupo.total_falhas += b.falhas.length;
+  }
+
+  res.json({ total: lista.length, dias });
+}

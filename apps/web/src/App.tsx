@@ -15,6 +15,7 @@ import { useAuth } from './hooks/useAuth';
 import { OrcamentoDetalhe } from './pages/OrcamentoDetalhe';
 import { Producao } from './pages/Producao';
 import { BaixaEstoque } from './pages/BaixaEstoque';
+import { RelatorioEstoque } from './pages/RelatorioEstoque';
 import { Markup } from './pages/Markup';
 import { AdminUsuarios } from './pages/admin/AdminUsuarios';
 import { AdminLog } from './pages/admin/AdminLog';
@@ -48,6 +49,7 @@ function App() {
             <Route path="/vendas" element={<Vendas />} />
             <Route path="/producao" element={<Producao />} />
             <Route path="/baixa-estoque" element={<BaixaEstoque />} />
+            <Route path="/baixa-estoque/relatorio" element={<RelatorioEstoque />} />
 
             <Route element={<AdminRoute />}>
               <Route path="/admin/usuarios" element={<AdminUsuarios />} />

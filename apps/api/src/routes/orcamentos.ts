@@ -32,6 +32,7 @@ import {
   listarPedidosSemOs,
   preverMedicaoProducao,
   preverSaidaEstoque,
+  relatorioSaidaEstoque,
   solicitarAbsorcaoMedicao,
 } from '../controllers/producaoController';
 import {
@@ -68,6 +69,7 @@ router.get('/agenda/vinculos', listarVinculosAgendaEmLote);
 router.get('/:id/producao', getProducaoOrcamento);
 router.get('/:id/ordens-producao/pdf', baixarPdfOrdensOrcamento);
 router.post('/:id/ordens-producao/imprimir-etiquetas', imprimirEtiquetasOrcamento);
+router.get('/estoque-saida/relatorio', relatorioSaidaEstoque);
 router.get('/:id/estoque-saida/preview', preverSaidaEstoque);
 router.post('/:id/estoque-saida', confirmarSaidaEstoque);
 router.get('/:id/agenda', listarVinculosAgenda);
