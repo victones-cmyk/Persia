@@ -30,11 +30,11 @@ const INTERVALO_MS = 15 * 60 * 1000;
  * antes, e para um deploy noturno — mas fecha bem antes de a loja abrir, que é
  * o que importa: depois disso já há gente lançando venda no PDV.
  */
-const HORA_LIMITE = 5;
+export const HORA_LIMITE = 5;
 
 let iniciado = false;
 
-function agoraSaoPaulo(d = new Date()): { data: string; hora: number } {
+export function agoraSaoPaulo(d = new Date()): { data: string; hora: number } {
   const partes = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
