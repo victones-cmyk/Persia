@@ -14,6 +14,7 @@ import { AppError } from '../middleware/errorHandler';
 import { compararMedicao, temDivergencia, type ItemDoOrcamento } from '../services/calc/comparacaoMedicao';
 import { recalcularComMedicao as recalcularItensComMedicao, type ItemComMedida } from '../services/calc/recalculoMedicao';
 import { consolidarAmbientesMedidos } from '../services/agenda/consolidacaoMedicao';
+import { itensDoOrcamento } from './producaoController';
 import { sugerirPareamento, normalizarPareamento, type Pareamento } from '../services/calc/pareamentoMedicao';
 import { contarInstalacoes, type ItemInstalavel } from '../services/agenda/quantidadesInstalacao';
 import { agendaApiHabilitada, criarOsNoAgenda, listarTecnicosDoAgenda, sugerirDatasDeVisita, AgendaApiError, type AmbienteParaAgenda } from '../services/agenda/agendaApi';
@@ -566,7 +567,12 @@ export async function medidasDosItensPelaAgenda(req: Request, res: Response): Pr
     return;
   }
 
-  const snapshots = Array.isArray(orc.itens_json) ? (orc.itens_json as unknown[]) : [];
+  // Passa por itensDoOrcamento em vez de ler itens_json direto: só o orçamento
+  // de PERSIANA guarda um array ali. Cortina e misto guardam um objeto, e o
+  // `Array.isArray` de antes devolvia lista vazia neles — o botão "usar as
+  // medidas do técnico" simplesmente não aparecia num orçamento de cortina.
+  // Também é esta função que define o `index` que o pareamento referencia.
+  const snapshots = itensDoOrcamento(orc) as unknown[];
   if (snapshots.length === 0) {
     res.json({ habilitado: true, medidas: [], so_na_medicao: [] });
     return;

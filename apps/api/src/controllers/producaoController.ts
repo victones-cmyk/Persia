@@ -355,7 +355,14 @@ function trilhoParaItem(t: TrilhoSnapshotProducao): ItemProducaoSnapshot {
   };
 }
 
-function itensDoOrcamento(orc: Pick<Orcamento, 'itens_json' | 'entrada_json' | 'tipo_produto'>): ItemProducaoSnapshot[] {
+/**
+ * Achata os itens vendidos numa lista indexada — persianas, depois cortinas,
+ * depois trilhos. É esta ordem que define o `index` que a Produção usa e que o
+ * pareamento da medição referencia, então quem precisar dos itens vendidos tem
+ * que passar por aqui em vez de ler itens_json direto: o formato muda conforme
+ * o tipo do orçamento (array em persiana, objeto em cortina e misto).
+ */
+export function itensDoOrcamento(orc: Pick<Orcamento, 'itens_json' | 'entrada_json' | 'tipo_produto'>): ItemProducaoSnapshot[] {
   const json = orc.itens_json as unknown;
   const entrada = orc.entrada_json as { itens?: ItemEntrada[]; cortinas?: CortinaEntrada[] } | null;
   if (Array.isArray(json)) {
