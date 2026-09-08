@@ -609,16 +609,22 @@ export async function medidasDosItensPelaAgenda(req: Request, res: Response): Pr
 
   // Devolve só os itens que de fato mudaram: preencher o resto seria reescrever
   // com o mesmo valor e sujar a conferência do que o técnico alterou.
-  const ambientesMudados = new Set(r.mudancas.map((m) => m.ambiente.trim().toLowerCase()));
-  const facesPorAmbiente = new Map(medidos.map((a) => [a.nome.trim().toLowerCase(), a.faces]));
+  //
+  // O critério é a MEDIDA ter mudado, e não o nome do ambiente bater. Antes eu
+  // cruzava o nome do vão medido com o nome da peça — que só coincidem quando o
+  // pareamento é por nome. Com pareamento explícito nunca coincidiam ("SALA (
+  // sanca 15 cm )" contra "SALA"), o filtro descartava tudo e o botão "usar as
+  // medidas do técnico" simplesmente não aparecia.
+  const facesPorPeca = new Map<number, number>();
+  for (const amb of medidos) {
+    for (const i of (amb.id ? pareamento[amb.id] : undefined) ?? []) {
+      facesPorPeca.set(i, amb.faces);
+    }
+  }
 
   const medidas = r.itens
     .map((it, index) => ({ index, it, original: paraCalculo[index] }))
-    .filter(({ it, original }) => {
-      const amb = (original.ambiente ?? '').trim().toLowerCase();
-      if (!ambientesMudados.has(amb)) return false;
-      return it.largura !== original.largura || it.altura !== original.altura;
-    })
+    .filter(({ it, original }) => it.largura !== original.largura || it.altura !== original.altura)
     .map(({ index, it, original }) => ({
       index,
       ambiente: original.ambiente,
@@ -626,7 +632,7 @@ export async function medidasDosItensPelaAgenda(req: Request, res: Response): Pr
       altura: it.altura,
       largura_vendida: original.largura,
       altura_vendida: original.altura,
-      faces_medidas: facesPorAmbiente.get((original.ambiente ?? '').trim().toLowerCase()) ?? 1,
+      faces_medidas: facesPorPeca.get(index) ?? 1,
     }));
 
   res.json({ habilitado: true, medidas, so_na_medicao: r.so_na_medicao });
