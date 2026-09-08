@@ -123,7 +123,15 @@ function ResumoCard({ label, valor }: { label: string; valor: number }) {
 }
 
 export function Producao() {
-  const [status, setStatus] = useState<'' | FiltroStatus>('criada');
+  // Abre na aba pedida pela URL, quando houver. A tela de Próximas Ações manda
+  // para cá dizendo QUAL fila o usuário clicou — sem isto, quem vinha de
+  // "pedidos sem OS" caía na aba de ordens criadas e via uma tela vazia,
+  // achando que a contagem estava errada. Aconteceu com uma vendedora que não
+  // tinha nenhuma ordem criada.
+  const [status, setStatus] = useState<'' | FiltroStatus>(() => {
+    const daUrl = new URLSearchParams(window.location.search).get('status');
+    return STATUS.some((s) => s.valor === daUrl) ? (daUrl as '' | FiltroStatus) : 'criada';
+  });
   const [tipo, setTipo] = useState<'' | TipoDocumento>('');
   const [busca, setBusca] = useState('');
   const [entregaDe, setEntregaDe] = useState('');

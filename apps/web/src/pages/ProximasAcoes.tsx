@@ -132,7 +132,10 @@ export function ProximasAcoes() {
       total: semOs,
       explicacao: 'A venda está fechada mas a fábrica ainda não recebeu o que produzir.',
       acaoLabel: 'Ir para Produção',
-      ir: () => navigate('/producao'),
+      // Diz a aba: a tela de Produção abre em "ordens criadas" por padrão, e cair
+      // ali vindo daqui mostra uma lista que não tem nada a ver com o número
+      // clicado — ou nada, para quem não tem ordens criadas.
+      ir: () => navigate('/producao?status=sem_os'),
     },
     {
       chave: 'etiquetas',
@@ -141,7 +144,7 @@ export function ProximasAcoes() {
       total: etiquetas,
       explicacao: 'Ordens geradas cuja etiqueta ainda não foi impressa. Sem ela a peça circula sem identificação.',
       acaoLabel: 'Ir para Produção',
-      ir: () => navigate('/producao'),
+      ir: () => navigate('/producao?status=criada'),
     },
     {
       chave: 'estoque',
