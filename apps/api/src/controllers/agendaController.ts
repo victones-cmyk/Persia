@@ -300,7 +300,11 @@ export async function agendarOsDoOrcamento(req: Request, res: Response): Promise
       cliente_numero: texto(b.cliente_numero, 20) || null,
       cliente_complemento: texto(b.cliente_complemento, 100) || null,
       vendedor: sessao.nome,
-      pedido_codigo: orc.gc_pedido_codigo ?? orc.gc_codigo ?? null,
+      // Cada número no seu campo. Antes o orçamento ia no campo do pedido
+      // quando não havia pedido ainda — que é o caso normal ao agendar uma
+      // medição, já que ela acontece antes da venda.
+      pedido_codigo: orc.gc_pedido_codigo ?? null,
+      orcamento_codigo: orc.gc_codigo ?? null,
       agendado_para: texto(b.agendado_para, 40) || null,
       observacoes: texto(b.observacoes, 2000) || null,
       ambientes,

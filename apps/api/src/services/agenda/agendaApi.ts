@@ -48,7 +48,12 @@ export interface NovaOsAgenda {
   cliente_numero?: string | null;
   cliente_complemento?: string | null;
   vendedor?: string | null;
+  /** Número do PEDIDO no GestãoClick. Só existe depois que a venda fecha. */
   pedido_codigo?: string | null;
+  /** Número do ORÇAMENTO. Existe desde o começo — é o que identifica a visita
+   *  marcada antes da venda. Campo separado de propósito: enviar o orçamento no
+   *  campo do pedido fazia o técnico ler "Pedido" para o que não era. */
+  orcamento_codigo?: string | null;
   agendado_para?: string | null;
   observacoes?: string | null;
   ambientes?: AmbienteParaAgenda[];
@@ -125,6 +130,7 @@ export function criarOsNoAgenda(os: NovaOsAgenda): Promise<OsCriada> {
       assigned_to: os.tecnico_id ?? null,
       period: os.periodo ?? '',
       order_number: os.pedido_codigo ?? '',
+      quote_number: os.orcamento_codigo ?? '',
       scheduled_at: os.agendado_para ?? '',
       notes: os.observacoes ?? '',
       ambientes: (os.ambientes ?? []).map((a) => ({
