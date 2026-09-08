@@ -36,6 +36,7 @@ export interface ItemComMedida {
 }
 
 export interface AmbienteMedido {
+  id?: string | null;
   nome: string;
   largura: number | null;
   altura: number | null;
@@ -57,6 +58,59 @@ export interface ResultadoRecalculo<T> {
   mudancas: MudancaAmbiente[];
   /** Ambientes medidos que o orçamento não tem — o vendedor decide se entram. */
   so_na_medicao: string[];
+}
+
+/** Recálculo quando as peças de cada ambiente já foram ditas por uma pessoa. */
+function recalcularPeloPareamento<T extends ItemComMedida>(
+  itens: T[],
+  ambientes: AmbienteMedido[],
+  pareamento: Record<string, number[]>,
+): ResultadoRecalculo<T> {
+  const saida = itens.map((it) => ({ ...it }));
+  const mudancas: MudancaAmbiente[] = [];
+  const semPeca: string[] = [];
+
+  for (const amb of ambientes) {
+    const indices = (amb.id ? pareamento[amb.id] : undefined) ?? [];
+    if (indices.length === 0) {
+      if (positivo(amb.largura) !== null) semPeca.push(amb.nome);
+      continue;
+    }
+
+    const largurasAntes = indices.map((i) => positivo(saida[i]?.largura) ?? 0);
+    const somaAntes = largurasAntes.reduce((s, v) => s + v, 0);
+    const alturasAntes = indices.map((i) => positivo(saida[i]?.altura));
+    const alturasUnicas = [...new Set(alturasAntes.filter((a): a is number => a !== null))];
+    const alturaAntes = alturasUnicas.length === 1 ? alturasUnicas[0] : null;
+
+    const novaLargura = positivo(amb.largura);
+    const novaAltura = positivo(amb.altura);
+    const mudaLargura = novaLargura !== null && Math.abs(roundHalfUp(novaLargura - somaAntes)) >= TOLERANCIA_M;
+    const mudaAltura = novaAltura !== null && alturaAntes !== null && Math.abs(roundHalfUp(novaAltura - alturaAntes)) >= TOLERANCIA_M;
+    if (!mudaLargura && !mudaAltura) continue;
+
+    const largurasDepois = mudaLargura ? redistribuirLargura(largurasAntes, novaLargura) : largurasAntes;
+    const aplicaLargura = mudaLargura && largurasDepois.length === indices.length;
+    if (!aplicaLargura && !mudaAltura) continue;
+
+    indices.forEach((idx, pos) => {
+      if (aplicaLargura) saida[idx] = { ...saida[idx], largura: largurasDepois[pos] };
+      if (mudaAltura) saida[idx] = { ...saida[idx], altura: novaAltura };
+    });
+
+    mudancas.push({
+      ambiente: amb.nome,
+      folhas: indices.length,
+      largura_antes: somaAntes > 0 ? roundHalfUp(somaAntes) : null,
+      largura_depois: aplicaLargura ? roundHalfUp(largurasDepois.reduce((s, v) => s + v, 0)) : null,
+      altura_antes: alturaAntes,
+      altura_depois: mudaAltura ? novaAltura : null,
+      larguras_antes: largurasAntes,
+      larguras_depois: aplicaLargura ? largurasDepois : largurasAntes,
+    });
+  }
+
+  return { itens: saida, mudancas, so_na_medicao: semPeca };
 }
 
 /** Mesma normalização da comparação: o pareamento é por nome digitado por gente. */
@@ -136,7 +190,18 @@ export function redistribuirLargura(atuais: number[], novoTotal: number): number
 export function recalcularComMedicao<T extends ItemComMedida>(
   itens: T[],
   ambientes: AmbienteMedido[],
+  /**
+   * Quais peças pertencem a cada ambiente medido, quando alguém já disse.
+   *
+   * Manda sobre o nome. Sem isto, o recálculo reagruparia por nome e desfaria
+   * a decisão que a pessoa tomou na tela de pareamento — pior que não ter
+   * pareamento nenhum, porque a tela mostraria uma coisa e a conta faria outra.
+   */
+  pareamento?: Record<string, number[]>,
 ): ResultadoRecalculo<T> {
+  if (pareamento && Object.keys(pareamento).length > 0) {
+    return recalcularPeloPareamento(itens, ambientes, pareamento);
+  }
   const medidos = new Map<string, AmbienteMedido>();
   for (const a of ambientes) {
     const nome = (a.nome ?? '').trim();

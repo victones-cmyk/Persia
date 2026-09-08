@@ -23,6 +23,8 @@ export interface ItemDoOrcamento {
 }
 
 export interface AmbienteMedido {
+  /** Id do ambiente no Agenda — chave do pareamento explícito. */
+  id?: string | null;
   nome: string;
   largura: number | null;
   altura: number | null;
@@ -86,7 +88,18 @@ const numero = (v: unknown): number | null => {
 export function compararMedicao(
   itens: ItemDoOrcamento[],
   ambientes: AmbienteMedido[],
+  /**
+   * Quais peças pertencem a cada ambiente medido, quando alguém já disse.
+   *
+   * Com pareamento, ele manda: o nome deixa de decidir. Sem, cai no pareamento
+   * por nome de antes — que funciona quando os dois lados escrevem igual e
+   * falha em silêncio quando não, que foi o que aconteceu no primeiro caso real.
+   */
+  pareamento?: Record<string, number[]>,
 ): ComparacaoAmbiente[] {
+  if (pareamento && Object.keys(pareamento).length > 0) {
+    return compararComPareamento(itens, ambientes, pareamento);
+  }
   // Agrupa as folhas do orçamento por ambiente.
   const porAmbiente = new Map<string, { nome: string; larguras: number[]; alturas: number[] }>();
   for (const it of itens) {
@@ -162,6 +175,88 @@ export function compararMedicao(
       diferenca_largura: null,
       diferenca_altura: null,
       situacao: 'so_na_medicao',
+    });
+  }
+
+  return saida;
+}
+
+/**
+ * Comparação quando o pareamento é explícito.
+ *
+ * Uma linha por ambiente medido, somando as peças ligadas a ele — é a mesma
+ * conta de antes, só que quem agrupou foi gente e não o nome. As peças que
+ * ninguém ligou aparecem no fim, para não sumirem da conferência.
+ */
+function compararComPareamento(
+  itens: ItemDoOrcamento[],
+  ambientes: AmbienteMedido[],
+  pareamento: Record<string, number[]>,
+): ComparacaoAmbiente[] {
+  const saida: ComparacaoAmbiente[] = [];
+  const usadas = new Set<number>();
+
+  for (const amb of ambientes) {
+    if (!amb.medido) continue;
+    const indices = (amb.id ? pareamento[amb.id] : undefined) ?? [];
+    const pecas = indices.map((i) => itens[i]).filter(Boolean);
+    for (const i of indices) usadas.add(i);
+
+    const larguras = pecas.map((p) => numero(p.largura)).filter((v): v is number => v !== null);
+    const alturas = pecas.map((p) => numero(p.altura)).filter((v): v is number => v !== null);
+    const larguraOrcada = larguras.length > 0 ? roundHalfUp(larguras.reduce((s, v) => s + v, 0)) : null;
+    const alturasUnicas = [...new Set(alturas)];
+    const alturaOrcada = alturasUnicas.length === 1 ? alturasUnicas[0] : null;
+
+    const dl = larguraOrcada !== null && amb.largura !== null ? roundHalfUp(amb.largura - larguraOrcada) : null;
+    const da = alturaOrcada !== null && amb.altura !== null ? roundHalfUp(amb.altura - alturaOrcada) : null;
+
+    let situacao: SituacaoAmbiente;
+    if (pecas.length === 0) situacao = 'so_na_medicao';
+    else if ((dl !== null && Math.abs(dl) >= TOLERANCIA_M) || (da !== null && Math.abs(da) >= TOLERANCIA_M)) situacao = 'difere';
+    else situacao = 'igual';
+
+    saida.push({
+      ambiente: amb.nome,
+      folhas: pecas.length,
+      larguras_orcadas: larguras,
+      faces_medidas: amb.faces ?? 1,
+      largura_orcada: larguraOrcada,
+      altura_orcada: alturaOrcada,
+      largura_medida: amb.largura,
+      altura_medida: amb.altura,
+      diferenca_largura: dl,
+      diferenca_altura: da,
+      situacao,
+    });
+  }
+
+  // Peça que ninguém ligou a nenhum ambiente: aparece sozinha, marcada.
+  const orfas = itens.map((it, i) => ({ it, i })).filter(({ i }) => !usadas.has(i));
+  const porNome = new Map<string, { nome: string; larguras: number[]; alturas: number[] }>();
+  for (const { it } of orfas) {
+    const nome = (it.ambiente ?? '').trim();
+    if (!nome) continue;
+    const g = porNome.get(normalizar(nome)) ?? { nome, larguras: [], alturas: [] };
+    const l = numero(it.largura); const a = numero(it.altura);
+    if (l !== null) g.larguras.push(l);
+    if (a !== null) g.alturas.push(a);
+    porNome.set(normalizar(nome), g);
+  }
+  for (const g of porNome.values()) {
+    const alturasUnicas = [...new Set(g.alturas)];
+    saida.push({
+      ambiente: g.nome,
+      folhas: Math.max(g.larguras.length, g.alturas.length),
+      larguras_orcadas: g.larguras,
+      faces_medidas: 0,
+      largura_orcada: g.larguras.length > 0 ? roundHalfUp(g.larguras.reduce((s, v) => s + v, 0)) : null,
+      altura_orcada: alturasUnicas.length === 1 ? alturasUnicas[0] : null,
+      largura_medida: null,
+      altura_medida: null,
+      diferenca_largura: null,
+      diferenca_altura: null,
+      situacao: 'so_no_orcamento',
     });
   }
 

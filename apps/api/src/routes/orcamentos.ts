@@ -40,6 +40,7 @@ import {
   agendarOsDoOrcamento,
   compararComMedicao,
   recalcularComMedicao,
+  salvarPareamentoMedicao,
   medidasDosItensPelaAgenda,
   listarAmbientesDoOrcamento,
   listarAmbientesAgenda,
@@ -74,6 +75,7 @@ router.get('/:id/agenda', listarVinculosAgenda);
 router.get('/:id/agenda/ambientes', listarAmbientesAgenda);
 router.get('/:id/agenda/comparacao', compararComMedicao);
 router.post('/:id/agenda/recalcular', recalcularComMedicao);
+router.put('/:id/agenda/pareamento', salvarPareamentoMedicao);
 router.get('/:id/agenda/medidas-itens', medidasDosItensPelaAgenda);
 router.get('/:id/ambientes', listarAmbientesDoOrcamento);
 router.get('/:id/agenda/buscar', buscarEventosAgenda);

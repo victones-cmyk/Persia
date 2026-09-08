@@ -4,11 +4,15 @@
 // Duas coisas MUITO diferentes acontecem com nomes repetidos, e confundi-las
 // perde medida:
 //
-// DENTRO DA MESMA OS, nome repetido são FACES do mesmo ambiente. É o que o
-// técnico faz de verdade: a OS 832 da produção tem "Sacada ( teto )" duas vezes,
-// 2,40 e 0,30 — a frente e a lateral. As duas existem, e o vão do ambiente é a
-// soma. Antes daqui, a segunda simplesmente sobrescrevia a primeira e a face de
-// 2,40 desaparecia da conferência sem ninguém notar.
+// DENTRO DA MESMA OS, cada entrada é um ambiente por si. Nome repetido NÃO é
+// motivo para somar: já custou caro. A OS 832 tem "Sacada ( teto )" duas vezes e
+// eram mesmo duas faces do mesmo vão; a OS 846 tem "SALA ( sanca 15 cm )" e
+// "Sala ( sanca 15 cm )" e eram duas janelas diferentes. O sinal é idêntico nos
+// dois casos, e somar gerou 7,05 m — medida que não existia na casa da cliente.
+//
+// Quem sabe agrupar é gente: o pareamento na tela liga vários ambientes medidos
+// à mesma peça quando for o caso. Aqui cada entrada sobrevive inteira, com o seu
+// id, e nada é inventado.
 //
 // ENTRE OS DIFERENTES, nome repetido é REMEDIÇÃO: mediu, voltou num retorno e
 // mediu de novo. Aí a última medição vale e a anterior não conta — somar seria
@@ -18,6 +22,8 @@ import { roundHalfUp } from '../calc/arredondamento';
 
 /** Um ambiente como veio de uma OS. */
 export interface AmbienteBruto {
+  /** Id cunhado no aparelho — a identidade estável do ambiente. */
+  id?: string | null;
   nome: string;
   largura: number | null;
   altura: number | null;
@@ -31,9 +37,11 @@ export interface EventoComAmbientes<T extends AmbienteBruto> {
 
 export interface AmbienteConsolidado extends AmbienteBruto {
   /**
-   * Quantas entradas do técnico formaram esta medida. Acima de 1 significa que
-   * o ambiente foi medido em partes — e aí a largura é a soma das faces, não um
-   * vão contínuo, o que muda como o recálculo deve ser lido.
+   * Sempre 1 hoje: cada entrada do técnico vira uma linha.
+   *
+   * Mantido porque a comparação e a tela já leem este campo para avisar sobre
+   * ambiente medido em partes — e o agrupamento agora vem do pareamento, que
+   * sabe quantos ambientes caem na mesma peça.
    */
   faces: number;
 }
@@ -54,28 +62,20 @@ const chave = (nome: string): string =>
  * e inventar uma seria pior que admitir que não dá para dizer — a comparação já
  * sabe lidar com altura nula.
  */
-function juntarFaces<T extends AmbienteBruto>(ambientes: T[]): Map<string, AmbienteConsolidado> {
-  const porNome = new Map<string, AmbienteConsolidado>();
+function porEvento<T extends AmbienteBruto>(ambientes: T[]): Map<string, AmbienteConsolidado> {
+  const saida = new Map<string, AmbienteConsolidado>();
   for (const amb of ambientes) {
     if (!amb.medido) continue;
     const nome = (amb.nome ?? '').trim();
     if (!nome) continue;
-    const k = chave(nome);
-    const atual = porNome.get(k);
-    if (!atual) {
-      porNome.set(k, { nome, largura: amb.largura, altura: amb.altura, medido: true, faces: 1 });
-      continue;
-    }
-    porNome.set(k, {
-      nome: atual.nome,
-      // Arredonda a cada soma: 2,40 + 0,30 em ponto flutuante dá 2,6999…
-      largura: roundHalfUp((atual.largura ?? 0) + (amb.largura ?? 0)),
-      altura: atual.altura !== null && amb.altura !== null && atual.altura === amb.altura ? atual.altura : null,
-      medido: true,
-      faces: atual.faces + 1,
-    });
+    // Chave é o ID, não o nome: dois ambientes do mesmo nome na mesma OS são
+    // duas coisas distintas até alguém dizer o contrário. Sem id (registro
+    // antigo), o nome serve de chave — aí o comportamento antigo permanece,
+    // porque não há como distinguir mesmo.
+    const k = amb.id?.trim() || `nome:${chave(nome)}`;
+    saida.set(k, { id: amb.id ?? null, nome, largura: amb.largura, altura: amb.altura, medido: true, faces: 1 });
   }
-  return porNome;
+  return saida;
 }
 
 /**
@@ -89,7 +89,20 @@ export function consolidarAmbientesMedidos<T extends AmbienteBruto>(
 ): AmbienteConsolidado[] {
   const final = new Map<string, AmbienteConsolidado>();
   for (const ev of eventos) {
-    for (const [k, amb] of juntarFaces(ev.ambientes)) final.set(k, amb);
+    const doEvento = porEvento(ev.ambientes);
+
+    // Remedição: o que esta OS mediu substitui o que uma OS ANTERIOR tinha
+    // medido com o mesmo nome. É por nome porque cada OS cunha ids próprios — o
+    // técnico que volta para remedir cria ambiente novo, não reusa o id.
+    //
+    // A limpeza acontece ANTES de inserir, e olhando só o que já estava lá: se
+    // rodasse entrada a entrada, dois ambientes de mesmo nome DESTA OS se
+    // apagariam um ao outro, que é justamente o que não pode acontecer.
+    const nomesDaOs = new Set([...doEvento.values()].map((a) => chave(a.nome)));
+    for (const [k, v] of final) {
+      if (nomesDaOs.has(chave(v.nome))) final.delete(k);
+    }
+    for (const [k, amb] of doEvento) final.set(k, amb);
   }
   return [...final.values()];
 }

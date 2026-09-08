@@ -166,3 +166,60 @@ describe('faces medidas', () => {
     expect(c[0].faces_medidas).toBe(0);
   });
 });
+
+describe('comparação com pareamento explícito', () => {
+  // O caso real: pedido 76127. Três cortinas todas chamadas "SALA" no orçamento,
+  // três vãos medidos com nomes que o técnico inventou na hora. Por nome, nada
+  // pareia. Com o pareamento, cada vão encontra a sua peça.
+  const itens = [
+    { ambiente: 'SALA', largura: 4.0, altura: 2.6 },
+    { ambiente: 'SALA', largura: 2.7, altura: 2.6 },
+    { ambiente: 'SALA', largura: 2.7, altura: 2.6 },
+  ];
+  const medidos = [
+    { id: 'a', nome: 'SALA ( sanca 15 cm )', largura: 4.4, altura: 2.64, medido: true },
+    { id: 'b', nome: 'Sala ( sanca 15 cm )', largura: 2.65, altura: 2.63, medido: true },
+    { id: 'c', nome: 'Sala Jantar ( sanca 15cm )', largura: 2.65, altura: 2.63, medido: true },
+  ];
+
+  it('compara cada vão com a sua peça, e não a soma de todas', () => {
+    const c = compararMedicao(itens, medidos, { a: [0], b: [1], c: [2] });
+    expect(c).toHaveLength(3);
+    expect(c[0]).toMatchObject({ largura_orcada: 4, largura_medida: 4.4, diferenca_largura: 0.4 });
+    expect(c[1]).toMatchObject({ largura_orcada: 2.7, largura_medida: 2.65 });
+    expect(c[2]).toMatchObject({ largura_orcada: 2.7, largura_medida: 2.65 });
+  });
+
+  it('soma as peças quando várias caem no mesmo vão (sacada em folhas)', () => {
+    const sacada = [
+      { ambiente: 'Sacada', largura: 1.24, altura: 2.27 },
+      { ambiente: 'Sacada', largura: 1.24, altura: 2.27 },
+      { ambiente: 'Sacada', largura: 1.06, altura: 2.27 },
+    ];
+    const c = compararMedicao(sacada, [{ id: 'x', nome: 'Sacada', largura: 3.6, altura: 2.27, medido: true }], { x: [0, 1, 2] });
+    expect(c[0].largura_orcada).toBe(3.54);
+    expect(c[0].folhas).toBe(3);
+  });
+
+  it('peça que ninguém ligou não some da conferência', () => {
+    const c = compararMedicao(itens, medidos, { a: [0] });
+    const orfas = c.filter((x) => x.situacao === 'so_no_orcamento');
+    expect(orfas).toHaveLength(1);
+    expect(orfas[0].folhas).toBe(2); // as duas peças que sobraram
+  });
+
+  it('ambiente medido sem peça ligada fica marcado como só na medição', () => {
+    const c = compararMedicao(itens, medidos, { a: [0], b: [1], c: [2] });
+    expect(c.every((x) => x.situacao !== 'so_na_medicao')).toBe(true);
+    const parcial = compararMedicao(itens, medidos, { a: [0, 1, 2] });
+    expect(parcial.filter((x) => x.situacao === 'so_na_medicao')).toHaveLength(2);
+  });
+
+  it('sem pareamento, mantém o comportamento por nome', () => {
+    const c = compararMedicao(
+      [{ ambiente: 'Sala', largura: 2, altura: 2 }],
+      [{ id: 'z', nome: 'Sala', largura: 2, altura: 2, medido: true }],
+    );
+    expect(c[0].situacao).toBe('igual');
+  });
+});

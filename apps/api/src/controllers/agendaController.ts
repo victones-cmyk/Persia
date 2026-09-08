@@ -14,6 +14,7 @@ import { AppError } from '../middleware/errorHandler';
 import { compararMedicao, temDivergencia, type ItemDoOrcamento } from '../services/calc/comparacaoMedicao';
 import { recalcularComMedicao as recalcularItensComMedicao, type ItemComMedida } from '../services/calc/recalculoMedicao';
 import { consolidarAmbientesMedidos } from '../services/agenda/consolidacaoMedicao';
+import { sugerirPareamento, normalizarPareamento, type Pareamento } from '../services/calc/pareamentoMedicao';
 import { contarInstalacoes, type ItemInstalavel } from '../services/agenda/quantidadesInstalacao';
 import { agendaApiHabilitada, criarOsNoAgenda, listarTecnicosDoAgenda, sugerirDatasDeVisita, AgendaApiError, type AmbienteParaAgenda } from '../services/agenda/agendaApi';
 import {
@@ -442,21 +443,108 @@ function itensDaEntrada(entradaJson: unknown): ItemDoOrcamento[] {
   ] as ItemDoOrcamento[];
 }
 
+/** Onde o pareamento fica guardado, junto do resto do histórico do orçamento. */
+function pareamentoGuardado(orc: { resposta_gc: unknown }): unknown {
+  const r = (orc.resposta_gc ?? null) as Record<string, unknown> | null;
+  return r?.medicao_pareamento ?? null;
+}
+
+/**
+ * Resolve o pareamento que vale agora: o gravado, se houver; senão um palpite
+ * pelo nome, para a tela não abrir vazia.
+ */
+function resolverPareamento(
+  orc: { resposta_gc: unknown },
+  medidos: { id?: string | null; nome: string }[],
+  pecas: { index: number; ambiente: string }[],
+): { pareamento: Pareamento; confirmado: boolean } {
+  const ids = medidos.map((m) => m.id).filter((v): v is string => typeof v === 'string' && v !== '');
+  const guardado = normalizarPareamento(pareamentoGuardado(orc), ids, pecas.length);
+  if (Object.keys(guardado).length > 0) return { pareamento: guardado, confirmado: true };
+  return { pareamento: sugerirPareamento(medidos, pecas), confirmado: false };
+}
+
 export async function compararComMedicao(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   if (!agendaHabilitado()) {
-    res.json({ habilitado: false, comparacao: [], divergente: false });
+    res.json({ habilitado: false, comparacao: [], divergente: false, ambientes: [], pecas: [], pareamento: {}, pareamento_confirmado: false });
     return;
   }
   const medidos = await ambientesMedidosDoOrcamento(orc.agenda_vinculos.map((v) => v.agenda_appointment_id));
+  const itens = itensDaEntrada(orc.entrada_json);
+  const pecas = itens.map((it, index) => ({
+    index,
+    ambiente: (it.ambiente ?? '').trim(),
+    largura: Number(it.largura) || null,
+    altura: Number(it.altura) || null,
+  }));
+
+  const { pareamento, confirmado } = resolverPareamento(orc, medidos, pecas);
 
   const comparacao = compararMedicao(
-    itensDaEntrada(orc.entrada_json),
+    itens,
     // `faces` vai junto: é o que avisa a tela quando a largura medida é a soma
     // de partes separadas em vez de um vão contínuo.
-    medidos.map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura, medido: a.medido, faces: a.faces })),
+    medidos.map((a) => ({ id: a.id, nome: a.nome, largura: a.largura, altura: a.altura, medido: a.medido, faces: a.faces })),
+    pareamento,
   );
-  res.json({ habilitado: true, comparacao, divergente: temDivergencia(comparacao) });
+
+  res.json({
+    habilitado: true,
+    comparacao,
+    divergente: temDivergencia(comparacao),
+    // O material para a tela de pareamento. Vai junto para ela não precisar de
+    // uma segunda requisição só para saber o que ligar com o quê.
+    ambientes: medidos.map((a) => ({ id: a.id, nome: a.nome, largura: a.largura, altura: a.altura })),
+    pecas,
+    pareamento,
+    pareamento_confirmado: confirmado,
+  });
+}
+
+/**
+ * PUT /api/orcamentos/:id/agenda/pareamento — grava quem é quem.
+ *
+ * Existe porque nome livre digitado em dois aparelhos não parea sozinho, e
+ * fingir que parea produz número errado com cara de certo. Aqui a escolha é de
+ * uma pessoa, fica gravada, e passa a mandar sobre o palpite por nome.
+ */
+export async function salvarPareamentoMedicao(req: Request, res: Response): Promise<void> {
+  exigirAgenda();
+  const sessao = req.session.usuario!;
+  const orc = await carregarOrcamentoAutorizado(req);
+
+  const medidos = await ambientesMedidosDoOrcamento(orc.agenda_vinculos.map((v) => v.agenda_appointment_id));
+  const itens = itensDaEntrada(orc.entrada_json);
+  const ids = medidos.map((m) => m.id).filter((v): v is string => typeof v === 'string' && v !== '');
+
+  const pareamento = normalizarPareamento(
+    (req.body as { pareamento?: unknown } | null)?.pareamento,
+    ids,
+    itens.length,
+  );
+
+  const respostaAtual = (orc.resposta_gc ?? {}) as Record<string, unknown>;
+  await prisma.orcamento.update({
+    where: { id: orc.id },
+    data: {
+      resposta_gc: { ...respostaAtual, medicao_pareamento: pareamento } as unknown as Prisma.InputJsonValue,
+    },
+  });
+  await prisma.logAcao.create({
+    data: {
+      usuario_id: sessao.id,
+      acao: 'medicao_pareamento_salvo',
+      detalhe: { orcamento_id: orc.id, ambientes: Object.keys(pareamento).length, pecas: Object.values(pareamento).flat().length },
+    },
+  });
+
+  const comparacao = compararMedicao(
+    itens,
+    medidos.map((a) => ({ id: a.id, nome: a.nome, largura: a.largura, altura: a.altura, medido: a.medido, faces: a.faces })),
+    pareamento,
+  );
+  res.json({ pareamento, comparacao, divergente: temDivergencia(comparacao) });
 }
 
 /**
@@ -502,9 +590,15 @@ export async function medidasDosItensPelaAgenda(req: Request, res: Response): Pr
     };
   });
 
+  const { pareamento } = resolverPareamento(
+    orc,
+    medidos,
+    paraCalculo.map((it, index) => ({ index, ambiente: String(it.ambiente ?? '').trim() })),
+  );
   const r = recalcularItensComMedicao(
     paraCalculo as ItemComMedida[],
-    medidos.map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura })),
+    medidos.map((a) => ({ id: a.id, nome: a.nome, largura: a.largura, altura: a.altura })),
+    pareamento,
   );
 
   // Devolve só os itens que de fato mudaram: preencher o resto seria reescrever
@@ -579,9 +673,19 @@ export async function recalcularComMedicao(req: Request, res: Response): Promise
   // cada item para a lista de onde veio.
   const itens = Array.isArray(entrada.itens) ? entrada.itens : [];
   const cortinas = Array.isArray(entrada.cortinas) ? entrada.cortinas : [];
+  const todosItens = [...itens, ...cortinas] as ItemComMedida[];
+  // O pareamento manda: sem ele aqui, o recálculo reagruparia por nome e
+  // desfaria a decisão tomada na tela — a conta faria uma coisa e a tela
+  // mostraria outra.
+  const { pareamento } = resolverPareamento(
+    orc,
+    medidos,
+    todosItens.map((it, index) => ({ index, ambiente: String(it.ambiente ?? '').trim() })),
+  );
   const resultado = recalcularItensComMedicao(
-    [...itens, ...cortinas] as ItemComMedida[],
-    medidos.map((a) => ({ nome: a.nome, largura: a.largura, altura: a.altura })),
+    todosItens,
+    medidos.map((a) => ({ id: a.id, nome: a.nome, largura: a.largura, altura: a.altura })),
+    pareamento,
   );
 
   if (resultado.mudancas.length === 0) {

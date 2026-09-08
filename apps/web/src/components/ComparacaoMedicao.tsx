@@ -12,13 +12,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faRulerCombined, faCheck, faTriangleExclamation, faCalculator, faSpinner } from '@fortawesome/free-solid-svg-icons';
+import { faRulerCombined, faCheck, faTriangleExclamation, faCalculator, faSpinner, faLink } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../lib/api';
 import { formatNum } from '../lib/formatacao';
 import { useToast } from '../hooks/useToast';
 import { ConfirmModal } from './ConfirmModal';
 
 type Situacao = 'igual' | 'difere' | 'so_no_orcamento' | 'so_na_medicao';
+
+interface AmbienteMedidoUI { id: string | null; nome: string; largura: number | null; altura: number | null }
+interface PecaUI { index: number; ambiente: string; largura: number | null; altura: number | null }
 
 interface ComparacaoAmbiente {
   ambiente: string;
@@ -69,16 +72,28 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
   const [carregando, setCarregando] = useState(true);
   const [confirmando, setConfirmando] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
+  const [ambientes, setAmbientes] = useState<AmbienteMedidoUI[]>([]);
+  const [pecas, setPecas] = useState<PecaUI[]>([]);
+  const [pareamento, setPareamento] = useState<Record<string, number[]>>({});
+  const [confirmado, setConfirmado] = useState(false);
+  const [pareando, setPareando] = useState(false);
+  const [salvandoPar, setSalvandoPar] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
     try {
-      const r = await api.get<{ habilitado: boolean; comparacao: ComparacaoAmbiente[]; divergente: boolean }>(
-        `/orcamentos/${orcamentoId}/agenda/comparacao`,
-      );
+      const r = await api.get<{
+        habilitado: boolean; comparacao: ComparacaoAmbiente[]; divergente: boolean;
+        ambientes: AmbienteMedidoUI[]; pecas: PecaUI[];
+        pareamento: Record<string, number[]>; pareamento_confirmado: boolean;
+      }>(`/orcamentos/${orcamentoId}/agenda/comparacao`);
       setHabilitado(r.habilitado);
       setLinhas(r.comparacao);
       setDivergente(r.divergente);
+      setAmbientes(r.ambientes ?? []);
+      setPecas(r.pecas ?? []);
+      setPareamento(r.pareamento ?? {});
+      setConfirmado(Boolean(r.pareamento_confirmado));
     } catch {
       setLinhas([]);
     } finally {
@@ -113,6 +128,36 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
     } finally {
       setRecalculando(false);
     }
+  }
+
+  async function salvarPareamento() {
+    setSalvandoPar(true);
+    try {
+      await api.put(`/orcamentos/${orcamentoId}/agenda/pareamento`, { pareamento });
+      showToast('success', 'Pareamento salvo', 'A comparação passa a usar estas ligações.');
+      setPareando(false);
+      await carregar();
+    } catch (e) {
+      showToast('error', 'Não deu para salvar', e instanceof ApiError ? e.message : 'Tente novamente.');
+    } finally {
+      setSalvandoPar(false);
+    }
+  }
+
+  /** Liga ou desliga uma peça de um ambiente. Peça pertence a um ambiente só. */
+  function alternarPeca(ambienteId: string, index: number) {
+    setPareamento((prev) => {
+      const novo: Record<string, number[]> = {};
+      // Tira a peça de onde estiver — sem isto ela seria contada duas vezes na
+      // comparação e recalculada duas vezes, com medidas diferentes.
+      for (const [id, lista] of Object.entries(prev)) {
+        const semEla = lista.filter((i) => i !== index);
+        if (semEla.length > 0) novo[id] = semEla;
+      }
+      const jaTinha = (prev[ambienteId] ?? []).includes(index);
+      if (!jaTinha) novo[ambienteId] = [...(novo[ambienteId] ?? []), index].sort((a, b) => a - b);
+      return novo;
+    });
   }
 
   // Sem medição vinculada não há o que comparar: o painel some em vez de ocupar
@@ -199,6 +244,80 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
           </tbody>
         </table>
       </div>
+
+      {/* Pareamento: quem é quem.
+          Nome livre digitado em dois aparelhos não parea sozinho — e fingir que
+          parea produz número errado com cara de certo. Aqui a ligação é feita
+          por gente e fica gravada. */}
+      {ambientes.length > 0 && (
+        <div style={{ padding: '0 12px 12px' }}>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs-ui text-neutral-600">
+              {confirmado
+                ? 'Ligações confirmadas por alguém.'
+                : 'Ligações sugeridas pelo nome — confira, porque nome digitado nos dois lados nem sempre bate.'}
+            </span>
+            <button className="btn btn-default btn-xs" onClick={() => setPareando((v) => !v)}>
+              <FontAwesomeIcon icon={faLink} /> {pareando ? 'Fechar' : confirmado ? 'Revisar ligações' : 'Conferir ligações'}
+            </button>
+          </div>
+
+          {pareando && (
+            <div className="mt-2" style={{ border: '1px solid var(--neutral-300)', borderRadius: 3, background: 'var(--neutral-0)', padding: 10 }}>
+              <div className="text-xs-ui text-neutral-600 mb-2">
+                Marque, em cada vão medido, as peças do orçamento que ele representa. Uma peça pertence a
+                um vão só.
+              </div>
+              {ambientes.map((a) => (
+                <div key={a.id ?? a.nome} className="mb-3">
+                  <div className="text-sm-ui font-bold text-neutral-800">
+                    {a.nome}
+                    <span className="font-mono tabular-nums text-neutral-600" style={{ fontWeight: 400 }}>
+                      {' '}— medido {medida(a.largura, a.altura)}
+                    </span>
+                  </div>
+                  {!a.id && (
+                    <div className="text-xs-ui text-neutral-500">
+                      Medição antiga, sem identificador — não dá para ligar. Peça ao técnico para remedir.
+                    </div>
+                  )}
+                  {a.id && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {pecas.map((p) => {
+                        const ligada = (pareamento[a.id!] ?? []).includes(p.index);
+                        const emOutro = !ligada && Object.entries(pareamento).some(([id, l]) => id !== a.id && l.includes(p.index));
+                        return (
+                          <button
+                            key={p.index}
+                            type="button"
+                            className="text-xs-ui"
+                            onClick={() => alternarPeca(a.id!, p.index)}
+                            title={emOutro ? 'Já ligada a outro vão — clicar move para cá' : undefined}
+                            style={{
+                              padding: '3px 8px',
+                              borderRadius: 3,
+                              border: '1px solid ' + (ligada ? 'var(--color-success)' : 'var(--neutral-300)'),
+                              background: ligada ? 'var(--color-success-subtle)' : emOutro ? 'var(--neutral-100)' : 'var(--neutral-0)',
+                              color: ligada ? 'var(--color-success-text)' : emOutro ? 'var(--neutral-500)' : 'var(--neutral-700)',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {p.ambiente || `Peça ${p.index + 1}`}{' '}
+                            <span className="font-mono tabular-nums">{medida(p.largura, p.altura)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <button className="btn btn-success btn-sm" disabled={salvandoPar} onClick={() => void salvarPareamento()}>
+                {salvandoPar ? <><FontAwesomeIcon icon={faSpinner} spin /> Salvando…</> : 'Salvar ligações'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {divergente && (
         <div style={{ padding: '4px 12px 12px' }}>
