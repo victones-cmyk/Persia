@@ -41,16 +41,13 @@ export function EstoqueSaidaModal({
   aberto,
   orcamentoId,
   onFechar,
-  onConfirmado,
 }: {
   aberto: boolean;
   orcamentoId: string | null;
   onFechar: () => void;
-  onConfirmado: () => void;
 }) {
   const [previa, setPrevia] = useState<PreviaSaidaEstoque | null>(null);
   const [carregando, setCarregando] = useState(false);
-  const [confirmando, setConfirmando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,20 +78,6 @@ export function EstoqueSaidaModal({
   // mostra a área de conteúdo vazia (nem spinner nem dados) até o próximo commit.
   const mostrandoCarregamento = carregando || (!previa && !erro);
 
-  async function confirmar() {
-    if (!orcamentoId) return;
-    setConfirmando(true);
-    setErro(null);
-    try {
-      await api.post(`/orcamentos/${orcamentoId}/estoque-saida`);
-      onConfirmado();
-      onFechar();
-    } catch (e) {
-      setErro(e instanceof ApiError ? e.message : 'Falha ao dar saída no estoque.');
-    } finally {
-      setConfirmando(false);
-    }
-  }
 
   // Portal pro <body>: este modal abre por cima de outro modal já aberto
   // (ProducaoModal). Renderizado como filho dele, position:fixed ainda fica
@@ -164,16 +147,16 @@ export function EstoqueSaidaModal({
               </div>
             )}
 
+            {/* Sem botão de confirmar: a baixa roda sozinha de madrugada e este
+                modal virou conferência do que vai sair. Um caminho manual
+                paralelo reabriria justamente a corrida que o horário evita —
+                ler o saldo enquanto alguém lança venda no PDV. */}
+            <div className="alert alert-info mt-3 text-sm-ui">
+              Estes materiais saem do estoque <strong>na próxima madrugada</strong>, automaticamente.
+              Não é preciso fazer nada — e o resultado fica no relatório de baixas.
+            </div>
             <div className="flex justify-end gap-2 mt-3">
-              <button type="button" className="btn btn-default" onClick={onFechar}>Cancelar</button>
-              <button
-                type="button"
-                className="btn btn-success"
-                disabled={confirmando || previa.materiais.length === 0}
-                onClick={() => void confirmar()}
-              >
-                {confirmando ? <><FontAwesomeIcon icon={faSpinner} spin /> Confirmando...</> : `Confirmar baixa (${previa.materiais.length} produto${previa.materiais.length === 1 ? '' : 's'})`}
-              </button>
+              <button type="button" className="btn btn-default" onClick={onFechar}>Fechar</button>
             </div>
           </>
         ) : null}

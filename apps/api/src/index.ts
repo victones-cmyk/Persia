@@ -28,6 +28,7 @@ import { carregarCalculadoras } from './services/calc/calculadoras';
 import { carregarCalculadorasCortina } from './services/calc/calculadorasCortina';
 import { carregarCalculadorasTrilhoEspecial } from './services/calc/calculadorasTrilhoEspecial';
 import { iniciarAgendadorCatalogoLocal } from './services/gc/catalogoLocal';
+import { iniciarAgendadorBaixaEstoque } from './services/producao/agendadorBaixaEstoque';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -179,6 +180,7 @@ const server = app.listen(env.PORT, () => {
   void carregarCalculadorasCortina(prisma);
   void carregarCalculadorasTrilhoEspecial(prisma);
   iniciarAgendadorCatalogoLocal();
+  iniciarAgendadorBaixaEstoque();
 });
 
 // Encerramento gracioso.

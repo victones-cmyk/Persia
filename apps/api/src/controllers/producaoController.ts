@@ -37,7 +37,7 @@ import {
   textoDestinoBaixa,
   type OrdemComItem,
 } from '../services/producao/materiaisEstoque';
-import { darSaidaEstoqueProduto, EstoqueVariacaoError, type BaixaEstoqueResultado } from '../services/gc/estoque';
+import { darSaidaEstoqueProduto, EstoqueVariacaoError, EstoqueProdutoInexistenteError, type BaixaEstoqueResultado } from '../services/gc/estoque';
 import { listarProdutos } from '../services/gc/catalogos';
 
 function temAcesso(orc: Pick<Orcamento, 'usuario_id'>, sessao: Express.Request['session']['usuario']): boolean {
@@ -1153,91 +1153,6 @@ export async function preverSaidaEstoque(req: Request, res: Response): Promise<v
   });
 }
 
-export async function confirmarSaidaEstoque(req: Request, res: Response): Promise<void> {
-  const orc = await carregarOrcamentoAutorizado(req);
-  const pendentes = ordensPendentesDeBaixa(orc);
-  const enriquecidas = await enriquecerComProdutoIdAtual(pendentes, await itensAtuaisParaEnriquecimento(orc));
-  const { elegiveis, excluidas } = classificarOrdensParaBaixa(enriquecidas);
-  if (elegiveis.length === 0) {
-    throw new AppError(409, 'SEM_MATERIAIS', 'Não há ordens de produção prontas para dar saída no estoque (falta OS gerada ou o mapeamento de produtos ainda não cobre os itens pendentes).');
-  }
-  const materiais = agregarMateriais(elegiveis);
-  const observacao = textoDestinoBaixa(pedidoCodigo(orc), orc.nome_cliente, elegiveis);
-
-  // Idempotência por MATERIAL (não por OS): se uma OS tem 10 materiais e só 1
-  // falha (ex.: produto com variação), os outros 9 já foram decrementados de
-  // verdade no GC — marcar só a OS inteira não bastava, porque quando TODA OS
-  // do pedido compartilha o mesmo material problemático nenhuma nunca fica
-  // "limpa" pra marcar, e cada nova tentativa decrementava os 9 de novo. Aqui
-  // cada produto só é decrementado uma vez por pedido, não importa quantas
-  // vezes o usuário tentar de novo.
-  let respostaAtual = respostaGcObj(orc);
-  const jaBaixados = materiaisBaixadosDoPedido(orc);
-
-  const sucesso: BaixaEstoqueResultado[] = [];
-  const falhas: { produto_id: string; nome: string; erro: string }[] = [];
-  for (const material of materiais) {
-    if (jaBaixados.has(material.produto_id)) continue; // já baixado numa tentativa anterior
-    try {
-      const resultado = await darSaidaEstoqueProduto(material.produto_id, material.quantidade);
-      sucesso.push(resultado);
-      jaBaixados.add(material.produto_id);
-      respostaAtual = { ...respostaAtual, estoque_materiais_baixados: [...jaBaixados] };
-      await prisma.orcamento.update({ where: { id: orc.id }, data: { resposta_gc: respostaAtual as unknown as Prisma.InputJsonValue } });
-    } catch (err) {
-      const erro = err instanceof EstoqueVariacaoError ? err.message : err instanceof Error ? err.message : String(err);
-      falhas.push({ produto_id: material.produto_id, nome: material.nome, erro });
-      // Sem `break`: um produto problemático (ex.: variação) não pode travar os
-      // demais, que dariam certo — cada material é independente no GC.
-    }
-  }
-
-  await prisma.logAcao.create({
-    data: {
-      usuario_id: req.session.usuario!.id,
-      acao: falhas.length > 0 ? 'saida_estoque_falha_parcial' : 'saida_estoque_gerada',
-      detalhe: {
-        orcamento_id: orc.id,
-        pedido: pedidoCodigo(orc),
-        observacao,
-        ordens: elegiveis.map((o) => o.codigo),
-        sucesso,
-        falhas,
-      } as unknown as Prisma.InputJsonValue,
-    },
-  });
-
-  // Marca a OS como baixada quando TODOS os materiais dela já estão no conjunto
-  // baixado (desta chamada ou de alguma anterior) — senão ela ficaria "baixada"
-  // com uma peça ainda pendente, escondendo o problema.
-  const ordensComSucesso = elegiveis.filter((o) => o.materiais.every((m) => jaBaixados.has(m.produto_id)));
-  if (ordensComSucesso.length > 0) {
-    await prisma.ordemProducao.updateMany({
-      where: { id: { in: ordensComSucesso.map((o) => o.id) } },
-      data: { baixado_estoque_em: new Date() },
-    });
-  }
-
-  if (falhas.length > 0) {
-    const baixadosAgora = sucesso.map((s) => `${s.nome} (${s.estoque_antes} → ${s.estoque_depois})`).join(', ');
-    // 409, não 502: isso é uma regra de negócio (produto com variação, etc.), não
-    // um problema de gateway — um 502 daqui faz o Cloudflare trocar a resposta
-    // pela página genérica dele, escondendo esta mensagem do usuário.
-    throw new AppError(
-      409,
-      'FALHA_BAIXA_ESTOQUE',
-      `Falha ao baixar ${falhas.length === 1 ? `"${falhas[0].nome}"` : `${falhas.length} produtos`} no GestãoClick: ${falhas.map((f) => f.erro).join(' | ')}. ${sucesso.length > 0 ? `Baixados agora, não serão baixados de novo: ${baixadosAgora}.` : jaBaixados.size > materiais.length - falhas.length ? 'Os demais produtos já tinham sido baixados numa tentativa anterior e não foram tocados de novo.' : 'Nenhum produto foi alterado ainda.'} As peças que usam o produto com falha continuam pendentes até a correção manual no GestãoClick.`,
-    );
-  }
-
-  res.json({
-    resultado: sucesso,
-    ordens_baixadas: ordensComSucesso.map((o) => o.codigo),
-    ordens_excluidas: excluidas,
-    observacao,
-  });
-}
-
 async function carregarOrdemAutorizada(req: Request) {
   const ordem = await prisma.ordemProducao.findUnique({
     where: { id: String(req.params.id) },
@@ -2006,4 +1921,163 @@ export async function relatorioSaidaEstoque(req: Request, res: Response): Promis
   }
 
   res.json({ total: lista.length, dias });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Baixa de estoque automática (diária)
+//
+// Passou a ser o ÚNICO caminho, por decisão do Victor. O motivo é a natureza da
+// baixa: o GestãoClick não tem ajuste de estoque na API, então a Pérsia lê o
+// saldo do produto, subtrai e grava o novo valor. Entre a leitura e a gravação,
+// qualquer venda no PDV ou entrada de compra é perdida — o saldo é sobrescrito.
+// Rodando de madrugada, quando ninguém está lançando nada, essa janela fica
+// sozinha. É melhor que detectar a colisão depois: evita em vez de avisar.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ResultadoBaixaOrcamento {
+  orcamento_id: string;
+  pedido: string;
+  sucesso: BaixaEstoqueResultado[];
+  /** Produtos que não existem mais no GC — nada a debitar, não é falha. */
+  ignorados: { produto_id: string; nome: string; motivo: string }[];
+  falhas: { produto_id: string; nome: string; erro: string }[];
+  ordens_concluidas: number;
+}
+
+/**
+ * Baixa o estoque de UM orçamento. Não lança: devolve o que aconteceu.
+ *
+ * A idempotência é por MATERIAL, não por OS: se uma OS tem 10 materiais e 1
+ * falha, os outros 9 já foram debitados de verdade no GC. Marcar só a OS
+ * inteira fazia cada nova tentativa debitar os 9 de novo.
+ */
+export async function baixarEstoqueDoOrcamento(
+  orcamentoId: string,
+  usuarioId: string,
+): Promise<ResultadoBaixaOrcamento> {
+  const orc = await prisma.orcamento.findUnique({
+    where: { id: orcamentoId },
+    include: { ordens_producao: true },
+  });
+  const vazio = { orcamento_id: orcamentoId, pedido: '', sucesso: [], ignorados: [], falhas: [], ordens_concluidas: 0 };
+  if (!orc) return vazio;
+
+  const pendentes = ordensPendentesDeBaixa(orc);
+  const enriquecidas = await enriquecerComProdutoIdAtual(pendentes, await itensAtuaisParaEnriquecimento(orc));
+  const { elegiveis } = classificarOrdensParaBaixa(enriquecidas);
+  if (elegiveis.length === 0) return { ...vazio, pedido: pedidoCodigo(orc) };
+
+  const materiais = agregarMateriais(elegiveis);
+  const observacao = textoDestinoBaixa(pedidoCodigo(orc), orc.nome_cliente, elegiveis);
+
+  let respostaAtual = respostaGcObj(orc);
+  const jaBaixados = materiaisBaixadosDoPedido(orc);
+  const sucesso: BaixaEstoqueResultado[] = [];
+  const ignorados: { produto_id: string; nome: string; motivo: string }[] = [];
+  const falhas: { produto_id: string; nome: string; erro: string }[] = [];
+
+  for (const material of materiais) {
+    if (jaBaixados.has(material.produto_id)) continue;
+    try {
+      sucesso.push(await darSaidaEstoqueProduto(material.produto_id, material.quantidade));
+      jaBaixados.add(material.produto_id);
+    } catch (err) {
+      if (err instanceof EstoqueProdutoInexistenteError) {
+        // Produto apagado no GC depois que a OS congelou o id. O material foi
+        // consumido, mas não há saldo em lugar nenhum para debitar — junto com o
+        // produto foi embora o estoque dele. Conta como resolvido, senão estas
+        // OS falhariam toda madrugada, para sempre.
+        ignorados.push({ produto_id: material.produto_id, nome: material.nome, motivo: err.message });
+        jaBaixados.add(material.produto_id);
+      } else {
+        falhas.push({
+          produto_id: material.produto_id,
+          nome: material.nome,
+          erro: err instanceof Error ? err.message : String(err),
+        });
+        // Sem `break`: material problemático não trava os que dariam certo.
+        continue;
+      }
+    }
+    respostaAtual = { ...respostaAtual, estoque_materiais_baixados: [...jaBaixados] };
+    await prisma.orcamento.update({
+      where: { id: orc.id },
+      data: { resposta_gc: respostaAtual as unknown as Prisma.InputJsonValue },
+    });
+  }
+
+  // Uma OS só é dada por baixada quando TODOS os materiais dela saíram (ou foram
+  // ignorados por não existirem mais). Senão ficaria "baixada" com peça pendente.
+  const ordensConcluidas = elegiveis.filter((o) => o.materiais.every((m) => jaBaixados.has(m.produto_id)));
+  if (ordensConcluidas.length > 0) {
+    await prisma.ordemProducao.updateMany({
+      where: { id: { in: ordensConcluidas.map((o) => o.id) } },
+      data: { baixado_estoque_em: new Date() },
+    });
+  }
+
+  if (sucesso.length > 0 || ignorados.length > 0 || falhas.length > 0) {
+    await prisma.logAcao.create({
+      data: {
+        usuario_id: usuarioId,
+        acao: falhas.length > 0 ? 'saida_estoque_falha_parcial' : 'saida_estoque_gerada',
+        detalhe: {
+          orcamento_id: orc.id,
+          pedido: pedidoCodigo(orc),
+          observacao,
+          automatica: true,
+          ordens: elegiveis.map((o) => o.codigo),
+          sucesso,
+          ignorados,
+          falhas,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  return {
+    orcamento_id: orc.id,
+    pedido: pedidoCodigo(orc),
+    sucesso,
+    ignorados,
+    falhas,
+    ordens_concluidas: ordensConcluidas.length,
+  };
+}
+
+/**
+ * Roda a baixa de todos os pedidos pendentes. Chamada pelo agendador diário.
+ *
+ * Sem filtro de data: o que está pendente está pendente. Recortar por "gerado
+ * até ontem" só adiaria o problema por 24h sem evitar nada — a OS de hoje vai
+ * estar igualmente pendente amanhã.
+ */
+export async function executarBaixaDiariaEstoque(usuarioId: string): Promise<{
+  pedidos: number; materiais: number; ignorados: number; falhas: number;
+}> {
+  const pendentes = await prisma.orcamento.findMany({
+    where: {
+      status: 'enviado',
+      ordens_producao: { some: { status: { not: 'cancelada' }, baixado_estoque_em: null } },
+    },
+    select: { id: true },
+    orderBy: { pedido_entrega_em: 'asc' },
+  });
+
+  let materiais = 0, ignorados = 0, falhas = 0, pedidos = 0;
+  for (const { id } of pendentes) {
+    try {
+      const r = await baixarEstoqueDoOrcamento(id, usuarioId);
+      if (r.sucesso.length > 0 || r.ignorados.length > 0 || r.falhas.length > 0) pedidos += 1;
+      materiais += r.sucesso.length;
+      ignorados += r.ignorados.length;
+      falhas += r.falhas.length;
+    } catch (e) {
+      // Um pedido problemático não pode derrubar a rotina inteira — os outros
+      // ainda precisam ser baixados esta noite.
+      falhas += 1;
+      console.error(`[baixa-estoque] falha inesperada no orçamento ${id}:`, e);
+    }
+  }
+  return { pedidos, materiais, ignorados, falhas };
 }

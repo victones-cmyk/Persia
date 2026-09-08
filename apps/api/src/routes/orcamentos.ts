@@ -18,7 +18,6 @@ import {
   baixarPdfOrdem,
   baixarPdfOrdensOrcamento,
   baixarZplEtiqueta,
-  confirmarSaidaEstoque,
   criarOrdensProducao,
   decidirAbsorcaoMedicao,
   desfazerOrdemProducao,
@@ -71,7 +70,6 @@ router.get('/:id/ordens-producao/pdf', baixarPdfOrdensOrcamento);
 router.post('/:id/ordens-producao/imprimir-etiquetas', imprimirEtiquetasOrcamento);
 router.get('/estoque-saida/relatorio', relatorioSaidaEstoque);
 router.get('/:id/estoque-saida/preview', preverSaidaEstoque);
-router.post('/:id/estoque-saida', confirmarSaidaEstoque);
 router.get('/:id/agenda', listarVinculosAgenda);
 router.get('/:id/agenda/ambientes', listarAmbientesAgenda);
 router.get('/:id/agenda/comparacao', compararComMedicao);

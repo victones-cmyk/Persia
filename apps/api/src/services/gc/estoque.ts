@@ -13,7 +13,7 @@
 // manda só `{ ativo: '0' }` e funciona, apesar da doc listar nome/codigo_interno/
 // valor_custo como "obrigatórios". Seguimos o mesmo padrão aqui.
 
-import { gcRequest, type GcEnvelope } from './client';
+import { gcRequest, GcError, type GcEnvelope } from './client';
 import { roundHalfUp } from '../calc/arredondamento';
 
 interface ProdutoGcBruto {
@@ -38,7 +38,7 @@ export async function buscarEstoqueProduto(produtoId: string): Promise<EstoquePr
     url: `/api/produtos/${encodeURIComponent(produtoId)}`,
   });
   const p = env.data;
-  if (!p) throw new Error(`Produto ${produtoId} não encontrado no GestãoClick.`);
+  if (!p) throw new EstoqueProdutoInexistenteError(produtoId);
   return {
     id: p.id,
     nome: p.nome,
@@ -69,6 +69,23 @@ export interface BaixaEstoqueResultado {
   estoque_depois: number;
 }
 
+/**
+ * O produto não existe mais no GestãoClick.
+ *
+ * Acontece de verdade: um material duplicado foi apagado lá depois que as OS já
+ * tinham congelado o id dele no snapshot — 20 OS ficaram apontando para um
+ * produto morto. Não é erro para tentar de novo amanhã: o produto não volta, e
+ * junto com ele foi embora o saldo que se debitaria. Quem chama trata como
+ * "pulado" e segue, senão essas OS ficariam falhando toda madrugada, para
+ * sempre.
+ */
+export class EstoqueProdutoInexistenteError extends Error {
+  constructor(public produtoId: string, nome?: string) {
+    super(`${nome ? `"${nome}"` : `Produto ${produtoId}`} não existe mais no GestãoClick — nada a debitar.`);
+    this.name = 'EstoqueProdutoInexistenteError';
+  }
+}
+
 export class EstoqueVariacaoError extends Error {
   constructor(public produtoId: string, nome: string) {
     super(`"${nome}" tem variações cadastradas no GestãoClick — a baixa automática não suporta estoque por variação. Ajuste manualmente.`);
@@ -79,7 +96,15 @@ export class EstoqueVariacaoError extends Error {
 /** Decrementa `quantidade` do estoque do produto e devolve antes/depois. */
 export async function darSaidaEstoqueProduto(produtoId: string, quantidade: number): Promise<BaixaEstoqueResultado> {
   return comLockProduto(produtoId, async () => {
-    const atual = await buscarEstoqueProduto(produtoId);
+    let atual: EstoqueProduto;
+    try {
+      atual = await buscarEstoqueProduto(produtoId);
+    } catch (e) {
+      // 404 do GC = produto apagado. Traduz para o erro específico, que quem
+      // chama sabe distinguir de uma falha passageira.
+      if (e instanceof GcError && e.status === 404) throw new EstoqueProdutoInexistenteError(produtoId);
+      throw e;
+    }
     if (atual.possuiVariacao) {
       throw new EstoqueVariacaoError(produtoId, atual.nome);
     }

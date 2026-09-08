@@ -148,8 +148,8 @@ export function BaixaEstoque() {
                   <Td className="font-mono text-sm-ui">{p.ordens_pendentes} de {p.total_ordens}</Td>
                   <Td className="table-actions">
                     <div className="table-actions-row" style={{ flexWrap: 'wrap', minWidth: 0 }}>
-                      <button type="button" className="btn btn-warning btn-xs" onClick={() => setBaixandoId(p.id)} title="Dar saída no estoque deste pedido">
-                        <FontAwesomeIcon icon={faBoxOpen} /> Dar saída
+                      <button type="button" className="btn btn-default btn-xs" onClick={() => setBaixandoId(p.id)} title="Ver os materiais que sairão na próxima madrugada">
+                        <FontAwesomeIcon icon={faBoxOpen} /> Ver materiais
                       </button>
                       <Link className="btn btn-default btn-xs" to={`/orcamentos/${p.id}`} title="Abrir orçamento">
                         Orçamento
@@ -167,7 +167,6 @@ export function BaixaEstoque() {
         aberto={baixandoId !== null}
         orcamentoId={baixandoId}
         onFechar={() => setBaixandoId(null)}
-        onConfirmado={() => void carregar()}
       />
     </div>
   );

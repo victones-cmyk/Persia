@@ -1049,6 +1049,7 @@ export function ProducaoModal({
 
         <div className="mb-4" style={{ border: '1px solid #dee2e6', borderRadius: 3, padding: 12, background: '#f8f9fa' }}>
           <div className="text-sm-ui font-bold mb-2">Baixa de estoque</div>
+          <div className="text-xs-ui text-neutral-600 mb-2">Sai sozinha na próxima madrugada — não é preciso fazer nada aqui.</div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -1057,7 +1058,7 @@ export function ProducaoModal({
               onClick={() => setEstoqueModalAberto(true)}
               title="Baixar no GestãoClick os materiais usados nas OS deste pedido"
             >
-              <FontAwesomeIcon icon={faBoxOpen} /> Dar saída no estoque ({pendentesEstoque})
+              <FontAwesomeIcon icon={faBoxOpen} /> Ver o que sai do estoque ({pendentesEstoque})
             </button>
             {pendentesEstoque === 0 && (dados?.itens.some(({ ordem }) => ordem) ?? false) && (
               <span className="text-xs-ui text-neutral-500">Nenhuma OS pendente de baixa.</span>
@@ -1391,10 +1392,6 @@ export function ProducaoModal({
         aberto={estoqueModalAberto}
         orcamentoId={orcamento.id}
         onFechar={() => setEstoqueModalAberto(false)}
-        onConfirmado={() => {
-          setSucesso('Saída de estoque registrada no GestãoClick.');
-          void carregar();
-        }}
       />
     </div>
   );

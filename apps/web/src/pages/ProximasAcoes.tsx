@@ -20,7 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faRulerCombined, faCircleCheck, faFileInvoiceDollar, faIndustry,
-  faTag, faBoxOpen, faRotateRight, faArrowRight, faSpinner,
+  faTag, faBoxOpen, faRotateRight, faArrowRight, faSpinner, faTriangleExclamation,
 } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import { api } from '../lib/api';
@@ -57,6 +57,7 @@ export function ProximasAcoes() {
   // piso, não o total — e dizer "500" como se fosse exato seria mentir.
   const [etiquetasNoLimite, setEtiquetasNoLimite] = useState(false);
   const [estoque, setEstoque] = useState(0);
+  const [falhasBaixa, setFalhasBaixa] = useState(0);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -75,6 +76,13 @@ export function ProximasAcoes() {
       pega<{ ordens: unknown[] }>('/orcamentos/ordens-producao?status=criada'),
       pega<{ total: number }>('/orcamentos/pendentes-estoque'),
     ]);
+
+    // Falhas da última madrugada: reusa o relatório em vez de criar um endpoint
+    // de contagem. Um dia de dados é pequeno, e assim a contagem e o detalhe que
+    // o usuário vai abrir vêm exatamente da mesma consulta.
+    const ontem = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const rel = await pega<{ dias: { total_falhas: number }[] }>(`/orcamentos/estoque-saida/relatorio?de=${ontem}`);
+    setFalhasBaixa((rel?.dias ?? []).reduce((n, d) => n + (d.total_falhas ?? 0), 0));
 
     setVisitas(numero(v?.total));
     setAprovacoes(numero(a?.total));
@@ -151,9 +159,21 @@ export function ProximasAcoes() {
       titulo: 'Baixa de estoque pendente',
       icone: faBoxOpen,
       total: estoque,
-      explicacao: 'Material já usado na produção que continua contado como disponível no GestãoClick.',
-      acaoLabel: 'Ir para Baixa de Estoque',
+      // A baixa virou automática, então "pendente" aqui não é tarefa de ninguém:
+      // é o que a madrugada vai resolver. Dizer isso evita alguém procurar um
+      // botão que não existe mais.
+      explicacao: 'Material já usado na produção que ainda consta como disponível no GestãoClick. Sai sozinho na próxima madrugada — nada a fazer, é só acompanhar.',
+      acaoLabel: 'Ver o que está pendente',
       ir: () => navigate('/baixa-estoque'),
+    },
+    {
+      chave: 'falhas_baixa',
+      titulo: 'Falharam na baixa automática',
+      icone: faTriangleExclamation,
+      total: falhasBaixa,
+      explicacao: 'Materiais que a rotina da madrugada não conseguiu baixar no GestãoClick. Ficam pendentes e são tentados de novo na próxima noite — mas se o motivo não mudar, vão falhar de novo.',
+      acaoLabel: 'Ver no relatório de baixas',
+      ir: () => navigate('/baixa-estoque/relatorio'),
     },
   ];
 
