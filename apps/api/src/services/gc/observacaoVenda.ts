@@ -20,6 +20,30 @@
 
 import { gcRequest } from './client';
 
+/**
+ * Descobre o id interno da venda pelo número que aparece no GestãoClick.
+ *
+ * Necessário porque a maioria das vendas da Pérsia não tem esse id guardado:
+ * quando o vendedor vincula a venda digitando o número (o caminho comum — 121
+ * de 176 vendas hoje), a Pérsia grava só o código. E o PUT precisa do id na
+ * URL.
+ */
+export async function idDaVendaPorCodigo(codigo: string): Promise<string | null> {
+  const limpo = (codigo || '').trim();
+  if (!limpo) return null;
+  try {
+    const r = await gcRequest<{ data?: unknown }>({ method: 'GET', url: `/vendas?codigo=${encodeURIComponent(limpo)}` });
+    const arr = Array.isArray(r?.data) ? r.data : [];
+    // Confere o código do que voltou: a busca do GC é por aproximação, e anotar
+    // na venda errada seria pior que não anotar.
+    const achada = arr.find((v) => String((v as Record<string, unknown>)?.codigo ?? '').trim() === limpo) as Record<string, unknown> | undefined;
+    const id = achada?.id;
+    return id ? String(id) : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface ResultadoObservacao {
   ok: boolean;
   /** Por que não deu, quando não deu. */

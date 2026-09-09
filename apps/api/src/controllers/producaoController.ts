@@ -9,7 +9,7 @@ import { roundHalfUp } from '../services/calc/arredondamento';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
 import { criarProduto, deletarProduto, inativarProduto } from '../services/gc/produtos';
 import { relatorioPedidoOriginal, relatorioPedidoDiferenca, type ItemConferido } from '../services/gc/relatorioMedicao';
-import { gravarObservacaoInternaVenda } from '../services/gc/observacaoVenda';
+import { gravarObservacaoInternaVenda, idDaVendaPorCodigo } from '../services/gc/observacaoVenda';
 import { criarVendaComPayload } from '../services/gc/vendas';
 import { resolverLoja } from '../lib/resolverLoja';
 import {
@@ -945,15 +945,41 @@ async function anotarMedicaoNoPedidoOriginal(
   desfecho: { pedido_diferenca: string } | { absorvida: true; valor: number },
   usuarioId: string,
 ): Promise<void> {
-  if (!orc.gc_pedido_id) return;
-  const r = await gravarObservacaoInternaVenda(orc.gc_pedido_id, relatorioPedidoOriginal(dados, desfecho));
-  await prisma.logAcao.create({
-    data: {
-      usuario_id: usuarioId,
-      acao: r.ok ? 'medicao_anotada_no_pedido_gc' : 'medicao_anotada_no_pedido_gc_falhou',
-      detalhe: { orcamento_id: orc.id, gc_pedido_id: orc.gc_pedido_id, ...(r.ok ? {} : { motivo: r.motivo }) },
-    },
-  }).catch(() => { /* nem o log derruba a operação principal */ });
+  const registrar = (acao: string, detalhe: Record<string, unknown>) =>
+    prisma.logAcao.create({ data: { usuario_id: usuarioId, acao, detalhe: { orcamento_id: orc.id, ...detalhe } } })
+      .catch(() => { /* nem o log derruba a operação principal */ });
+
+  // O PUT precisa do id interno do GC, e a maioria das vendas não tem ele
+  // guardado: quando o vendedor vincula digitando o número, a Pérsia grava só o
+  // código. Antes isto era um `return` mudo — a anotação simplesmente não
+  // acontecia e nada no log dizia por quê. Agora busca pelo número.
+  let vendaId = orc.gc_pedido_id;
+  const codigo = (orc.gc_pedido_codigo ?? '').trim();
+  if (!vendaId && codigo) {
+    vendaId = await idDaVendaPorCodigo(codigo);
+    // Guarda para as próximas: descobrir uma vez basta.
+    if (vendaId) {
+      await prisma.orcamento.update({ where: { id: orc.id }, data: { gc_pedido_id: vendaId } })
+        .catch(() => { /* achar já valeu; guardar é conveniência */ });
+    }
+  }
+
+  if (!vendaId) {
+    await registrar('medicao_anotada_no_pedido_gc_falhou', {
+      motivo: codigo
+        ? `não encontrei a venda ${codigo} no GestãoClick para anotar`
+        : 'orçamento sem número de pedido — nada a anotar',
+      gc_pedido_codigo: codigo || null,
+    });
+    return;
+  }
+
+  const r = await gravarObservacaoInternaVenda(vendaId, relatorioPedidoOriginal(dados, desfecho));
+  await registrar(r.ok ? 'medicao_anotada_no_pedido_gc' : 'medicao_anotada_no_pedido_gc_falhou', {
+    gc_pedido_id: vendaId,
+    gc_pedido_codigo: codigo || null,
+    ...(r.ok ? {} : { motivo: r.motivo }),
+  });
 }
 
 export async function gerarVendaAjusteMedicao(req: Request, res: Response): Promise<void> {
