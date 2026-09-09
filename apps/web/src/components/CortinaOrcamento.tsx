@@ -10,6 +10,7 @@ import { faPlus, faSpinner, faPaperPlane, faFloppyDisk } from '@fortawesome/free
 import { api, ApiError } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
 import { CortinaCard, type CortinaResumo, type CortinaInicial } from './CortinaCard';
+import { AvisoAmbientesRepetidos } from './AvisoAmbientesRepetidos';
 import { ConfirmModal } from './ConfirmModal';
 import { formatBRL } from '../lib/formatacao';
 import { useToast } from '../hooks/useToast';
@@ -241,6 +242,10 @@ export function CortinaOrcamento({
   // Coluna de cards (reutilizada no modo normal e no embutido/misto).
   const colCortinas = (
     <div className="space-y-4">
+      {/* Mesmo aviso da persiana: nome de ambiente repetido pode ser um vão em
+          folhas (legítimo) ou vãos diferentes com o mesmo nome (que quebra o
+          casamento com a medição). Quem sabe é quem falou com o cliente. */}
+      <AvisoAmbientesRepetidos nomes={ids.map((id) => resumos[id]?.payload?.ambiente ?? '')} />
       {ids.map((id, i) => (
         <CortinaCard
           key={id}

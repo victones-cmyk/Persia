@@ -12,6 +12,7 @@ import { api, ApiError } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
 import { roundHalfUp, formatBRL, formatNum, formatQtd } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
+import { AvisoAmbientesRepetidos } from './AvisoAmbientesRepetidos';
 import { MedidaInput } from './MedidaInput';
 import { ConfirmModal } from './ConfirmModal';
 import {
@@ -523,6 +524,12 @@ export function PersianaForm({
   return (
     <div className="card p-4">
       <h4 className="text-lg-ui font-medium mb-4">Dados da Persiana</h4>
+
+      {/* Nome de ambiente repetido não é erro — a sacada em folhas é isso. Mas
+          quando são vãos DIFERENTES com o mesmo nome, a medição do técnico não
+          casa com a peça certa e alguém liga uma por uma depois. Avisa e não
+          impede: quem sabe se é um vão ou três é quem falou com o cliente. */}
+      <AvisoAmbientesRepetidos nomes={itens.map((it) => it.ambiente ?? '')} />
 
       <div className="space-y-4">
         {/* Itens (janelas) — cada um com seu Produto Sob Medida + Instalação */}

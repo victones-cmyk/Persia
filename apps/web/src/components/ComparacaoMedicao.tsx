@@ -330,7 +330,7 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
               <FontAwesomeIcon icon={faTriangleExclamation} className="text-neutral-400" />{' '}
               Este orçamento já virou venda, então não dá para recalculá-lo aqui — sairia uma segunda venda
               no GestãoClick com a primeira ainda de pé. As medidas do técnico continuam disponíveis: abra o
-              pedido em <strong>Produção</strong> e use o botão <strong>"Usar as medidas do técnico"</strong>,
+              pedido em <strong>Produção</strong> e use o botão <strong>"Trazer as medidas para a produção"</strong>,
               ao lado de "Recalcular diferença".
             </div>
           )}
@@ -342,7 +342,7 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
             >
               {recalculando
                 ? <><FontAwesomeIcon icon={faSpinner} spin /> Recalculando…</>
-                : <><FontAwesomeIcon icon={faCalculator} /> Recalcular com as medidas do técnico</>}
+                : <><FontAwesomeIcon icon={faCalculator} /> Refazer o orçamento com estas medidas</>}
             </button>
           )}
         </div>
@@ -350,7 +350,7 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
 
       <ConfirmModal
         aberto={confirmando}
-        titulo="Recalcular com as medidas do técnico"
+        titulo="Refazer o orçamento com as medidas do técnico"
         mensagem={
           <>
             <p>

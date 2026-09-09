@@ -1195,9 +1195,9 @@ export function ProducaoModal({
                 className="btn btn-default"
                 disabled={orcamento.status !== 'enviado' || puxandoAgenda || !dados}
                 onClick={() => void puxarMedidasDaAgenda()}
-                title="Preenche as medidas finais com o que o técnico mediu na OS vinculada"
+                title="Preenche a coluna Medida final com o que o técnico mediu na OS vinculada"
               >
-                {puxandoAgenda ? 'Puxando...' : 'Usar as medidas do técnico'}
+                {puxandoAgenda ? 'Trazendo...' : 'Trazer as medidas para a produção'}
               </button>
             )}
             <button type="button" className="btn btn-default" disabled={orcamento.status !== 'enviado' || recalculando || !dados} onClick={() => void recalcularMedicao()}>

@@ -128,10 +128,11 @@ export function Producao() {
   // "pedidos sem OS" caía na aba de ordens criadas e via uma tela vazia,
   // achando que a contagem estava errada. Aconteceu com uma vendedora que não
   // tinha nenhuma ordem criada.
-  const [status, setStatus] = useState<'' | FiltroStatus>(() => {
-    const daUrl = new URLSearchParams(window.location.search).get('status');
-    return STATUS.some((s) => s.valor === daUrl) ? (daUrl as '' | FiltroStatus) : 'criada';
-  });
+  const statusDaUrl = (() => {
+    const v = new URLSearchParams(window.location.search).get('status');
+    return STATUS.some((s) => s.valor === v) ? (v as '' | FiltroStatus) : null;
+  })();
+  const [status, setStatus] = useState<'' | FiltroStatus>(statusDaUrl ?? 'criada');
   const [tipo, setTipo] = useState<'' | TipoDocumento>('');
   const [busca, setBusca] = useState('');
   const [entregaDe, setEntregaDe] = useState('');
@@ -147,6 +148,39 @@ export function Producao() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const modoSemOs = status === 'sem_os';
+
+  // Escolhe a aba inicial pela fila que TEM trabalho.
+  //
+  // A tela abria fixa em "Pendentes" (ordens geradas e não impressas). Só que
+  // hoje, na produção, as 464 ordens estão todas como impressa e nenhuma como
+  // criada — ou seja, ela abria vazia para todo mundo, todas as vezes. Tela que
+  // abre vazia ensina a pessoa a não confiar nela, e foi o que aconteceu: o
+  // Victor concluiu que o admin não enxergava as vendas dos outros.
+  //
+  // Só decide quando a URL não mandou aba nenhuma — quem veio de Próximas Ações
+  // clicou numa fila específica e essa escolha manda.
+  useEffect(() => {
+    if (statusDaUrl) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const [ord, semOs] = await Promise.all([
+          api.get<{ resumo: ResumoProducao }>('/orcamentos/ordens-producao?status=criada'),
+          api.get<{ total: number }>('/orcamentos/pedidos-sem-os'),
+        ]);
+        if (!vivo) return;
+        // Etiqueta pendente é o trabalho mais imediato; pedido sem OS vem em
+        // seguida. Se não há nem um nem outro, fica em "Pendentes" mesmo — aí a
+        // tela vazia é a resposta certa, e não um filtro mal escolhido.
+        if ((ord.resumo?.total ?? 0) === 0 && (semOs.total ?? 0) > 0) setStatus('sem_os');
+      } catch {
+        /* escolher a aba é conveniência: falhar aqui não pode travar a tela */
+      }
+    })();
+    return () => { vivo = false; };
+    // Só na montagem: trocar de aba depois é escolha do usuário.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
