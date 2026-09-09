@@ -390,7 +390,6 @@ input[type='number'] {
     white-space: nowrap;
   }
   .badge-secondary { background: var(--neutral-200); color: var(--neutral-600); border-color: var(--neutral-300); }
-  .badge-primary   { background: #cce5ff; color: #004085; border-color: #b8daff; }
   .badge-success   { background: var(--color-success-subtle); color: var(--color-success-text); border-color: var(--color-success-border); }
   .badge-warning   { background: var(--color-warning-subtle); color: var(--color-warning-text); border-color: var(--color-warning-border); }
   .badge-info      { background: var(--color-info-subtle); color: var(--color-info-text); border-color: var(--color-info-border); }
