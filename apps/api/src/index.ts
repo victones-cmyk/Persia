@@ -155,6 +155,26 @@ app.use('/api/cep', cepRouter);
 if (isProduction) {
   const webDist = path.resolve(__dirname, '../../web/dist');
   if (fs.existsSync(webDist)) {
+    // Identidade desta build: o nome do bundle, que o Vite versiona por conteúdo.
+    //
+    // Serve para a aba antiga descobrir que ficou para trás. Sem isto, quem
+    // deixa o app aberto continua rodando o JS de dias atrás e vê "o botão não
+    // apareceu" enquanto o servidor já tem tudo — aconteceu de verdade e custou
+    // uma investigação inteira.
+    //
+    // Lido uma vez, no boot: o deploy reinicia o processo, então não há como
+    // ficar defasado. E é o mesmo dado que já está público no index.html.
+    let bundleAtual: string | null = null;
+    try {
+      const html = fs.readFileSync(path.join(webDist, 'index.html'), 'utf8');
+      bundleAtual = html.match(/assets\/(index-[A-Za-z0-9_-]+\.js)/)?.[1] ?? null;
+    } catch {
+      console.warn('[versao] não consegui ler o index.html — aviso de versão nova fica desligado.');
+    }
+    app.get('/api/versao', (_req: Request, res: Response) => {
+      res.json({ bundle: bundleAtual });
+    });
+
     app.use(express.static(webDist));
     // SPA fallback: qualquer GET que não seja /api retorna o index.html.
     app.get(/^(?!\/api).*/, (_req: Request, res: Response) => {

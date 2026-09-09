@@ -8,9 +8,12 @@ import { NavGuardProvider } from '../hooks/useNavGuard';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
 import { GcOfflineBanner } from './GcOfflineBanner';
+import { VersaoNovaBanner } from './VersaoNovaBanner';
+import { useVersaoNova } from '../hooks/useVersaoNova';
 
 export function Layout() {
   const { status } = useGcHealth();
+  const versaoNova = useVersaoNova();
   const { pathname } = useLocation();
   // Novo Orçamento tem sua própria barra fixa no rodapé (total/ações) e esconde a
   // aba de navegação (ver Sidebar.tsx) — só reserva espaço pra aba quando ela existe.
@@ -21,6 +24,7 @@ export function Layout() {
       <div className="h-full flex flex-col">
         <Navbar gcStatus={status} />
         {status === 'offline' && <GcOfflineBanner />}
+        {versaoNova && <VersaoNovaBanner />}
         <div className="flex flex-col lg:flex-row flex-1 min-h-0">
           <Sidebar />
           <main
