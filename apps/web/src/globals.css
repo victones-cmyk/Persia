@@ -164,7 +164,7 @@ input[type='number'] {
   100% { background-position: -200% 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #f9f9f9 25%, #dee2e6 50%, #f9f9f9 75%);
+  background: linear-gradient(90deg, var(--neutral-50) 25%, var(--neutral-300) 50%, var(--neutral-50) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 3px;
@@ -336,10 +336,10 @@ input[type='number'] {
     border-radius: var(--radius-md);
     font-size: var(--text-sm);
   }
-  .alert-success { background: var(--color-success-subtle); border-color: var(--color-success-border); color: #155724; }
-  .alert-warning { background: var(--color-warning-subtle); border-color: var(--color-warning-border); color: #856404; }
-  .alert-error   { background: var(--color-error-subtle); border-color: var(--color-error-border); color: #721c24; }
-  .alert-info    { background: var(--color-info-subtle); border-color: var(--color-info-border); color: #0c5460; }
+  .alert-success { background: var(--color-success-subtle); border-color: var(--color-success-border); color: var(--color-success-text); }
+  .alert-warning { background: var(--color-warning-subtle); border-color: var(--color-warning-border); color: var(--color-warning-text); }
+  .alert-error   { background: var(--color-error-subtle); border-color: var(--color-error-border); color: var(--color-error-text); }
+  .alert-info    { background: var(--color-info-subtle); border-color: var(--color-info-border); color: var(--color-info-text); }
 
   /* ---- Banner de sistema (faixa no topo) ---- */
   .banner {
@@ -352,8 +352,8 @@ input[type='number'] {
     font-weight: var(--weight-medium);
     border-bottom: 1px solid transparent;
   }
-  .banner-warning { background: var(--color-warning-subtle); border-color: var(--color-warning-border); color: #856404; }
-  .banner-error   { background: var(--color-error-subtle); border-color: var(--color-error-border); color: #721c24; }
+  .banner-warning { background: var(--color-warning-subtle); border-color: var(--color-warning-border); color: var(--color-warning-text); }
+  .banner-error   { background: var(--color-error-subtle); border-color: var(--color-error-border); color: var(--color-error-text); }
   .banner-info    { background: var(--color-info-subtle); border-color: var(--color-info-border); color: var(--color-info-text); }
 
   /* ---- Links da sidebar ---- */
