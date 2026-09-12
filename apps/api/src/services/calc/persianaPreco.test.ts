@@ -1,7 +1,8 @@
 // apps/api/src/services/calc/persianaPreco.test.ts
 // Casos GERADOS das planilhas do Victor — travam o motor de preço da persiana (v.5.1).
 import { describe, it, expect } from 'vitest';
-import { calcularPrecoPersiana, ReceitaPendenteError } from './persianaPreco';
+import { calcularPrecoPersiana, unidadeDoTecido, ReceitaPendenteError } from './persianaPreco';
+import { componentesSnapshot } from './persianaPrecoGc';
 import { evalQuantidade } from './formula';
 
 describe('evalQuantidade (avaliador com parênteses)', () => {
@@ -174,5 +175,47 @@ describe('calcularPrecoPersiana — receitas pendentes', () => {
   const precos = new Map<string, number>();
   it('romana motorizada lança ReceitaPendenteError (não existe — Victor)', () => {
     expect(() => calcularPrecoPersiana({ tipo: 'persiana_romana_blackout', acionamento: 'motorizado_com_bando', largura: 2, altura: 2, tc: 1.5, preco_tecido: 100, precos })).toThrow(ReceitaPendenteError);
+  });
+});
+
+// A tela solar cobra 20% de perda de corte e consome só o que sai do rolo. Enquanto
+// os dois números eram o mesmo, a OS pedia e o estoque baixava tecido que ninguém
+// cortou — 128 m² acumulados até 12/09/2026.
+describe('tecido: quantidade do preço x quantidade consumida', () => {
+  const precos = new Map<string, number>();
+
+  it('tela solar separa os dois: cobra 4,8 m² e consome 4 m²', () => {
+    const r = calcularPrecoPersiana({
+      tipo: 'persiana_rolo_screen', acionamento: 'com_bando',
+      largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 35, precos,
+    });
+    expect(r.tecido.quantidade).toBeCloseTo(4.8, 4);
+    expect(r.tecido.quantidade_consumo).toBeCloseTo(4, 4);
+    expect(r.tecido.subtotal).toBeCloseTo(168, 2); // 4,8 × 35 — o preço não mudou
+  });
+
+  it('sem perda declarada, consumo e preço são o mesmo número', () => {
+    const r = calcularPrecoPersiana({
+      tipo: 'persiana_rolo_blackout', acionamento: 'com_bando',
+      largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 35, precos,
+    });
+    expect(r.tecido.quantidade_consumo).toBeCloseTo(r.tecido.quantidade, 6);
+  });
+
+  it('rotula a unidade pela fórmula: com LARGURA é m², sem LARGURA é metro linear', () => {
+    expect(unidadeDoTecido('LARGURA*(ALTURA+0.2)')).toBe('m²');
+    expect(unidadeDoTecido('(ALTURA+0.2)')).toBe('m');
+    expect(unidadeDoTecido('(ALTURA+HASTES*0.025+0.05)*LARGURA')).toBe('m²');
+  });
+
+  it('o snapshot que vira OS e baixa de estoque leva o consumo, não o preço', () => {
+    const r = calcularPrecoPersiana({
+      tipo: 'persiana_rolo_screen', acionamento: 'com_bando',
+      largura: 2, altura: 1.8, tc: 1.5, preco_tecido: 35, precos,
+    });
+    const tecido = componentesSnapshot(r, 'PROD-1').find((l) => l.grupo === 'tecido');
+    expect(tecido?.quantidade).toBeCloseTo(4, 4);
+    expect(tecido?.unidade).toBe('m²');
+    expect(tecido?.produto_id).toBe('PROD-1');
   });
 });

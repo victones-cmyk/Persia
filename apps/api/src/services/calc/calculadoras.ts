@@ -18,7 +18,10 @@ export interface ComponenteCalculadora {
 
 export interface ReceitaCalculadora {
   componentes: ComponenteCalculadora[];
+  /** Quantidade de tecido REALMENTE consumida — vai para a OS e para a baixa de estoque. */
   tecido_qtd: string;
+  /** Perda de corte embutida no PREÇO (1 = nenhuma, 1.2 = +20%). Fora da OS e do estoque. */
+  tecido_perda?: number;
 }
 
 export interface CalculadoraPersiana {
@@ -200,12 +203,41 @@ export const CALCULADORAS_DEFAULT: CalculadoraPersiana[] = [
 // ---- Armazenamento em memória (cache) ----
 let calculadorasCached: CalculadoraPersiana[] = [];
 
+// Migração única das receitas que já estão no banco.
+//
+// A tela solar nasceu com a perda de corte DENTRO da fórmula da quantidade. Isso
+// inflava o preço corretamente, mas também inflava a quantidade que ia para a OS e
+// para a baixa de estoque — 128 m² de consumo inexistente acumulados até aqui.
+//
+// A migração é por igualdade exata da fórmula antiga, de propósito: se alguém já
+// tinha ajustado a fórmula à mão (o vertical, por exemplo, hoje está diferente do
+// padrão no banco), nada acontece — em vez de um palpite sobre o que o "*1.2" dele
+// significava. Depois que a receita ganha tecido_perda, a migração não olha mais
+// para ela.
+const PERDA_EMBUTIDA: Record<string, { tecido_qtd: string; tecido_perda: number }> = {
+  'LARGURA*(ALTURA+0.2)*1.2': { tecido_qtd: 'LARGURA*(ALTURA+0.2)', tecido_perda: 1.2 },
+};
+
+function separarPerdaDaQuantidade(r: ReceitaCalculadora | undefined): ReceitaCalculadora | undefined {
+  if (!r || r.tecido_perda !== undefined) return r;
+  const separada = PERDA_EMBUTIDA[(r.tecido_qtd ?? '').trim()];
+  return separada ? { ...r, ...separada } : r;
+}
+
 function normalizarCalculadoras(calculadoras: CalculadoraPersiana[]): CalculadoraPersiana[] {
-  return calculadoras.map((c) => ({
-    ...c,
-    ativo: c.ativo !== false,
-    largura_tecido_obrigatoria: c.largura_tecido_obrigatoria !== false,
-  }));
+  return calculadoras.map((c) => {
+    const receitas: CalculadoraPersiana['receitas'] = {};
+    for (const [variante, receita] of Object.entries(c.receitas ?? {})) {
+      const migrada = separarPerdaDaQuantidade(receita as ReceitaCalculadora | undefined);
+      if (migrada) receitas[variante as keyof CalculadoraPersiana['receitas']] = migrada;
+    }
+    return {
+      ...c,
+      ativo: c.ativo !== false,
+      largura_tecido_obrigatoria: c.largura_tecido_obrigatoria !== false,
+      receitas,
+    };
+  });
 }
 
 function anexarDefaultsAusentes(calculadoras: CalculadoraPersiana[]): CalculadoraPersiana[] {

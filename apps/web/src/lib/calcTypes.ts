@@ -13,7 +13,10 @@ export interface ComponenteCalculadora {
 
 export interface ReceitaCalculadora {
   componentes: ComponenteCalculadora[];
+  /** Consumo real de tecido — é esta quantidade que vai para a OS e para a baixa de estoque. */
   tecido_qtd: string;
+  /** Perda de corte somada só ao PREÇO (1 = nenhuma, 1.2 = +20%). */
+  tecido_perda?: number;
 }
 
 export interface CalculadoraPersiana {

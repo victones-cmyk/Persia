@@ -254,7 +254,8 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
       canal: it.canal ?? null,
       fixacao_instalacao: it.fixacao_instalacao === 'teto' || it.fixacao_instalacao === 'parede' ? it.fixacao_instalacao : null,
       qtd_venda: item.venda.tecido.quantidade,
-      qtd_producao: item.venda.tecido.quantidade,
+      // Produção consome o que sai do rolo; a venda cobra também a perda de corte.
+      qtd_producao: item.venda.tecido.quantidade_consumo ?? item.venda.tecido.quantidade,
       valor_bruto: valorBruto,
       valor_final: valorBruto, // sem desconto: valor cheio vai ao GC
       valor_custo: valorCusto,

@@ -102,6 +102,14 @@ export function precoPersianaItem(args: {
  * TECIDO não passa pelo casamento por codigo_interno dos demais componentes. */
 export function componentesSnapshot(r: ResultadoPrecoPersiana, tecidoProdutoId?: string | null): { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id: string | null }[] {
   const linhas = r.itens.map((i) => ({ grupo: 'componente', descricao: i.descricao, quantidade: i.quantidade, unidade: 'un', produto_id: i.produto_id ?? null }));
-  linhas.push({ grupo: 'tecido', descricao: 'TECIDO', quantidade: r.tecido.quantidade, unidade: 'm', produto_id: tecidoProdutoId ?? null });
+  // Consumo, não a quantidade do preço: esta linha vira a quantidade da OS e a baixa
+  // de estoque, e a perda de corte da tela solar não sai do rolo (ver tecido_perda).
+  linhas.push({
+    grupo: 'tecido',
+    descricao: 'TECIDO',
+    quantidade: r.tecido.quantidade_consumo ?? r.tecido.quantidade,
+    unidade: r.tecido.unidade ?? 'm',
+    produto_id: tecidoProdutoId ?? null,
+  });
   return linhas;
 }

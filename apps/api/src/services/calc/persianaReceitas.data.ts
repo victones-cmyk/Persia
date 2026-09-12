@@ -3,6 +3,12 @@
 // Fórmulas extraídas das CÉLULAS REAIS (coluna G), não do texto descritivo (que tinha typos).
 // qtd = fórmula de QUANTIDADE (sem preço); custo = qtd × preço (GC, pelo codigo_interno).
 // Preço final da persiana = soma de tudo, a VAREJO (Victor v.5.1). Romana: pendente.
+//
+// tecido_qtd x tecido_perda: a planilha da tela solar trazia "*1.2" dentro da fórmula
+// da quantidade, e esse mesmo número virava a quantidade da OS e a baixa de estoque.
+// Os 20% são margem de perda de CORTE — existem no preço, não no consumo (Victor,
+// 12/09/2026). Somados, davam 128 m² de consumo que nunca saiu do rolo. Aqui a
+// fórmula é o consumo real e a perda é um fator à parte, aplicado só no preço.
 
 export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_solar' | 'romana' | 'romana_tela_solar' | 'vertical';
 // Manual (KIT COMANDO) e motorizada (KIT MOTOR), cada uma com/sem bandô.
@@ -10,7 +16,13 @@ export type FamiliaPersiana = 'rolo_bk_translucido' | 'double_vision' | 'tela_so
 // tela_solar e romana motor: pendentes do Victor.
 export type VariantePersiana = 'com_bando' | 'sem_bando' | 'motor_com_bando' | 'motor_sem_bando';
 export interface ComponenteReceita { codigo_interno: string; descricao: string; qtd: string; }
-export interface ReceitaPersiana { componentes: ComponenteReceita[]; tecido_qtd: string; }
+export interface ReceitaPersiana {
+  componentes: ComponenteReceita[];
+  /** Quantidade de tecido REALMENTE consumida — a que vai para a OS e para a baixa de estoque. */
+  tecido_qtd: string;
+  /** Perda embutida no PREÇO (1 = nenhuma, 1.2 = +20%). Não entra na OS nem no estoque. */
+  tecido_perda?: number;
+}
 
 export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<VariantePersiana, ReceitaPersiana>>>> = {
   rolo_bk_translucido: {
@@ -211,7 +223,8 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<V
         { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
         { codigo_interno: '1069063700105', descricao: 'CORRENTE BOLA 10 COR BRANCO', qtd: 'TC*2' },
       ],
-      tecido_qtd: 'LARGURA*(ALTURA+0.2)*1.2',
+      tecido_qtd: 'LARGURA*(ALTURA+0.2)',
+      tecido_perda: 1.2,
     },
     sem_bando: {
       componentes: [
@@ -233,7 +246,8 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<V
         { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
         { codigo_interno: '1069063700105', descricao: 'CORRENTE BOLA 10 COR BRANCO', qtd: 'TC*2' },
       ],
-      tecido_qtd: 'LARGURA*(ALTURA+0.2)*1.2',
+      tecido_qtd: 'LARGURA*(ALTURA+0.2)',
+      tecido_perda: 1.2,
     },
     // MOTORIZADA: mesma receita do ROLO motor; só o tecido muda (por m²). Victor 26/06/2026.
     motor_com_bando: {
@@ -252,7 +266,8 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<V
         { codigo_interno: '2041749670169', descricao: 'KIT INSTALAÇÃO MOTOR', qtd: '1' },
         { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
       ],
-      tecido_qtd: 'LARGURA*(ALTURA+0.2)*1.2',
+      tecido_qtd: 'LARGURA*(ALTURA+0.2)',
+      tecido_perda: 1.2,
     },
     motor_sem_bando: {
       componentes: [
@@ -271,7 +286,8 @@ export const RECEITAS_PERSIANA: Partial<Record<FamiliaPersiana, Partial<Record<V
         { codigo_interno: '5752963489736', descricao: 'EMBALAGEM DE PERSIANA', qtd: '1' },
         { codigo_interno: '3211432323511', descricao: 'PARAFUSO E BUCHA PARA PERSIANA', qtd: 'LARGURA/0.5' },
       ],
-      tecido_qtd: 'LARGURA*(ALTURA+0.2)*1.2',
+      tecido_qtd: 'LARGURA*(ALTURA+0.2)',
+      tecido_perda: 1.2,
     },
   },
   // ROMANA — planilha CÁLCULO PERSIANA ROMANA v.2 (26/06/2026). Não tem motorizada.

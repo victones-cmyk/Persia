@@ -1142,15 +1142,41 @@ export function AdminCalculadoras() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="form-label">Fórmula de Quantidade do Tecido<span className="label-required">*</span></label>
-                            <input
-                              className="input font-mono"
-                              type="text"
-                              placeholder="ex: (ALTURA+0.2)"
-                              value={rec.tecido_qtd}
-                              onChange={(e) => atualizarReceita(abaVariante, { tecido_qtd: e.target.value })}
-                            />
+                          <div className="flex flex-col gap-3">
+                            <div>
+                              <label className="form-label">Fórmula de Quantidade do Tecido<span className="label-required">*</span></label>
+                              <input
+                                className="input font-mono"
+                                type="text"
+                                placeholder="ex: (ALTURA+0.2)"
+                                value={rec.tecido_qtd}
+                                onChange={(e) => atualizarReceita(abaVariante, { tecido_qtd: e.target.value })}
+                              />
+                              <div className="helper-text">Consumo real: é esta quantidade que vai para a OS e para a baixa de estoque.</div>
+                            </div>
+                            <div>
+                              <label className="form-label">Perda de corte no preço<span className="label-optional">opcional</span></label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  className="input font-mono"
+                                  style={{ width: 90 }}
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  placeholder="0"
+                                  value={rec.tecido_perda === undefined ? '' : Math.round((rec.tecido_perda - 1) * 100)}
+                                  onChange={(e) => {
+                                    const txt = e.target.value.trim();
+                                    if (txt === '') { atualizarReceita(abaVariante, { tecido_perda: undefined }); return; }
+                                    const pct = Number(txt);
+                                    if (!Number.isFinite(pct) || pct < 0) return;
+                                    atualizarReceita(abaVariante, { tecido_perda: 1 + pct / 100 });
+                                  }}
+                                />
+                                <span className="text-xs-ui text-neutral-600">% a mais</span>
+                              </div>
+                              <div className="helper-text">Entra só no preço. A OS e o estoque continuam com o consumo acima.</div>
+                            </div>
                           </div>
                           <div className="bg-neutral-50 border border-neutral-300 rounded-sm p-3 flex flex-col justify-center">
                             <span className="text-xs-ui font-bold text-neutral-600 flex items-center gap-1">

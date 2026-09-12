@@ -106,3 +106,43 @@ describe('Calculadoras Service', () => {
     expect(getCalculadorasAtivas().map((c) => c.id)).not.toContain('calc_inativa');
   });
 });
+
+// As receitas que já estão no banco nasceram com a perda de corte dentro da fórmula
+// da quantidade. Este teste trava a separação — e trava também o que ela NÃO faz.
+describe('migração: perda de corte embutida na fórmula do tecido', () => {
+  const calculadoraCom = (tecido_qtd: string, tecido_perda?: number) => ({
+    id: 'persiana_rolo_screen', nome: 'Screen', db_tipo_produto: 'persiana_rolo_screen',
+    codigo_gc: '2592', familia: 'tela_solar', margem: 0.15, dobrar_altura: false,
+    base_venda: 'largura', fator_venda: 1.3, mao_de_obra: 'MÃO DE OBRA PERSIANA',
+    receitas: { com_bando: { componentes: [], tecido_qtd, ...(tecido_perda ? { tecido_perda } : {}) } },
+  });
+
+  const carregar = async (calc: unknown) => {
+    const prisma = {
+      configuracao: {
+        findUnique: vi.fn().mockResolvedValue({ valor: JSON.stringify([calc]) }),
+        update: vi.fn(), upsert: vi.fn(),
+      },
+    } as unknown as PrismaClient;
+    await carregarCalculadoras(prisma);
+    return encontrarCalculadora('persiana_rolo_screen')?.receitas.com_bando;
+  };
+
+  it('tira o *1.2 da quantidade e o registra como perda', async () => {
+    const r = await carregar(calculadoraCom('LARGURA*(ALTURA+0.2)*1.2'));
+    expect(r?.tecido_qtd).toBe('LARGURA*(ALTURA+0.2)');
+    expect(r?.tecido_perda).toBe(1.2);
+  });
+
+  it('não mexe em fórmula que alguém já ajustou à mão', async () => {
+    const r = await carregar(calculadoraCom('LARGURA*(ALTURA+0.3)*1.15'));
+    expect(r?.tecido_qtd).toBe('LARGURA*(ALTURA+0.3)*1.15');
+    expect(r?.tecido_perda).toBeUndefined();
+  });
+
+  it('não roda de novo em receita que já tem perda declarada', async () => {
+    const r = await carregar(calculadoraCom('LARGURA*(ALTURA+0.2)*1.2', 1.2));
+    expect(r?.tecido_qtd).toBe('LARGURA*(ALTURA+0.2)*1.2');
+    expect(r?.tecido_perda).toBe(1.2);
+  });
+});

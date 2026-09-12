@@ -70,7 +70,12 @@ export class ReceitaPendenteError extends Error {
 export interface LinhaCustoPersiana {
   codigo_interno: string;
   descricao: string;
+  /** Quantidade que forma o PREÇO — para o tecido, já inclui a perda de corte. */
   quantidade: number;
+  /** Só no tecido: o que sai do rolo de verdade (sem a perda). Vai para a OS e o estoque. */
+  quantidade_consumo?: number;
+  /** Só no tecido: unidade da quantidade — 'm²' quando a fórmula usa LARGURA, senão 'm'. */
+  unidade?: string;
   preco: number;
   subtotal: number;
   /** ID do produto no GestãoClick (chave do PUT /produtos/{id} — saída de estoque).
@@ -207,6 +212,18 @@ function resolverComponenteColorido(
   return { codigo_interno: r.codigo_interno, descricao: r.descricao, preco: r.preco, produto_id: r.produto_id };
 }
 
+/**
+ * Unidade em que a receita mede o tecido.
+ *
+ * Fórmula com LARGURA consome área (o corte usa largura e altura do rolo); sem
+ * LARGURA, consome comprimento linear. Era tudo rotulado 'm' antes — e um número
+ * de m² escrito como metro linear na OS é exatamente o tipo de coisa que esconde
+ * um erro de quantidade por meses.
+ */
+export function unidadeDoTecido(formulaConsumo: string): string {
+  return /LARGURA/i.test(formulaConsumo) ? 'm\u00b2' : 'm';
+}
+
 function variaveisDaFamilia(familia: FamiliaPersiana, largura: number, altura: number, tc: number): VarsQtd {
   const vars: VarsQtd = { largura, altura, tc };
   if (ehFamiliaRomana(familia)) {
@@ -214,6 +231,31 @@ function variaveisDaFamilia(familia: FamiliaPersiana, largura: number, altura: n
     vars.hastes = hastesRomana(altura);
   }
   return vars;
+}
+
+/**
+ * Monta a linha de TECIDO separando o que se cobra do que se consome.
+ *
+ * `quantidade` é a base do preço (consumo x perda de corte); `quantidade_consumo` é
+ * o que sai do rolo. Quem manda para a OS ou para a baixa de estoque usa a segunda.
+ */
+function linhaDeTecido(
+  receita: { tecido_qtd: string; tecido_perda?: number },
+  vars: VarsQtd,
+  precoTecido: number,
+): LinhaCustoPersiana {
+  const consumo = evalQuantidade(receita.tecido_qtd, vars);
+  const perda = receita.tecido_perda ?? 1;
+  const qPreco = consumo * perda;
+  return {
+    codigo_interno: '',
+    descricao: 'TECIDO',
+    quantidade: roundHalfUp(qPreco, 4),
+    quantidade_consumo: roundHalfUp(consumo, 4),
+    unidade: unidadeDoTecido(receita.tecido_qtd),
+    preco: precoTecido,
+    subtotal: roundHalfUp(qPreco * precoTecido),
+  };
 }
 
 export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPersiana {
@@ -253,15 +295,8 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
     });
   }
 
-  const qTec = evalQuantidade(receita.tecido_qtd, vars);
-  total += qTec * e.preco_tecido;
-  const tecido: LinhaCustoPersiana = {
-    codigo_interno: '',
-    descricao: 'TECIDO',
-    quantidade: roundHalfUp(qTec, 4),
-    preco: e.preco_tecido,
-    subtotal: roundHalfUp(qTec * e.preco_tecido),
-  };
+  const tecido = linhaDeTecido(receita, vars, e.preco_tecido);
+  total += tecido.quantidade * e.preco_tecido;
 
   return { familia, variante, itens, tecido, valor: roundHalfUp(total) };
 }
@@ -269,7 +304,7 @@ export function calcularPrecoPersiana(e: EntradaPrecoPersiana): ResultadoPrecoPe
 export function auditarPrecoPersiana(e: EntradaPrecoPersiana & {
   familia: FamiliaPersiana;
   variante: VariantePersiana;
-  receita: { componentes: { codigo_interno: string; descricao: string; qtd: string }[]; tecido_qtd: string };
+  receita: { componentes: { codigo_interno: string; descricao: string; qtd: string }[]; tecido_qtd: string; tecido_perda?: number };
 }): ResultadoAuditoriaPersiana {
   const vars = variaveisDaFamilia(e.familia, e.largura, e.altura, e.tc);
   let total = 0;
@@ -294,15 +329,8 @@ export function auditarPrecoPersiana(e: EntradaPrecoPersiana & {
     };
   });
 
-  const qTec = evalQuantidade(e.receita.tecido_qtd, vars);
-  total += qTec * e.preco_tecido;
-  const tecido: LinhaCustoPersiana = {
-    codigo_interno: '',
-    descricao: 'TECIDO',
-    quantidade: roundHalfUp(qTec, 4),
-    preco: e.preco_tecido,
-    subtotal: roundHalfUp(qTec * e.preco_tecido),
-  };
+  const tecido = linhaDeTecido(e.receita, vars, e.preco_tecido);
+  total += tecido.quantidade * e.preco_tecido;
 
   return { familia: e.familia, variante: e.variante, itens, tecido, valor: roundHalfUp(total), variaveis: vars };
 }

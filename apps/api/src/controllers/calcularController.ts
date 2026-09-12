@@ -118,7 +118,7 @@ function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: num
     dimensao: tecido.dimensao_m,
     tc: item.tc,
     qtd_venda: v.tecido.quantidade,
-    qtd_producao: v.tecido.quantidade,
+    qtd_producao: v.tecido.quantidade_consumo ?? v.tecido.quantidade,
     preco_tecido: tecido.preco_venda,
     valor_bruto: valor, // SOMA de todos os componentes + tecido + instalação (VAREJO)
     valor,
