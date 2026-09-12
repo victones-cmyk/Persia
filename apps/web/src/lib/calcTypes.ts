@@ -153,6 +153,23 @@ export interface ResultadoPersiana {
   itens?: LinhaCustoPersiana[];
   tecido?: LinhaCustoPersiana;
   variante?: string;
+  /** Rolos do mesmo tecido em larguras diferentes. Vazio quando só existe um. */
+  rolos?: RoloDoTecido[];
+}
+
+/** Uma largura de rolo do tecido escolhido, com o preço desta peça. */
+export interface RoloDoTecido {
+  id: string;
+  nome: string;
+  dimensao_m: number;
+  cabe: boolean;
+  /** Sobra do rolo depois da peça (m). Negativo quando não cabe. */
+  folga_m: number;
+  valor: number;
+  /** Contra o rolo escolhido hoje. Só faz sentido quando `cabe`. */
+  diferenca: number;
+  selecionado: boolean;
+  recomendado: boolean;
 }
 
 export interface CalcularResposta {
