@@ -4,7 +4,7 @@
 // recomendar um rolo de outra cor.
 
 import { describe, it, expect } from 'vitest';
-import { chaveDoTecido, rolosDoMesmoTecido, temEconomia, type TecidoDoCatalogo } from './seletorTecido';
+import { chaveDoTecido, mesmoTecido, rolosDoMesmoTecido, temEconomia, type TecidoDoCatalogo } from './seletorTecido';
 
 describe('chaveDoTecido', () => {
   it('ignora o sufixo de largura, em qualquer capitalização', () => {
@@ -81,5 +81,44 @@ describe('rolosDoMesmoTecido', () => {
     const mesmoPreco = (t: TecidoDoCatalogo) => (t.id === outro.id ? 999 : 200);
     const r = rolosDoMesmoTecido({ selecionado: largo, catalogo, largura: 1.5, precoDaPeca: mesmoPreco });
     expect(r.find((x) => x.recomendado)!.dimensao_m).toBe(1.8);
+  });
+});
+
+// O campo "COD TECIDO" existe para tirar o agrupamento da dependência do nome.
+// Os casos que importam são os dois extremos do cadastro: o que ele conserta
+// quando está completo, e o que ele NÃO pode estragar enquanto está pela metade.
+describe('mesmoTecido — campo COD TECIDO', () => {
+  const t = (id: string, nome: string, codigo_tecido = '', dimensao_m = 2): TecidoDoCatalogo =>
+    ({ id, nome, dimensao_m, preco_venda: 100, codigo_tecido });
+
+  it('sem campo em nenhum dos dois, vale o nome', () => {
+    expect(mesmoTecido(t('1', 'DOUBLE VISION BRANCO AM-3640 1,80M'), t('2', 'DOUBLE VISION BRANCO AM-3640 2,25M'))).toBe(true);
+    expect(mesmoTecido(t('1', 'DOUBLE VISION BRANCO AM-3640 1,80M'), t('2', 'DOUBLE VISION PRETO AM-3640 1,80M'))).toBe(false);
+  });
+
+  it('com campo nos dois, o campo manda — junta o que o nome separaria', () => {
+    const a = t('1', 'DV BRANCO ROLO ANTIGO', 'AM-3640 BRANCO');
+    const b = t('2', 'DOUBLE VISION BRANCO AM-3640 2,25M', 'AM-3640 BRANCO');
+    expect(mesmoTecido(a, b)).toBe(true);
+  });
+
+  it('com campo nos dois, o campo manda — separa o que o nome juntaria', () => {
+    const a = t('1', 'DOUBLE VISION BRANCO AM-3640 1,80M', 'AM-3640 BRANCO');
+    const b = t('2', 'DOUBLE VISION BRANCO AM-3640 2,25M', 'AM-3640 BRANCO GELO');
+    expect(mesmoTecido(a, b)).toBe(false);
+  });
+
+  it('preenchido pela metade não perde o agrupamento que o nome já dava', () => {
+    const comCodigo = t('1', 'DOUBLE VISION BRANCO AM-3640 1,80M', 'AM-3640 BRANCO');
+    const semCodigo = t('2', 'DOUBLE VISION BRANCO AM-3640 2,25M');
+    expect(mesmoTecido(comCodigo, semCodigo)).toBe(true);
+  });
+
+  it('ignora caixa e espaço no código', () => {
+    expect(mesmoTecido(t('1', 'A', 'am-3640 branco'), t('2', 'B', 'AM-3640 BRANCO'))).toBe(true);
+  });
+
+  it('código em branco conta como não cadastrado', () => {
+    expect(mesmoTecido(t('1', 'DOUBLE VISION BRANCO AM-3640 1,80M', '   '), t('2', 'DOUBLE VISION PRETO AM-3640 1,80M', 'X'))).toBe(false);
   });
 });
