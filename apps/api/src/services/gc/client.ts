@@ -45,6 +45,21 @@ function temCredenciais(): boolean {
   return env.GESTAOCLICK_ACCESS_TOKEN !== '' && env.GESTAOCLICK_SECRET_ACCESS_TOKEN !== '';
 }
 
+/**
+ * Modo leitura: o staging aponta para o GestãoClick REAL, porque não existe
+ * sandbox dele. Antes disso a proteção era deixar o token vazio — e aí nada no
+ * staging funcionava, nem a busca de cliente, que é onde o vendedor começa.
+ *
+ * A trava vive aqui e em nenhum outro lugar porque gcRequest é a única saída
+ * para o GC: nenhum serviço chama axios direto. Um GET passa; POST, PUT, PATCH e
+ * DELETE morrem aqui, antes da fila, sem chegar à rede.
+ */
+export function gcSomenteLeitura(): boolean {
+  return env.GC_SOMENTE_LEITURA;
+}
+
+const METODOS_DE_LEITURA = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 const MAX_RETRY_429 = 3;
 const MAX_RETRY_5XX = 2;
 
@@ -114,6 +129,13 @@ async function executar<T>(config: AxiosRequestConfig, tentativa = 0): Promise<T
 export async function gcRequest<T>(config: AxiosRequestConfig): Promise<T> {
   if (!temCredenciais()) {
     throw new GcError(401, 'Credenciais GestãoClick não configuradas.');
+  }
+  const metodo = (config.method ?? 'GET').toUpperCase();
+  if (env.GC_SOMENTE_LEITURA && !METODOS_DE_LEITURA.has(metodo)) {
+    throw new GcError(
+      403,
+      `Ambiente de teste: gravação no GestãoClick está desligada (${metodo} ${config.url ?? ''}).`,
+    );
   }
   const queue = await getQueue();
   return queue.add(() => executar<T>(config)) as Promise<T>;

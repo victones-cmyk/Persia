@@ -52,6 +52,8 @@
   --gc-online:   #28a745;
   --gc-offline:  #dc3545;
   --gc-checking: #ffc107;
+  /* Staging: le o GestaoClick real, gravacao desligada. */
+  --gc-leitura:  #17a2b8;
 
   /* ESCALA NEUTRA */
   --neutral-0:   #ffffff;

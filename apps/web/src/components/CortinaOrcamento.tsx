@@ -324,7 +324,7 @@ export function CortinaOrcamento({
 
           {!cliente && <div className="alert alert-info mb-3 text-xs-ui"><span>Selecione o <strong>cliente</strong> no topo para enviar (ou use <strong>Salvar</strong>).</span></div>}
           {!todasCompletas && <div className="alert alert-warning mb-3 text-xs-ui"><span>Escolha o <strong>produto de cada acessório</strong> em todas as cortinas para enviar.</span></div>}
-          {gcOffline && <div className="alert alert-warning mb-3 text-xs-ui"><span>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong>.</span></div>}
+          {gcOffline && <div className={`alert mb-3 text-xs-ui ${gcStatus === 'leitura' ? 'alert-info' : 'alert-warning'}`}><span>{gcStatus === 'leitura' ? <>Ambiente de teste: <strong>Enviar</strong> está desligado. <strong>Salvar</strong> grava o orçamento aqui.</> : <>GestãoClick indisponível. Você ainda pode <strong>Salvar</strong>.</>}</span></div>}
           {!gcOffline && semVendedor && <div className="alert alert-warning mb-3 text-xs-ui"><span>Seu usuário não está vinculado a um vendedor do GestãoClick — o orçamento sairá sem vendedor.</span></div>}
           {calculando && <div className="alert alert-info mb-3 text-xs-ui"><span>Aguarde o cálculo terminar para salvar ou enviar.</span></div>}
 

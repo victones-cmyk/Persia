@@ -2,9 +2,10 @@
 // Health check do GestãoClick — GET /api/lojas como ping leve (SRD §11).
 // Cache server-side de 5s para não martelar a API com o polling do frontend.
 
-import { gcRequest, temCredenciais } from './client';
+import { gcRequest, gcSomenteLeitura, temCredenciais } from './client';
 
-export type GcHealthStatus = 'online' | 'offline' | 'checking';
+/** 'leitura' = staging: le o GC real, gravacao desligada (ver gcSomenteLeitura). */
+export type GcHealthStatus = 'online' | 'offline' | 'leitura' | 'checking';
 
 export interface GcHealth {
   status: GcHealthStatus;
@@ -31,7 +32,9 @@ export async function getGcHealth(): Promise<GcHealth> {
     const inicio = Date.now();
     try {
       await gcRequest({ method: 'GET', url: '/api/lojas' });
-      value = { status: 'online', latency_ms: Date.now() - inicio };
+      value = gcSomenteLeitura()
+        ? { status: 'leitura', latency_ms: Date.now() - inicio, detail: 'Ambiente de teste: o GestãoClick é lido, nada é gravado nele.' }
+        : { status: 'online', latency_ms: Date.now() - inicio };
     } catch {
       value = { status: 'offline', latency_ms: Date.now() - inicio, detail: 'GestãoClick inacessível.' };
     }
