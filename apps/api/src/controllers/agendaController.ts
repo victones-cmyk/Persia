@@ -560,6 +560,47 @@ export async function salvarPareamentoMedicao(req: Request, res: Response): Prom
  * A repartição entre as folhas é a mesma do recálculo, então os dois caminhos não
  * podem divergir.
  */
+/**
+ * tecido_id → largura do rolo, tirado do snapshot do orçamento.
+ *
+ * O `entrada_json` guarda só o id do tecido; a largura do rolo vive no
+ * `itens_json`. Cruzar pelo id evita depender de os dois arrays estarem na mesma
+ * ordem — o que hoje é verdade, mas não é garantido por nada.
+ */
+function rolosPorTecido(snapshots: unknown[]): Map<string, { nome: string; rolo: number }> {
+  const mapa = new Map<string, { nome: string; rolo: number }>();
+  for (const s of snapshots) {
+    const it = (s ?? {}) as Record<string, unknown>;
+    const id = String(it.tecido_codigo_gc ?? '').trim();
+    const rolo = Number(it.dimensao_m);
+    if (id && Number.isFinite(rolo) && rolo > 0) {
+      mapa.set(id, { nome: typeof it.tecido_nome === 'string' ? it.tecido_nome : '', rolo });
+    }
+  }
+  return mapa;
+}
+
+/**
+ * A medida do técnico deixou a peça mais larga que o rolo vendido?
+ *
+ * A RN-01 já barra isso, mas só quando o vendedor salva o orçamento recalculado
+ * — um 400 no fim do caminho, sem dizer qual peça. Aqui o aviso sai antes, com o
+ * nome do ambiente, enquanto ainda dá para trocar o tecido por um mais largo.
+ *
+ * Vale só para persiana: na cortina o tecido é emendado e a largura do rolo
+ * limita a ALTURA, não a largura (ver altura_excede_tecido em calc/cortina.ts).
+ */
+function naoCabeNoTecido(
+  original: { tipo: string; dimensao_tecido: number; tecido_nome: string },
+  larguraMedida: number | null | undefined,
+): { nao_cabe_no_tecido?: { tecido: string; largura_maxima: number } } {
+  if (!original.tipo.startsWith('persiana')) return {};
+  const rolo = original.dimensao_tecido;
+  if (!Number.isFinite(rolo) || rolo <= 0) return {};
+  if (!Number.isFinite(larguraMedida) || (larguraMedida as number) <= rolo) return {};
+  return { nao_cabe_no_tecido: { tecido: original.tecido_nome, largura_maxima: rolo } };
+}
+
 export async function medidasDosItensPelaAgenda(req: Request, res: Response): Promise<void> {
   const orc = await carregarOrcamentoAutorizado(req);
   if (!agendaHabilitado()) {
@@ -593,6 +634,11 @@ export async function medidasDosItensPelaAgenda(req: Request, res: Response): Pr
       ambiente: typeof it.ambiente === 'string' ? it.ambiente : null,
       largura: Number(it.largura_m),
       altura: Number(it.altura_m),
+      // Largura do rolo escolhido na venda — o snapshot já guarda, então dá para
+      // avisar que a medida nova não cabe sem consultar o GestãoClick.
+      tipo: typeof it.tipo === 'string' ? it.tipo : '',
+      dimensao_tecido: Number(it.dimensao_m),
+      tecido_nome: typeof it.tecido_nome === 'string' ? it.tecido_nome : '',
     };
   });
 
@@ -633,6 +679,7 @@ export async function medidasDosItensPelaAgenda(req: Request, res: Response): Pr
       largura_vendida: original.largura,
       altura_vendida: original.altura,
       faces_medidas: facesPorPeca.get(index) ?? 1,
+      ...naoCabeNoTecido(original, it.largura),
     }));
 
   res.json({ habilitado: true, medidas, so_na_medicao: r.so_na_medicao });
@@ -704,6 +751,21 @@ export async function recalcularComMedicao(req: Request, res: Response): Promise
     throw new AppError(400, 'SEM_DIFERENCA', 'As medidas do técnico já são as que estão no orçamento — não há o que recalcular.');
   }
 
+  // O recálculo não barra quem não cabe: ele grava o rascunho e a RN-01 só reage
+  // quando o vendedor salva. Barrar aqui perderia as outras peças, que estão
+  // certas. Então grava e devolve o aviso junto, com o ambiente e o rolo máximo.
+  const rolos = rolosPorTecido(itensDoOrcamento(orc) as unknown[]);
+  const naoCabem = resultado.itens
+    .map((it, i) => {
+      const orig = (todosItens[i] ?? {}) as Record<string, unknown>;
+      const tipo = String(orig.tipo ?? '');
+      const larg = Number((it as Record<string, unknown>).largura);
+      const tec = rolos.get(String(orig.tecido_id ?? '').trim());
+      if (!tipo.startsWith('persiana') || !tec || !Number.isFinite(larg) || larg <= tec.rolo) return null;
+      return { ambiente: String(orig.ambiente ?? '').trim(), largura: larg, tecido: tec.nome, largura_maxima: tec.rolo };
+    })
+    .filter((x): x is { ambiente: string; largura: number; tecido: string; largura_maxima: number } => x !== null);
+
   const novaEntrada: Record<string, unknown> = { ...entrada };
   if (Array.isArray(entrada.itens)) novaEntrada.itens = resultado.itens.slice(0, itens.length);
   if (Array.isArray(entrada.cortinas)) novaEntrada.cortinas = resultado.itens.slice(itens.length);
@@ -738,6 +800,7 @@ export async function recalcularComMedicao(req: Request, res: Response): Promise
       orcamento: atualizado,
       mudancas: resultado.mudancas,
       so_na_medicao: resultado.so_na_medicao,
+      nao_cabem: naoCabem,
       no_lugar: true,
     });
     return;
@@ -806,6 +869,7 @@ export async function recalcularComMedicao(req: Request, res: Response): Promise
     orcamento: copia,
     mudancas: resultado.mudancas,
     so_na_medicao: resultado.so_na_medicao,
+    nao_cabem: naoCabem,
     no_lugar: false,
   });
 }

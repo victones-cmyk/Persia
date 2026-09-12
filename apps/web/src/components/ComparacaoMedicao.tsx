@@ -107,9 +107,21 @@ export function ComparacaoMedicao({ orcamentoId, status, temVenda, recarregarEm 
     setConfirmando(false);
     setRecalculando(true);
     try {
-      const r = await api.post<{ orcamento: { id: string }; so_na_medicao: string[]; no_lugar: boolean }>(
-        `/orcamentos/${orcamentoId}/agenda/recalcular`,
-      );
+      const r = await api.post<{
+        orcamento: { id: string };
+        so_na_medicao: string[];
+        nao_cabem: { ambiente: string; largura: number; tecido: string; largura_maxima: number }[];
+        no_lugar: boolean;
+      }>(`/orcamentos/${orcamentoId}/agenda/recalcular`);
+      // Sai antes do toast de sucesso porque muda o que o vendedor vai fazer na
+      // próxima tela: sem trocar o tecido, o rascunho não salva (RN-01).
+      for (const n of r.nao_cabem ?? []) {
+        showToast(
+          'warning',
+          `${n.ambiente || 'Peça'} não cabe mais no tecido`,
+          `${formatNum(n.largura)} m medidos contra ${formatNum(n.largura_maxima)} m de rolo do ${n.tecido}. Escolha um tecido mais largo ou divida em folhas antes de salvar.`,
+        );
+      }
       if (r.so_na_medicao.length > 0) {
         showToast(
           'info',
