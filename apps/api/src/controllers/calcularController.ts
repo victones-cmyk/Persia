@@ -18,6 +18,7 @@ import {
   type CamadaCortina,
 } from '../services/calc/cortina';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
+import { rolosDoMesmoTecido, type RoloDoTecido } from '../services/calc/seletorTecido';
 import { exigeLarguraTecido, getCalculadorasAtivas } from '../services/calc/calculadoras';
 import { getCalculadorasCortinaAtivas } from '../services/calc/calculadorasCortina';
 import type { TecidoGc } from '../services/gc/tecidos';
@@ -130,6 +131,38 @@ function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: num
   };
 }
 
+/**
+ * Os rolos do mesmo tecido, com o preço DESTA peça em cada um.
+ *
+ * Roda o motor de preço uma vez por rolo candidato — e isso é barato: são no
+ * máximo dois ou três, os mapas de preço já estão em memória e a lista de
+ * tecidos vem de um cache de 60s. Tecido de rolo único devolve lista vazia e
+ * não custa nem isso.
+ *
+ * Comparar pelo preço da peça INTEIRA, e não só pelo tecido, é o que torna o
+ * número útil: é o valor que o cliente vê. A instalação entra nos dois lados e
+ * se anula na diferença, mas mantém o absoluto igual ao que a tela mostra.
+ */
+async function rolosDoTecido(
+  tipo: TipoPersiana,
+  tecido: TecidoGc,
+  largura: number,
+  precoItem: (t: { preco_venda: number; preco_custo: number }) => number,
+): Promise<RoloDoTecido[]> {
+  try {
+    const catalogo = await tecidosParaTipo(tipo);
+    return rolosDoMesmoTecido({
+      selecionado: tecido,
+      catalogo,
+      largura,
+      precoDaPeca: (t) => precoItem({ preco_venda: t.preco_venda, preco_custo: t.preco_custo ?? 0 }),
+    });
+  } catch {
+    // Sugestão é acessório: se o catálogo não veio, o orçamento segue sem ela.
+    return [];
+  }
+}
+
 function mensagemErroFormula(err: unknown): string | null {
   if (!(err instanceof Error)) return null;
   if (/Fórmula|Formula|MAX|Parêntese|Número esperado|Sobra de tokens/i.test(err.message)) {
@@ -172,23 +205,30 @@ export async function calcularPersianaController(req: Request, res: Response): P
 
   const { precos, custos, componentesPorNome } = await mapasDePrecoComponentes();
   const inst = instalacao_id ? (await indiceInstalacoes()).get(String(instalacao_id)) ?? null : null;
-  try {
-    const item = precoPersianaItem({
+  // Mesma entrada para o tecido escolhido e para cada rolo candidato: só o preço
+  // do tecido muda, e é exatamente isso que a comparação precisa isolar.
+  const comTecido = (t: { preco_venda: number; preco_custo: number }) =>
+    precoPersianaItem({
       tipo,
       acionamento,
       largura: larguraN,
       altura: alturaN,
       tc: tc !== undefined && tc !== null && tc !== '' ? Number(tc) : undefined,
-      preco_tecido: tecido.preco_venda,
-      preco_tecido_custo: tecido.preco_custo,
+      preco_tecido: t.preco_venda,
+      preco_tecido_custo: t.preco_custo,
       precos,
       custos,
       componentesPorNome,
       cor_acessorio,
       cor_base: base || cor_acessorio,
     });
+  try {
+    const item = comTecido(tecido);
+    const rolos = await rolosDoTecido(tipo, tecido, larguraN, (t) =>
+      roundHalfUp(comTecido(t).valor + (inst?.preco ?? 0)),
+    );
     res.json({
-      resultado: montarResultado(item, tecido, larguraN, alturaN, inst),
+      resultado: { ...montarResultado(item, tecido, larguraN, alturaN, inst), rolos },
       tecido: { id: tecido.id, nome: tecido.nome, dimensao_m: tecido.dimensao_m, preco_venda: tecido.preco_venda },
     });
   } catch (err) {
@@ -264,15 +304,15 @@ export async function calcularPersianaLoteController(req: Request, res: Response
       continue;
     }
     const inst = it.instalacao_id ? idxInst.get(String(it.instalacao_id)) ?? null : null;
-    try {
-      const item = precoPersianaItem({
+    const comTecido = (t: { preco_venda: number; preco_custo: number }) =>
+      precoPersianaItem({
         tipo,
         acionamento: it.acionamento,
         largura: larguraN,
         altura: alturaN,
         tc: it.tc !== undefined && it.tc !== null && it.tc !== '' ? Number(it.tc) : undefined,
-        preco_tecido: tecido.preco_venda,
-        preco_tecido_custo: tecido.preco_custo,
+        preco_tecido: t.preco_venda,
+        preco_tecido_custo: t.preco_custo,
         precos,
         custos,
         componentesPorNome,
@@ -282,7 +322,12 @@ export async function calcularPersianaLoteController(req: Request, res: Response
         emissor: Boolean(it.emissor),
         componente_emissor: it.emissor && it.emissor_codigo ? { codigo_interno: String(it.emissor_codigo), descricao: String(it.emissor_nome || 'Emissor') } : null,
       });
-      const resultado = montarResultado(item, tecido, larguraN, alturaN, inst);
+    try {
+      const item = comTecido(tecido);
+      const rolos = await rolosDoTecido(tipo, tecido, larguraN, (t) =>
+        roundHalfUp(comTecido(t).valor + (inst?.preco ?? 0)),
+      );
+      const resultado = { ...montarResultado(item, tecido, larguraN, alturaN, inst), rolos };
       totalBruto = roundHalfUp(totalBruto + resultado.valor);
       resultados.push({
         ok: true,
