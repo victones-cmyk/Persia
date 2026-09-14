@@ -28,7 +28,7 @@ import {
 } from '../services/calc/tipos';
 import { descricaoProdutoPersiana, nomeProdutoPersiana } from '../services/calc/persianaProduto';
 import { buscarTecidoGc, tecidosParaTipo, type TecidoGc } from '../services/gc/tecidos';
-import { consumoDoPedido, type PecaDoPedido } from '../services/calc/consumoDoPedido';
+import { consumoDoPedido, type PecaDoPedido, type PlanoCorteSalvo } from '../services/calc/consumoDoPedido';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { marcarSituacaoOrcamentoGc } from '../lib/situacaoOrcamentoGc';
@@ -162,6 +162,8 @@ function produtoSobMedidaLabel(tipo: TipoPersiana): string {
 export async function prepararItens(tipoFallback: TipoPersiana | null, itens: ItemEntrada[], tecidos: Map<string, TecidoGc>): Promise<{
   preparados: ItemPreparado[];
   valorBrutoTotal: number;
+  /** Plano de corte por tecido — desenhado na folha de produção do pedido. */
+  planoCorte: PlanoCorteSalvo | null;
 }> {
   const { precos, custos, componentesPorNome, produtoIds } = await mapasDePrecoComponentes();
   const idxInst = await indiceInstalacoes();
@@ -275,8 +277,8 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
     });
   }
 
-  await aplicarPlanoDeCorte(preparados);
-  return { preparados, valorBrutoTotal };
+  const planoCorte = await aplicarPlanoDeCorte(preparados);
+  return { preparados, valorBrutoTotal, planoCorte };
 }
 
 /**
@@ -293,7 +295,7 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
  * calculou, que é o comportamento de hoje. Um erro de plano de corte não pode
  * impedir alguém de fechar uma venda.
  */
-async function aplicarPlanoDeCorte(preparados: ItemPreparado[]): Promise<void> {
+async function aplicarPlanoDeCorte(preparados: ItemPreparado[]): Promise<PlanoCorteSalvo | null> {
   try {
     const pecas: PecaDoPedido[] = [];
     for (let i = 0; i < preparados.length; i++) {
@@ -308,14 +310,14 @@ async function aplicarPlanoDeCorte(preparados: ItemPreparado[]): Promise<void> {
         tecido: preparados[i].tecido,
       });
     }
-    if (pecas.length === 0) return;
+    if (pecas.length === 0) return null;
 
     // O catálogo de um tipo já traz os rolos irmãos; junta os tipos presentes
     // para achar irmãos de qualquer peça sem repetir chamada.
     const tipos = [...new Set(preparados.map((p) => p.tipo))];
     const catalogo = (await Promise.all(tipos.map((t) => tecidosParaTipo(t)))).flat();
 
-    const { porPeca } = consumoDoPedido({
+    const { porPeca, lotes } = consumoDoPedido({
       pecas,
       catalogo,
       permiteInverter: (t) => t.permite_inverter === true,
@@ -329,8 +331,24 @@ async function aplicarPlanoDeCorte(preparados: ItemPreparado[]): Promise<void> {
       linha.descricao = 'TECIDO';
       preparados[ref].qtd_producao = consumo.quantidade;
     }
+
+    // O ambiente entra no plano para o desenho poder nomear cada retângulo — a
+    // mesa de corte precisa saber qual peça é qual, não só que há um 0,80×2,60.
+    return {
+      gerado_em: new Date().toISOString(),
+      lotes: lotes.map((l) => ({
+        tecido_nome: l.tecido_nome,
+        unidade: l.unidade,
+        rolo: l.plano.rolo,
+        metros_lineares: l.plano.metros_lineares,
+        area_consumida_m2: l.plano.area_consumida_m2,
+        faixas: l.plano.faixas,
+        ambientes: l.refs.map((r) => ({ ref: r, ambiente: preparados[r]?.ambiente ?? '' })),
+      })),
+    };
   } catch (e) {
     console.error('[plano-de-corte] falhou; quantidades seguem as da receita.', e);
+    return null;
   }
 }
 
@@ -537,7 +555,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
     }
   }
 
-  const { preparados, valorBrutoTotal } = await prepararItens(tipoFallback, itensEntrada, tecidos);
+  const { preparados, valorBrutoTotal, planoCorte } = await prepararItens(tipoFallback, itensEntrada, tecidos);
   // RT do arquiteto (Victor 27/06/2026): gross-up embutido no valor de venda de cada
   // produto (custo inalterado). % vale para o orçamento todo.
   const rtPct = Math.max(0, Math.min(99, Number(b.rt_pct) || 0));
@@ -585,6 +603,7 @@ export async function criarOrcamento(req: Request, res: Response): Promise<void>
   // tipo_produto = tipo do 1º item (representativo; o tipo real de cada item está em itens_json).
   const baseDados = {
     tipo_produto: dbTipoProduto,
+    plano_corte_json: (planoCorte ? (planoCorte as unknown as Prisma.InputJsonValue) : Prisma.DbNull),
     usuario_id: vendedorAtribuido?.id ?? editarOrc?.usuario_id ?? sessao.id,
     loja_id: loja.id,
     entrada_json: entradaJson,

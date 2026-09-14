@@ -15,7 +15,7 @@
 // exatamente como está hoje (Victor, 14/09/2026): o cliente paga o que sempre
 // pagou, e quem passa a falar a verdade é a OS e a baixa de estoque.
 
-import { planejarLote, type PlanoDoLote, type PecaDoLote, type RoloDisponivel } from './corteTecido';
+import { planejarLote, type FaixaDoPlano, type PlanoDoLote, type PecaDoLote, type RoloDisponivel } from './corteTecido';
 import { mesmoTecido, type TecidoDoCatalogo } from './seletorTecido';
 import { roundHalfUp } from './arredondamento';
 
@@ -144,4 +144,26 @@ export function consumoDoPedido(args: {
   }
 
   return { porPeca, lotes };
+}
+
+/**
+ * O plano como ele é GUARDADO no orçamento, e não recalculado na impressão.
+ *
+ * O catálogo muda — rolo novo, rolo inativado, largura corrigida. Um plano
+ * refeito semanas depois poderia desenhar um arranjo diferente daquele que
+ * gerou as quantidades já baixadas do estoque, e aí o desenho na mesa de corte
+ * contradiz a baixa que já aconteceu. Guardar congela os dois juntos.
+ */
+export interface PlanoCorteSalvo {
+  gerado_em: string;
+  lotes: {
+    tecido_nome: string;
+    unidade: string;
+    rolo: RoloDisponivel;
+    metros_lineares: number;
+    area_consumida_m2: number;
+    faixas: FaixaDoPlano[];
+    /** ref → ambiente, para o desenho nomear cada retângulo. */
+    ambientes: { ref: number; ambiente: string }[];
+  }[];
 }
