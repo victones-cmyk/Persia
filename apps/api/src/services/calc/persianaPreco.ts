@@ -76,6 +76,8 @@ export interface LinhaCustoPersiana {
   quantidade_consumo?: number;
   /** Só no tecido: unidade da quantidade — 'm²' quando a fórmula usa LARGURA, senão 'm'. */
   unidade?: string;
+  /** Só no tecido: em quantas folhas separadas o consumo é cortado (double vision = 2). */
+  folhas?: number;
   preco: number;
   subtotal: number;
   /** ID do produto no GestãoClick (chave do PUT /produtos/{id} — saída de estoque).
@@ -220,6 +222,24 @@ function resolverComponenteColorido(
  * de m² escrito como metro linear na OS é exatamente o tipo de coisa que esconde
  * um erro de quantidade por meses.
  */
+/**
+ * Em quantas folhas separadas o consumo é cortado.
+ *
+ * O double vision leva duas camadas de tecido — a receita diz
+ * `(ALTURA+0.2)*2`. Para o preço tanto faz: são os mesmos metros. Para o plano
+ * de corte importa muito, porque são dois retângulos que se encaixam lado a
+ * lado no rolo, e não um retângulo de comprimento dobrado.
+ *
+ * Lê o multiplicador inteiro no fim da fórmula em vez de olhar a família: assim
+ * uma receita nova com `*3` funciona sozinha. `*LARGURA` e `*1.2` não contam —
+ * o primeiro não é número, e o segundo não é folha (é perda, e já saiu daqui).
+ */
+export function folhasDaReceita(formula: string): number {
+  const m = /\*\s*(\d+)\s*$/.exec((formula ?? '').trim());
+  const n = m ? Number(m[1]) : 1;
+  return Number.isInteger(n) && n >= 1 ? n : 1;
+}
+
 export function unidadeDoTecido(formulaConsumo: string): string {
   return /LARGURA/i.test(formulaConsumo) ? 'm\u00b2' : 'm';
 }
@@ -253,6 +273,7 @@ function linhaDeTecido(
     quantidade: roundHalfUp(qPreco, 4),
     quantidade_consumo: roundHalfUp(consumo, 4),
     unidade: unidadeDoTecido(receita.tecido_qtd),
+    folhas: folhasDaReceita(receita.tecido_qtd),
     preco: precoTecido,
     subtotal: roundHalfUp(qPreco * precoTecido),
   };

@@ -1,7 +1,7 @@
 // apps/api/src/services/calc/persianaPreco.test.ts
 // Casos GERADOS das planilhas do Victor — travam o motor de preço da persiana (v.5.1).
 import { describe, it, expect } from 'vitest';
-import { calcularPrecoPersiana, unidadeDoTecido, ReceitaPendenteError } from './persianaPreco';
+import { calcularPrecoPersiana, folhasDaReceita, unidadeDoTecido, ReceitaPendenteError } from './persianaPreco';
 import { componentesSnapshot } from './persianaPrecoGc';
 import { evalQuantidade } from './formula';
 
@@ -217,5 +217,20 @@ describe('tecido: quantidade do preço x quantidade consumida', () => {
     expect(tecido?.quantidade).toBeCloseTo(4, 4);
     expect(tecido?.unidade).toBe('m²');
     expect(tecido?.produto_id).toBe('PROD-1');
+  });
+});
+
+describe('folhasDaReceita', () => {
+  it('double vision corta em duas folhas', () => {
+    expect(folhasDaReceita('(ALTURA+0.2)*2')).toBe(2);
+  });
+  it('as demais, uma só', () => {
+    expect(folhasDaReceita('(ALTURA+0.2)')).toBe(1);
+    expect(folhasDaReceita('LARGURA*(ALTURA+0.2)')).toBe(1);
+    expect(folhasDaReceita('(ALTURA+HASTES*0.025+0.05)*LARGURA')).toBe(1);
+    expect(folhasDaReceita('MAX(LARGURA*MAX(ALTURA,1.2),1.5)')).toBe(1);
+  });
+  it('não confunde perda com folha', () => {
+    expect(folhasDaReceita('LARGURA*(ALTURA+0.2)*1.2')).toBe(1);
   });
 });

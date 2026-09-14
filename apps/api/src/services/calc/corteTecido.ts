@@ -195,20 +195,33 @@ export interface PlanoDoLote {
   consumo_por_peca: Record<number, number>;
 }
 
-/** Orienta a peça para o rolo, preferindo o lado menor atravessado. */
-function orientarPara(peca: PegadaDaPeca, W: number, podeGirar: boolean):
+/**
+ * Duas estratégias de orientação, porque elas se contradizem.
+ *
+ * `estreita` atravessa o rolo com o lado menor: sobra largura para a peça
+ * seguinte entrar na mesma faixa — bom quando há muitas peças parecidas.
+ * `curta` gasta o menor comprimento possível — bom quando a peça vai sozinha na
+ * faixa, e é onde girar rende.
+ *
+ * Nenhuma das duas ganha sempre, e descobrir qual ganha exige tentar. São duas
+ * passadas sobre uma lista de poucas peças; o planejador roda as duas e fica
+ * com o resultado melhor, em vez de eu escolher no papel a regra errada.
+ */
+type Estrategia = 'estreita' | 'curta';
+
+function orientarPara(peca: PegadaDaPeca, W: number, podeGirar: boolean, estrategia: Estrategia):
   { largura: number; altura: number; orientacao: Orientacao } | null {
-  const normal = peca.largura <= W + FOLGA_MM;
-  const girada = podeGirar && peca.altura <= W + FOLGA_MM;
-  // Cabendo dos dois jeitos, atravessa o rolo com o lado menor: sobra mais
-  // largura livre para a próxima peça entrar na mesma faixa.
-  if (normal && girada) {
-    return peca.altura < peca.largura
-      ? { largura: peca.altura, altura: peca.largura, orientacao: 'girada' }
-      : { largura: peca.largura, altura: peca.altura, orientacao: 'normal' };
+  const emPe = { largura: peca.largura, altura: peca.altura, orientacao: 'normal' as Orientacao };
+  const deitada = { largura: peca.altura, altura: peca.largura, orientacao: 'girada' as Orientacao };
+  const cabeEmPe = peca.largura <= W + FOLGA_MM;
+  const cabeDeitada = podeGirar && peca.altura <= W + FOLGA_MM;
+
+  if (cabeEmPe && cabeDeitada) {
+    if (estrategia === 'estreita') return deitada.largura < emPe.largura ? deitada : emPe;
+    return deitada.altura < emPe.altura ? deitada : emPe;
   }
-  if (normal) return { largura: peca.largura, altura: peca.altura, orientacao: 'normal' };
-  if (girada) return { largura: peca.altura, altura: peca.largura, orientacao: 'girada' };
+  if (cabeEmPe) return emPe;
+  if (cabeDeitada) return deitada;
   return null;
 }
 
@@ -221,11 +234,11 @@ function orientarPara(peca: PegadaDaPeca, W: number, podeGirar: boolean):
  * melhor que cortar na ordem do pedido. Devolve null se alguma peça não couber
  * neste rolo.
  */
-function encaixarNoRolo(pecas: PecaDoLote[], rolo: RoloDisponivel, podeGirar: boolean): PlanoDoLote | null {
+function encaixarNoRolo(pecas: PecaDoLote[], rolo: RoloDisponivel, podeGirar: boolean, estrategia: Estrategia): PlanoDoLote | null {
   const W = rolo.dimensao_m;
   const orientadas: { ref: number; largura: number; altura: number; orientacao: Orientacao }[] = [];
   for (const p of pecas) {
-    const o = orientarPara(p, W, podeGirar);
+    const o = orientarPara(p, W, podeGirar, estrategia);
     if (!o) return null;
     orientadas.push({ ref: p.ref, ...o });
   }
@@ -279,15 +292,17 @@ export function planejarLote(args: {
   let melhor: PlanoDoLote | null = null;
   for (const rolo of args.rolos) {
     if (!(rolo.dimensao_m > 0)) continue;
-    const p = encaixarNoRolo(args.pecas, rolo, args.permiteInverter);
-    if (!p) continue;
-    if (
-      !melhor ||
-      p.area_consumida_m2 < melhor.area_consumida_m2 - 0.0001 ||
-      (Math.abs(p.area_consumida_m2 - melhor.area_consumida_m2) <= 0.0001 &&
-        p.rolo.dimensao_m < melhor.rolo.dimensao_m)
-    ) {
-      melhor = p;
+    for (const estrategia of ['estreita', 'curta'] as Estrategia[]) {
+      const p = encaixarNoRolo(args.pecas, rolo, args.permiteInverter, estrategia);
+      if (!p) continue;
+      if (
+        !melhor ||
+        p.area_consumida_m2 < melhor.area_consumida_m2 - 0.0001 ||
+        (Math.abs(p.area_consumida_m2 - melhor.area_consumida_m2) <= 0.0001 &&
+          p.rolo.dimensao_m < melhor.rolo.dimensao_m)
+      ) {
+        melhor = p;
+      }
     }
   }
   return melhor;

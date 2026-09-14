@@ -100,8 +100,9 @@ export function precoPersianaItem(args: {
 /** Breakdown no formato antigo {grupo, descricao, quantidade, unidade} (compat com o snapshot/UI).
  * `tecidoProdutoId`: ID do produto de tecido no GC (Orcamento/TecidoGc.id) — a linha de
  * TECIDO não passa pelo casamento por codigo_interno dos demais componentes. */
-export function componentesSnapshot(r: ResultadoPrecoPersiana, tecidoProdutoId?: string | null): { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id: string | null }[] {
-  const linhas = r.itens.map((i) => ({ grupo: 'componente', descricao: i.descricao, quantidade: i.quantidade, unidade: 'un', produto_id: i.produto_id ?? null }));
+export function componentesSnapshot(r: ResultadoPrecoPersiana, tecidoProdutoId?: string | null): { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id: string | null; folhas?: number }[] {
+  const linhas: { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id: string | null; folhas?: number }[] =
+    r.itens.map((i) => ({ grupo: 'componente', descricao: i.descricao, quantidade: i.quantidade, unidade: 'un', produto_id: i.produto_id ?? null }));
   // Consumo, não a quantidade do preço: esta linha vira a quantidade da OS e a baixa
   // de estoque, e a perda de corte da tela solar não sai do rolo (ver tecido_perda).
   linhas.push({
@@ -110,6 +111,9 @@ export function componentesSnapshot(r: ResultadoPrecoPersiana, tecidoProdutoId?:
     quantidade: r.tecido.quantidade_consumo ?? r.tecido.quantidade,
     unidade: r.tecido.unidade ?? 'm',
     produto_id: tecidoProdutoId ?? null,
+    // Quantas folhas separadas o corte gera — o plano de corte precisa saber
+    // que o double vision são dois retângulos, e não um comprimento dobrado.
+    folhas: r.tecido.folhas ?? 1,
   });
   return linhas;
 }

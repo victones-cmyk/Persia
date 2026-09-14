@@ -48,6 +48,8 @@ export interface TecidoDoCatalogo {
   preco_custo?: number;
   /** Campo extra "COD TECIDO" do GestãoClick. Vazio = não cadastrado. */
   codigo_tecido?: string;
+  /** Campo extra "PERMITE INVERTER?". Ausente conta como não. */
+  permite_inverter?: boolean;
 }
 
 /**

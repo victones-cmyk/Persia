@@ -24,6 +24,10 @@ export interface TecidoGc {
   /** Campo extra "COD TECIDO": liga os rolos de larguras diferentes do MESMO
    * tecido. Vazio quando não cadastrado — aí o agrupamento cai no nome. */
   codigo_tecido: string;
+  /** Campo extra "PERMITE INVERTER?": o tecido aceita ser cortado girado.
+   * Ausente ou diferente de SIM conta como NÃO — girar um tecido estampado
+   * inverte o desenho, e errar para esse lado estraga a peça. */
+  permite_inverter: boolean;
 }
 
 // Grupos de produto no GestãoClick (GET /api/grupos_produtos).
@@ -122,6 +126,24 @@ export function codigoDoTecido(p: GcProduto): string {
   return '';
 }
 
+/**
+ * O tecido aceita corte girado? (campo extra "PERMITE INVERTER?")
+ *
+ * Só SIM explícito libera. Vazio, ausente ou qualquer outra coisa é NÃO: a
+ * maioria dos tecidos tem desenho, e girar inverte o desenho (Victor,
+ * 14/09/2026). Perder a economia de um corte girado custa material; girar um
+ * estampado que não podia custa a peça.
+ */
+export function permiteInverterProduto(p: GcProduto): boolean {
+  for (const a of p.atributos ?? []) {
+    const desc = String(a?.atributo?.descricao ?? '').toUpperCase().replace(/[?.:]/g, '').trim();
+    if (desc === 'PERMITE INVERTER' || desc === 'CORTE GIRADO') {
+      return /^SIM$/i.test(String(a.atributo.conteudo ?? '').trim());
+    }
+  }
+  return false;
+}
+
 /** Preço (venda/custo) de um produto na tabela indicada. Fallback: valor_venda padrão. */
 export function precoByTier(p: GcProduto, tier: PriceTier): { venda: number; custo: number } {
   const v = p.valores?.find((x) => x.tipo_id === TIER_ID[tier] || x.nome_tipo === TIER_NOME[tier]);
@@ -150,6 +172,7 @@ function produtoParaTecido(p: GcProduto, exigirLargura = true): TecidoGc | null 
     preco_custo: preco.custo,
     grupo_id: String(p.grupo_id ?? ''),
     codigo_tecido: codigoDoTecido(p),
+    permite_inverter: permiteInverterProduto(p),
   };
 }
 
@@ -230,6 +253,7 @@ export async function tecidosCortina(): Promise<TecidoGc[]> {
       preco_custo: preco.custo,
       grupo_id: String(p.grupo_id ?? ''),
       codigo_tecido: codigoDoTecido(p),
+      permite_inverter: permiteInverterProduto(p),
     });
   }
   cacheCortina = { tecidos, expiresAt: Date.now() + CACHE_TTL_MS };

@@ -27,7 +27,8 @@ import {
   type Acionamento,
 } from '../services/calc/tipos';
 import { descricaoProdutoPersiana, nomeProdutoPersiana } from '../services/calc/persianaProduto';
-import { buscarTecidoGc, type TecidoGc } from '../services/gc/tecidos';
+import { buscarTecidoGc, tecidosParaTipo, type TecidoGc } from '../services/gc/tecidos';
+import { consumoDoPedido, type PecaDoPedido } from '../services/calc/consumoDoPedido';
 import { criarProduto, deletarProduto } from '../services/gc/produtos';
 import { inativarProdutosSinteticosDoOrcamento, respostaComProdutosCriados } from '../services/gc/limpezaProdutos';
 import { marcarSituacaoOrcamentoGc } from '../lib/situacaoOrcamentoGc';
@@ -92,7 +93,7 @@ interface ItemPreparado {
   valor_custo: number;
   instalacao_id: string | null;
   instalacao_nome: string | null;
-  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id?: string | null }[];
+  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id?: string | null; folhas?: number }[];
   nome_produto: string;
   descricao_produto: string;
 }
@@ -129,7 +130,7 @@ export interface ItemSnapshot {
   gc_produto_id: string | null;
   nome_produto: string;
   descricao_produto?: string;
-  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id?: string | null }[];
+  componentes: { grupo: string; descricao: string; quantidade: number; unidade: string; produto_id?: string | null; folhas?: number }[];
 }
 
 function erroGcLegivel(erro: string | null | undefined): string | null {
@@ -274,7 +275,63 @@ export async function prepararItens(tipoFallback: TipoPersiana | null, itens: It
     });
   }
 
+  await aplicarPlanoDeCorte(preparados);
   return { preparados, valorBrutoTotal };
+}
+
+/**
+ * Reescreve a linha de TECIDO de cada peça com o consumo REAL, depois de
+ * encaixar todas as peças do mesmo tecido no rolo.
+ *
+ * Roda depois do loop, e não dentro dele, porque a conta é do lote: quanto uma
+ * peça consome depende das peças ao lado, que dividem a mesma faixa do rolo.
+ *
+ * Não toca em preço nenhum — `valorBrutoTotal` já está fechado quando isto
+ * roda. O que muda é o que a OS pede e o que o estoque baixa.
+ *
+ * Melhor esforço: qualquer falha aqui deixa as quantidades como a receita
+ * calculou, que é o comportamento de hoje. Um erro de plano de corte não pode
+ * impedir alguém de fechar uma venda.
+ */
+async function aplicarPlanoDeCorte(preparados: ItemPreparado[]): Promise<void> {
+  try {
+    const pecas: PecaDoPedido[] = [];
+    for (let i = 0; i < preparados.length; i++) {
+      const linha = preparados[i].componentes.find((c) => c.grupo === 'tecido');
+      if (!linha || !(Number(linha.quantidade) > 0)) continue;
+      pecas.push({
+        ref: i,
+        largura: preparados[i].largura,
+        consumo: Number(linha.quantidade),
+        unidade: linha.unidade,
+        folhas: Number(linha.folhas ?? 1),
+        tecido: preparados[i].tecido,
+      });
+    }
+    if (pecas.length === 0) return;
+
+    // O catálogo de um tipo já traz os rolos irmãos; junta os tipos presentes
+    // para achar irmãos de qualquer peça sem repetir chamada.
+    const tipos = [...new Set(preparados.map((p) => p.tipo))];
+    const catalogo = (await Promise.all(tipos.map((t) => tecidosParaTipo(t)))).flat();
+
+    const { porPeca } = consumoDoPedido({
+      pecas,
+      catalogo,
+      permiteInverter: (t) => t.permite_inverter === true,
+    });
+
+    for (const [ref, consumo] of porPeca) {
+      const linha = preparados[ref].componentes.find((c) => c.grupo === 'tecido');
+      if (!linha) continue;
+      linha.quantidade = consumo.quantidade;
+      linha.produto_id = consumo.produto_id;
+      linha.descricao = 'TECIDO';
+      preparados[ref].qtd_producao = consumo.quantidade;
+    }
+  } catch (e) {
+    console.error('[plano-de-corte] falhou; quantidades seguem as da receita.', e);
+  }
 }
 
 /**
