@@ -279,29 +279,43 @@ function encaixarNoRolo(pecas: PecaDoLote[], rolo: RoloDisponivel, podeGirar: bo
 /**
  * O melhor plano para o lote, entre os rolos disponíveis.
  *
- * Critério: menor ÁREA retirada do rolo. Comprimento sozinho escolheria o rolo
- * largo à toa — 2,60 m de um rolo de 3,00 tiram mais tecido que 2,60 m de um de
- * 2,00. Empate resolve pelo rolo mais estreito, que deixa o largo livre para a
- * peça que precisa dele.
+ * Critério: menor CUSTO de material, e não menor área. Os dois só coincidem
+ * quando todos os rolos custam o mesmo por unidade — o caso da tela solar. No
+ * blackout não coincidem, e a diferença é grande: duas peças de 0,80 × 2,60
+ * saem por R$ 358,80 no rolo de 2,00 m e por R$ 502,32 no de 2,80.
+ *
+ * O custo também é o que protege contra a troca ingênua pelo rolo mais
+ * estreito. Três peças de 0,80 cabem lado a lado num rolo de 2,80 (uma faixa),
+ * mas num de 2,00 só cabem duas — a terceira abre outra faixa, e o rolo
+ * "econômico" sai mais caro. Minimizar custo resolve os dois casos sem regra
+ * extra.
+ *
+ * `custo` é injetado porque a unidade muda com a família: metro linear no rolô
+ * e blackout, m² na tela solar. Sem ele, cai em área, que é o comportamento
+ * certo quando não há preço para comparar.
  */
 export function planejarLote(args: {
   pecas: PecaDoLote[];
   rolos: RoloDisponivel[];
   permiteInverter: boolean;
+  custo?: (plano: PlanoDoLote) => number;
 }): PlanoDoLote | null {
+  const custoDe = args.custo ?? ((p: PlanoDoLote) => p.area_consumida_m2);
   let melhor: PlanoDoLote | null = null;
+  let melhorCusto = Infinity;
+
   for (const rolo of args.rolos) {
     if (!(rolo.dimensao_m > 0)) continue;
     for (const estrategia of ['estreita', 'curta'] as Estrategia[]) {
       const p = encaixarNoRolo(args.pecas, rolo, args.permiteInverter, estrategia);
       if (!p) continue;
-      if (
-        !melhor ||
-        p.area_consumida_m2 < melhor.area_consumida_m2 - 0.0001 ||
-        (Math.abs(p.area_consumida_m2 - melhor.area_consumida_m2) <= 0.0001 &&
-          p.rolo.dimensao_m < melhor.rolo.dimensao_m)
-      ) {
+      const c = custoDe(p);
+      const empate = Math.abs(c - melhorCusto) <= 0.0001;
+      // Empate de custo fica com o rolo mais estreito: sobra menos ponta e o
+      // largo continua livre para a peça que precisa dele.
+      if (!melhor || c < melhorCusto - 0.0001 || (empate && p.rolo.dimensao_m < melhor.rolo.dimensao_m)) {
         melhor = p;
+        melhorCusto = c;
       }
     }
   }

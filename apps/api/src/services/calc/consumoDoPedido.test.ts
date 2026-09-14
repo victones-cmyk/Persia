@@ -3,7 +3,7 @@
 // impede a correção de mexer no preço.
 
 import { describe, it, expect } from 'vitest';
-import { consumoDoPedido, rolosSemMudarPreco, type PecaDoPedido } from './consumoDoPedido';
+import { consumoDoPedido, rolosDoTecido, type PecaDoPedido } from './consumoDoPedido';
 import type { TecidoDoCatalogo } from './seletorTecido';
 
 const bk: TecidoDoCatalogo = { id: 'bk280', nome: 'LINHO DIGITAL CINZA BK 2,80m', dimensao_m: 2.8, preco_venda: 193.2 };
@@ -71,21 +71,35 @@ describe('tela solar: passa a debitar a área que sai do rolo', () => {
   });
 });
 
-describe('a trava do preço', () => {
-  it('rolos de preços diferentes não entram na disputa', () => {
-    // O blackout de 2,00 custa R$ 140 e o de 2,80 R$ 193,20: trocar mudaria o
-    // valor do orçamento, então só o escolhido pelo vendedor vale.
-    const rolos = rolosSemMudarPreco(bk, catalogo);
-    expect(rolos.map((r) => r.id)).toEqual(['bk280']);
+// O critério do plano é CUSTO, não área. Os dois só coincidem quando todos os
+// rolos custam o mesmo por unidade.
+describe('escolha do rolo pelo custo', () => {
+  it('todos os rolos do tecido entram na disputa, com o preço de cada um', () => {
+    expect(rolosDoTecido(bk, catalogo).map((r) => [r.id, r.preco])).toEqual([
+      ['bk280', 193.2],
+      ['bk200', 140],
+    ]);
   });
 
-  it('rolos de mesmo preço entram todos', () => {
-    const rolos = rolosSemMudarPreco(screen200, catalogo);
-    expect(rolos.map((r) => r.id).sort()).toEqual(['s200', 's250', 's300']);
+  it('desce para o rolo estreito quando ele sai mais barato', () => {
+    // Duas peças de 0,80: 2,60 m nos dois rolos, mas o de 2,00 custa R$ 140/m
+    // contra R$ 193,20 — R$ 364 contra R$ 502,32.
+    const { porPeca } = consumoDoPedido({ pecas: [linear(0, 0.8, 2.4, bk), linear(1, 0.8, 2.4, bk)], catalogo });
+    expect(porPeca.get(0)!.produto_id).toBe('bk200');
+    expect(porPeca.get(1)!.produto_id).toBe('bk200');
   });
 
-  it('o plano nunca troca por um rolo mais caro nem mais barato', () => {
-    const { porPeca } = consumoDoPedido({ pecas: [linear(0, 1.5, 2.4, bk)], catalogo });
+  it('fica no rolo largo quando o estreito obrigaria a abrir outra faixa', () => {
+    // Três peças de 0,80 cabem lado a lado no rolo de 2,80 (uma faixa, 2,60 m =
+    // R$ 502,32). No de 2,00 só cabem duas: a terceira abre outra faixa, 5,20 m
+    // = R$ 728. O rolo "econômico" sai mais caro.
+    const pecas = [linear(0, 0.8, 2.4, bk), linear(1, 0.8, 2.4, bk), linear(2, 0.8, 2.4, bk)];
+    const { porPeca } = consumoDoPedido({ pecas, catalogo });
+    expect(porPeca.get(0)!.produto_id).toBe('bk280');
+  });
+
+  it('peça larga demais para o rolo estreito continua no que cabe', () => {
+    const { porPeca } = consumoDoPedido({ pecas: [linear(0, 2.5, 2.4, bk)], catalogo });
     expect(porPeca.get(0)!.produto_id).toBe('bk280');
   });
 });

@@ -56,22 +56,42 @@ export interface LotePlanejado {
 }
 
 /**
- * Rolos que o plano pode escolher sem mexer no preço.
+ * Todos os rolos do mesmo tecido, com o preço de cada um.
  *
- * O rolo escolhido pelo vendedor é a referência do orçamento, e trocá-lo por
- * baixo mudaria o valor já apresentado ao cliente. Então só entram na disputa
- * os rolos que custam o MESMO por unidade — o caso da tela solar, onde as três
- * larguras saem por R$ 42,00/m² e a escolha é só de aproveitamento.
+ * Eu tinha restringido isto aos rolos de preço IGUAL ao escolhido, com medo de
+ * mexer no valor do cliente. Era medo mal colocado: o valor é calculado antes
+ * do plano e não muda com ele. O que eu queria evitar era o plano encarecer o
+ * material em silêncio — e disso quem cuida é o critério de menor CUSTO, não
+ * uma lista restrita.
  *
- * Onde o preço difere (as famílias lineares), a escolha continua sendo do
- * vendedor, e é a Fase 2 que a mostra com o valor de cada opção.
+ * A restrição custava caro: duas peças de 0,80 × 2,60 ficavam presas no rolo de
+ * 2,80 m por R$ 502,32, com 1,20 m de largura desperdiçada, quando o mesmo
+ * tecido existe em 2,00 m por R$ 358,80 e sobra de 0,40 (Victor, 14/09/2026).
  */
-export function rolosSemMudarPreco(escolhido: TecidoDoCatalogo, catalogo: TecidoDoCatalogo[]): RoloDisponivel[] {
-  const mesmos = catalogo.filter(
-    (t) => mesmoTecido(escolhido, t) && Math.abs(t.preco_venda - escolhido.preco_venda) < 0.005,
-  );
+export function rolosDoTecido(escolhido: TecidoDoCatalogo, catalogo: TecidoDoCatalogo[]): RoloComPreco[] {
+  const mesmos = catalogo.filter((t) => mesmoTecido(escolhido, t));
   const lista = mesmos.some((t) => t.id === escolhido.id) ? mesmos : [escolhido, ...mesmos];
-  return lista.map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m }));
+  return lista.map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m, preco: t.preco_venda }));
+}
+
+interface RoloComPreco extends RoloDisponivel {
+  /** Por metro linear nas famílias lineares; por m² na tela solar. */
+  preco: number;
+}
+
+/**
+ * Custo do material de um plano.
+ *
+ * Usa o preço de VENDA porque é o campo confiável do cadastro e o mesmo que o
+ * seletor da Fase 2 mostra ao vendedor — as duas telas não podem discordar
+ * sobre qual rolo sai mais barato. O que decide é a RAZÃO entre os rolos, e ela
+ * é a mesma em venda ou custo enquanto o markup for uniforme.
+ */
+function custoDoPlano(unidade: string, precoPorRolo: Map<string, number>) {
+  return (plano: PlanoDoLote): number => {
+    const preco = precoPorRolo.get(plano.rolo.id) ?? 0;
+    return (unidade === 'm²' ? plano.area_consumida_m2 : plano.metros_lineares) * preco;
+  };
 }
 
 /** Retângulos que a peça ocupa no rolo — um por folha. */
@@ -112,7 +132,8 @@ export function consumoDoPedido(args: {
 
   for (const grupo of grupos) {
     const base = grupo[0];
-    const rolos = rolosSemMudarPreco(base.tecido, args.catalogo);
+    const rolos = rolosDoTecido(base.tecido, args.catalogo);
+    const precoPorRolo = new Map(rolos.map((r) => [r.id, r.preco]));
     const inverte = args.permiteInverter ? args.permiteInverter(base.tecido) : false;
 
     // Cada folha vira um retângulo com ref própria, para o rateio saber de qual
@@ -130,7 +151,12 @@ export function consumoDoPedido(args: {
       folhaDaPeca.set(p.ref, refs);
     }
 
-    const plano = planejarLote({ pecas: pecasDoLote, rolos, permiteInverter: inverte });
+    const plano = planejarLote({
+      pecas: pecasDoLote,
+      rolos,
+      permiteInverter: inverte,
+      custo: custoDoPlano(base.unidade, precoPorRolo),
+    });
     if (!plano) continue; // sem plano viável: cada peça fica com o consumo da receita
 
     lotes.push({
