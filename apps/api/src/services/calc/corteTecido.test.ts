@@ -4,7 +4,7 @@
 // menos tecido.
 
 import { describe, it, expect } from 'vitest';
-import { melhorCorte, planosDeCorte, pegadaDaPeca, type RoloDisponivel } from './corteTecido';
+import { melhorCorte, planejarLote, planosDeCorte, pegadaDaPeca, type RoloDisponivel } from './corteTecido';
 
 // SCREEN 3% PANAMA OFF WHITE/01, as três larguras cadastradas pelo Victor.
 const ROLOS: RoloDisponivel[] = [
@@ -87,5 +87,74 @@ describe('pegadaDaPeca — sai da receita, sem repetir a folga', () => {
 
   it('família linear (m): o consumo já é o comprimento', () => {
     expect(pegadaDaPeca({ largura: 0.8, consumo: 2.6, unidade: 'm' })).toEqual({ largura: 0.8, altura: 2.6 });
+  });
+});
+
+// O caso que o Victor descreveu: duas persianas de 0,80 × 2,40 num rolo largo.
+// Hoje a Persia cobra e debita duas faixas; elas saem de uma so.
+describe('planejarLote', () => {
+  const rolo280: RoloDisponivel = { id: 'bk', nome: 'LINHO DIGITAL CINZA BK 2,80m', dimensao_m: 2.8 };
+
+  it('duas peças estreitas dividem a mesma faixa', () => {
+    const pecas = [
+      { ref: 0, largura: 0.8, altura: 2.6 },
+      { ref: 1, largura: 0.8, altura: 2.6 },
+    ];
+    const p = planejarLote({ pecas, rolos: [rolo280], permiteInverter: false })!;
+    expect(p.faixas).toHaveLength(1);
+    expect(p.metros_lineares).toBe(2.6);          // e não 5,20
+    expect(p.faixas[0].sobra_largura).toBeCloseTo(1.2, 4);
+    // O rateio divide a faixa entre as duas, e a soma fecha com o total.
+    expect(p.consumo_por_peca[0]).toBeCloseTo(1.3, 4);
+    expect(p.consumo_por_peca[1]).toBeCloseTo(1.3, 4);
+    const soma = Object.values(p.consumo_por_peca).reduce((a, b) => a + b, 0);
+    expect(soma).toBeCloseTo(p.metros_lineares, 4);
+  });
+
+  it('a soma do rateio sempre fecha com o total, com peças desiguais', () => {
+    const pecas = [
+      { ref: 0, largura: 1.5, altura: 2.6 },
+      { ref: 1, largura: 1.2, altura: 1.4 },
+      { ref: 2, largura: 0.6, altura: 2.2 },
+      { ref: 3, largura: 2.7, altura: 1.1 },
+    ];
+    const p = planejarLote({ pecas, rolos: [rolo280], permiteInverter: false })!;
+    const soma = Object.values(p.consumo_por_peca).reduce((a, b) => a + b, 0);
+    expect(soma).toBeCloseTo(p.metros_lineares, 3);
+    expect(Object.keys(p.consumo_por_peca)).toHaveLength(4);
+  });
+
+  it('quem ocupa mais largura leva mais da faixa, inclusive da sobra', () => {
+    const pecas = [
+      { ref: 0, largura: 2.0, altura: 2.0 },
+      { ref: 1, largura: 0.5, altura: 2.0 },
+    ];
+    const p = planejarLote({ pecas, rolos: [rolo280], permiteInverter: false })!;
+    expect(p.faixas).toHaveLength(1);
+    expect(p.consumo_por_peca[0]).toBeGreaterThan(p.consumo_por_peca[1]);
+  });
+
+  it('peça que não cabe em pé derruba o rolo inteiro quando não se pode girar', () => {
+    const pecas = [{ ref: 0, largura: 3.2, altura: 1 }];
+    expect(planejarLote({ pecas, rolos: [rolo280], permiteInverter: false })).toBeNull();
+    expect(planejarLote({ pecas, rolos: [rolo280], permiteInverter: true })!.metros_lineares).toBe(3.2);
+  });
+
+  it('entre rolos, escolhe pela área retirada e não pelo comprimento', () => {
+    const rolos: RoloDisponivel[] = [
+      { id: 'a', nome: '2,00', dimensao_m: 2 },
+      { id: 'b', nome: '3,00', dimensao_m: 3 },
+    ];
+    // Uma peça de 1,90 × 2,00 cabe nos dois e gasta 2,00 m de comprimento em
+    // ambos — mas o rolo de 2,00 tira 4 m² e o de 3,00 tira 6 m².
+    const p = planejarLote({ pecas: [{ ref: 0, largura: 1.9, altura: 2 }], rolos, permiteInverter: false })!;
+    expect(p.rolo.dimensao_m).toBe(2);
+    expect(p.area_consumida_m2).toBeCloseTo(4, 4);
+  });
+
+  it('lote vazio não vira plano com metro nenhum', () => {
+    const p = planejarLote({ pecas: [], rolos: [rolo280], permiteInverter: false })!;
+    expect(p.metros_lineares).toBe(0);
+    expect(p.faixas).toHaveLength(0);
   });
 });
