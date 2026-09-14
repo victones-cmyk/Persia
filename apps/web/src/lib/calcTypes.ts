@@ -107,8 +107,12 @@ export type Acionamento =
 export interface TecidoOpcao {
   id: string;
   nome: string;
+  /** Largura do rolo. Num tecido com várias, é a MAIOR — o plano de corte
+   * escolhe a mais justa depois, sabendo a medida da peça. */
   dimensao_m: number;
   preco_venda: number;
+  /** As larguras em que este tecido existe. Uma só quando o rolo é único. */
+  larguras_m?: number[];
 }
 
 /** Tipo de instalação (grupo INSTALAÇÃO do GestãoClick) — embutido no preço do produto. */

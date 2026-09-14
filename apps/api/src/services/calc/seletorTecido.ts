@@ -110,6 +110,13 @@ export function rolosDoMesmoTecido(args: {
   const irmaos = args.catalogo.filter((t) => mesmoTecido(args.selecionado, t));
   if (irmaos.length < 2) return [];
 
+  // Rolos de mesmo preço não são escolha do vendedor: o plano de corte decide,
+  // sabendo a medida da peça. Mostrá-los aqui seria pedir uma decisão que não
+  // muda o valor do cliente — e foi isso que poluiu a tela da tela solar, onde
+  // as três larguras saem por R$ 42,00/m².
+  const precos = new Set(irmaos.map((t) => Math.round(t.preco_venda * 100)));
+  if (precos.size < 2) return [];
+
   const valorSelecionado = args.precoDaPeca(args.selecionado);
 
   const rolos: RoloDoTecido[] = irmaos.map((t) => {
@@ -198,4 +205,49 @@ export function agruparTecidos(catalogo: TecidoDoCatalogo[]): GrupoDeTecido[] {
  */
 export function codigosOrfaos(grupos: GrupoDeTecido[]): GrupoDeTecido[] {
   return grupos.filter((g) => g.rolos.length === 1 && g.rolos[0].codigo_tecido !== '');
+}
+
+/**
+ * Colapsa os rolos de MESMO PREÇO numa opção só, para a lista do vendedor.
+ *
+ * O cadastro das três larguras da tela solar transformou 10 tecidos em 30
+ * linhas na busca — e o vendedor passou a escolher ROLO, quando o que ele
+ * decide é TECIDO. Pior: escolhendo o de 2,00 m, uma peça de 3,00 m passou a
+ * ser recusada pela RN-01, sendo que o tecido existe em 3,00.
+ *
+ * O critério é o preço, o mesmo de rolosSemMudarPreco:
+ *
+ *   mesmo preço  -> uma opção só. O rolo não é decisão de venda, é de corte, e
+ *                   quem decide é o plano de corte, que sabe a medida da peça.
+ *   preços        -> continuam separados. Aí o rolo MUDA o valor do cliente, e
+ *   diferentes      escolher é do vendedor — é o que a Fase 2 mostra.
+ *
+ * A opção representa o grupo pela largura MAIOR, para a RN-01 aceitar qualquer
+ * peça que caiba em algum rolo; o plano depois escolhe o rolo mais justo.
+ */
+export function agruparOpcoesDeTecido<T extends TecidoDoCatalogo>(
+  catalogo: T[],
+): (T & { larguras_m: number[] })[] {
+  const grupos: T[][] = [];
+  for (const t of catalogo) {
+    const g = grupos.find(
+      (x) => mesmoTecido(x[0], t) && Math.abs(x[0].preco_venda - t.preco_venda) < 0.005,
+    );
+    if (g) g.push(t);
+    else grupos.push([t]);
+  }
+
+  return grupos.map((g) => {
+    const larguras = [...new Set(g.map((t) => t.dimensao_m))].sort((a, b) => a - b);
+    const maisLargo = g.reduce((a, b) => (b.dimensao_m > a.dimensao_m ? b : a));
+    // Nome sem o sufixo de largura quando o grupo tem mais de um rolo: exibir
+    // "…3,00M" numa opção que também corta no 2,00 seria mentir na etiqueta.
+    const nome = g.length > 1 ? nomeSemLargura(maisLargo.nome) : maisLargo.nome;
+    return { ...maisLargo, nome, larguras_m: larguras };
+  });
+}
+
+/** O nome do tecido sem o sufixo de largura, preservando a capitalização. */
+export function nomeSemLargura(nome: string): string {
+  return (nome ?? '').replace(SUFIXO_LARGURA, '').replace(/\s+/g, ' ').trim();
 }

@@ -18,7 +18,7 @@ import {
   type CamadaCortina,
 } from '../services/calc/cortina';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
-import { rolosDoMesmoTecido, type RoloDoTecido } from '../services/calc/seletorTecido';
+import { agruparOpcoesDeTecido, rolosDoMesmoTecido, type RoloDoTecido } from '../services/calc/seletorTecido';
 import { exigeLarguraTecido, getCalculadorasAtivas } from '../services/calc/calculadoras';
 import { getCalculadorasCortinaAtivas } from '../services/calc/calculadorasCortina';
 import type { TecidoGc } from '../services/gc/tecidos';
@@ -46,7 +46,9 @@ export async function listarTecidos(req: Request, res: Response): Promise<void> 
   if (!isTipoPersiana(tipo)) {
     throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
   }
-  const tecidos = await tecidosParaTipo(tipo);
+  // Colapsa os rolos de mesmo preço: o vendedor escolhe TECIDO, o plano de
+  // corte escolhe o rolo. Onde o rolo muda o preço, as opções seguem separadas.
+  const tecidos = agruparOpcoesDeTecido(await tecidosParaTipo(tipo));
   res.json({ tecidos });
 }
 
@@ -191,7 +193,7 @@ export async function calcularPersianaController(req: Request, res: Response): P
 
   // RN-01: a largura não pode exceder a largura do rolo do tecido.
   if (exigeLarguraTecido(tipo) && larguraN > tecido.dimensao_m) {
-    const alternativos = (await tecidosParaTipo(tipo))
+    const alternativos = agruparOpcoesDeTecido(await tecidosParaTipo(tipo))
       .filter((t) => t.dimensao_m >= larguraN)
       .map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m }));
     res.status(422).json({
@@ -262,7 +264,12 @@ export async function calcularPersianaLoteController(req: Request, res: Response
   const compatCache = new Map<TipoPersiana, { id: string; nome: string; dimensao_m: number }[]>();
   const compatPara = async (tipo: TipoPersiana, larguraN: number) => {
     if (!compatCache.has(tipo)) {
-      compatCache.set(tipo, (await tecidosParaTipo(tipo)).map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m })));
+      // Agrupado pelo mesmo critério da lista: sugerir os três rolos do mesmo
+      // tecido como se fossem três alternativas é repetir a mesma sugestão.
+      compatCache.set(
+        tipo,
+        agruparOpcoesDeTecido(await tecidosParaTipo(tipo)).map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m })),
+      );
     }
     return compatCache.get(tipo)!.filter((t) => t.dimensao_m >= larguraN);
   };

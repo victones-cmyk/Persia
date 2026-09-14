@@ -4,7 +4,7 @@
 // recomendar um rolo de outra cor.
 
 import { describe, it, expect } from 'vitest';
-import { chaveDoTecido, mesmoTecido, rolosDoMesmoTecido, temEconomia, type TecidoDoCatalogo } from './seletorTecido';
+import { agruparOpcoesDeTecido, chaveDoTecido, mesmoTecido, rolosDoMesmoTecido, temEconomia, type TecidoDoCatalogo } from './seletorTecido';
 
 describe('chaveDoTecido', () => {
   it('ignora o sufixo de largura, em qualquer capitalização', () => {
@@ -120,5 +120,71 @@ describe('mesmoTecido — campo COD TECIDO', () => {
 
   it('código em branco conta como não cadastrado', () => {
     expect(mesmoTecido(t('1', 'DOUBLE VISION BRANCO AM-3640 1,80M', '   '), t('2', 'DOUBLE VISION PRETO AM-3640 1,80M', 'X'))).toBe(false);
+  });
+});
+
+// O cadastro das tres larguras da tela solar virou 30 linhas na busca, e o
+// vendedor passou a escolher ROLO em vez de TECIDO — escolhendo o de 2,00 m,
+// uma peca de 3,00 m era recusada, sendo que o tecido existe em 3,00.
+describe('agruparOpcoesDeTecido', () => {
+  const t = (id: string, nome: string, dimensao_m: number, preco_venda: number): TecidoDoCatalogo =>
+    ({ id, nome, dimensao_m, preco_venda });
+
+  const screen = [
+    t('s200', 'SCREEN 3% PANAMA OFF WHITE/01 2,00M', 2, 42),
+    t('s250', 'SCREEN 3% PANAMA OFF WHITE/01 2,50M', 2.5, 42),
+    t('s300', 'SCREEN 3% PANAMA OFF WHITE/01 3,00M', 3, 42),
+  ];
+
+  it('mesmo preço vira uma opção só, representada pela largura maior', () => {
+    const r = agruparOpcoesDeTecido(screen);
+    expect(r).toHaveLength(1);
+    expect(r[0].dimensao_m).toBe(3);
+    expect(r[0].larguras_m).toEqual([2, 2.5, 3]);
+  });
+
+  it('o nome perde o sufixo de largura — o grupo corta em qualquer uma', () => {
+    expect(agruparOpcoesDeTecido(screen)[0].nome).toBe('SCREEN 3% PANAMA OFF WHITE/01');
+  });
+
+  it('preços diferentes continuam separados: aí o rolo muda o valor do cliente', () => {
+    const dv = [
+      t('dv180', 'DOUBLE VISION BRANCO AM-3640 1,80M', 1.8, 90),
+      t('dv225', 'DOUBLE VISION BRANCO AM-3640 2,25M', 2.25, 130),
+    ];
+    const r = agruparOpcoesDeTecido(dv);
+    expect(r).toHaveLength(2);
+    expect(r.map((x) => x.nome)).toEqual([
+      'DOUBLE VISION BRANCO AM-3640 1,80M',
+      'DOUBLE VISION BRANCO AM-3640 2,25M',
+    ]);
+  });
+
+  it('tecido de rolo único não perde o nome que tem', () => {
+    const unico = [t('u', 'LAGUNA CINZA BK', 2, 131.3)];
+    const r = agruparOpcoesDeTecido(unico);
+    expect(r[0].nome).toBe('LAGUNA CINZA BK');
+    expect(r[0].larguras_m).toEqual([2]);
+  });
+
+  it('não mistura tecidos diferentes que por acaso custam igual', () => {
+    const r = agruparOpcoesDeTecido([
+      t('a', 'SCREEN 3% PANAMA OFF WHITE/01 2,00M', 2, 42),
+      t('b', 'SCREEN 3% PANAMA PRETO/50 2,00M', 2, 42),
+    ]);
+    expect(r).toHaveLength(2);
+  });
+});
+
+describe('o seletor da Fase 2 some quando não há o que decidir', () => {
+  const mesmo = (id: string, nome: string, dimensao_m: number): TecidoDoCatalogo =>
+    ({ id, nome, dimensao_m, preco_venda: 42 });
+  it('rolos de preço igual não viram pergunta ao vendedor', () => {
+    const catalogo = [
+      mesmo('s200', 'SCREEN 3% PANAMA OFF WHITE/01 2,00M', 2),
+      mesmo('s300', 'SCREEN 3% PANAMA OFF WHITE/01 3,00M', 3),
+    ];
+    const r = rolosDoMesmoTecido({ selecionado: catalogo[1], catalogo, largura: 1.5, precoDaPeca: () => 100 });
+    expect(r).toEqual([]);
   });
 });
