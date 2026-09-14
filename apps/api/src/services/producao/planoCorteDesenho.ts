@@ -129,13 +129,19 @@ export function desenharPlanoDeCorte(doc: Doc, plano: PlanoCorteDesenho, cabecal
         const w = faixa.sobra_largura * escalaX;
         doc.save().rect(x, y, w, altura).fillOpacity(0.06).fill('#000').restore();
         doc.rect(x, y, w, altura).lineWidth(0.5).dash(2, { space: 2 }).strokeColor('#999').stroke().undash();
-        doc.fontSize(7).fillColor('#777')
-          .text(`sobra ${num(faixa.sobra_largura)}`, x + 3, y + 4, { width: Math.max(w - 6, 8), height: 9, ellipsis: true });
-        doc.fillColor('#000');
+        // Sobra estreita não recebe rótulo: "sobra 0,10" em 8 pt de largura sai
+        // cortado como "so…", que lê como defeito. A medida vai na legenda da
+        // faixa, onde sempre cabe.
+        if (w > 44) {
+          doc.fontSize(7).fillColor('#777')
+            .text(`sobra ${num(faixa.sobra_largura)}`, x + 3, y + 4, { width: w - 6, height: 9, ellipsis: true });
+          doc.fillColor('#000');
+        }
       }
 
+      const sobra = faixa.sobra_largura > 0.005 ? ` · sobra ${num(faixa.sobra_largura)} m de largura` : '';
       doc.fontSize(6.5).fillColor('#777')
-        .text(`faixa ${i + 1} - ${num(faixa.comprimento)} m`, left, y + altura + 3, { width: largura });
+        .text(`faixa ${i + 1} - ${num(faixa.comprimento)} m${sobra}`, left, y + altura + 3, { width: largura });
       doc.fillColor('#000');
       y += altura + 14;
     }
