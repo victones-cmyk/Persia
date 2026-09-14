@@ -106,3 +106,42 @@ describe('tecido sem plano viável', () => {
     expect(porPeca.has(0)).toBe(false);
   });
 });
+
+// O desenho procura o nome do ambiente pelo ref do RETANGULO. Ele e numerado
+// por lote, comecando do zero em cada tecido; a peca e numerada no pedido
+// inteiro. Confundir os dois deixou o segundo tecido sem nome nenhum no plano
+// impresso — passava despercebido porque o primeiro tecido batia por acaso.
+describe('os retângulos de cada peça', () => {
+  it('o segundo tecido do pedido tem sua própria numeração de retângulos', () => {
+    const { lotes } = consumoDoPedido({
+      pecas: [
+        linear(0, 0.8, 2.4, bk),
+        linear(1, 0.8, 2.4, bk),
+        { ref: 2, largura: 1, consumo: 2, unidade: 'm²', folhas: 1, tecido: screen200 },
+      ],
+      catalogo,
+    });
+    expect(lotes).toHaveLength(2);
+    const doScreen = lotes.find((l) => l.tecido_nome.includes('SCREEN'))!;
+    // A peça 2 do pedido é o retângulo 0 do lote dela.
+    expect(doScreen.pecas).toEqual([{ ref: 2, retangulos: [0] }]);
+  });
+
+  it('double vision gera dois retângulos para a mesma peça', () => {
+    const { lotes } = consumoDoPedido({
+      pecas: [{ ref: 0, largura: 0.8, consumo: 2 * 2.6, unidade: 'm', folhas: 2, tecido: bk }],
+      catalogo,
+    });
+    expect(lotes[0].pecas).toEqual([{ ref: 0, retangulos: [0, 1] }]);
+  });
+
+  it('todo retângulo do plano tem uma peça correspondente', () => {
+    const { lotes } = consumoDoPedido({
+      pecas: [linear(0, 0.8, 2.4), linear(1, 1.2, 2.0), linear(2, 0.6, 1.5)],
+      catalogo,
+    });
+    const doPlano = new Set(lotes.flatMap((l) => l.plano.faixas.flatMap((f) => f.pecas.map((p) => p.ref))));
+    const dasPecas = new Set(lotes.flatMap((l) => l.pecas.flatMap((p) => p.retangulos)));
+    expect([...doPlano].sort()).toEqual([...dasPecas].sort());
+  });
+});

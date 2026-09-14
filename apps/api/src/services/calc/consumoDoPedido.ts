@@ -44,7 +44,15 @@ export interface LotePlanejado {
   tecido_nome: string;
   plano: PlanoDoLote;
   unidade: string;
-  refs: number[];
+  /**
+   * Peça do pedido → os retângulos dela dentro DESTE plano.
+   *
+   * São numerações diferentes, e confundi-las já custou os nomes dos ambientes
+   * no desenho: o retângulo é numerado por lote, começando do zero em cada
+   * tecido, enquanto a peça é numerada no pedido inteiro. Coincidem só no
+   * primeiro tecido, e só quando cada peça tem uma folha.
+   */
+  pecas: { ref: number; retangulos: number[] }[];
 }
 
 /**
@@ -125,7 +133,12 @@ export function consumoDoPedido(args: {
     const plano = planejarLote({ pecas: pecasDoLote, rolos, permiteInverter: inverte });
     if (!plano) continue; // sem plano viável: cada peça fica com o consumo da receita
 
-    lotes.push({ tecido_nome: base.tecido.nome, plano, unidade: base.unidade, refs: grupo.map((p) => p.ref) });
+    lotes.push({
+      tecido_nome: base.tecido.nome,
+      plano,
+      unidade: base.unidade,
+      pecas: grupo.map((p) => ({ ref: p.ref, retangulos: folhaDaPeca.get(p.ref) ?? [] })),
+    });
 
     for (const p of grupo) {
       const metros = (folhaDaPeca.get(p.ref) ?? []).reduce((s, r) => s + (plano.consumo_por_peca[r] ?? 0), 0);

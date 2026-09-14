@@ -343,7 +343,11 @@ async function aplicarPlanoDeCorte(preparados: ItemPreparado[]): Promise<PlanoCo
         metros_lineares: l.plano.metros_lineares,
         area_consumida_m2: l.plano.area_consumida_m2,
         faixas: l.plano.faixas,
-        ambientes: l.refs.map((r) => ({ ref: r, ambiente: preparados[r]?.ambiente ?? '' })),
+        // Um par por RETÂNGULO, não por peça: é o retângulo que o desenho
+        // procura pelo nome, e o double vision gera dois deles por peça.
+        ambientes: l.pecas.flatMap((pc) =>
+          pc.retangulos.map((r) => ({ ref: r, ambiente: preparados[pc.ref]?.ambiente ?? '' })),
+        ),
       })),
     };
   } catch (e) {
