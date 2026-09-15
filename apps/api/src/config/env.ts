@@ -54,6 +54,10 @@ export const env = {
   // Vazio → omitido (GC usa o usuário master). O vendedor real vai em vendedor_id.
   GC_USUARIO_INTEGRACAO_ID: optional('GC_USUARIO_INTEGRACAO_ID', ''),
   GC_DEBUG_LOG: optional('GC_DEBUG_LOG', 'false') === 'true',
+  // Staging: le o GestãoClick de verdade, mas nunca escreve nele. Ver a trava em
+  // services/gc/client.ts — sem isso, o staging só funciona com token vazio, e aí
+  // nem a busca de cliente roda.
+  GC_SOMENTE_LEITURA: optional('GC_SOMENTE_LEITURA', 'false') === 'true',
   GC_TIMEOUT_MS: Number(optional('GC_TIMEOUT_MS', '10000')),
 
   // Producao / Zebra

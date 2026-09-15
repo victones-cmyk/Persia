@@ -21,6 +21,13 @@ export interface TecidoGc {
   preco_venda: number;
   preco_custo: number;
   grupo_id: string; // subgrupo no GC (usado p/ filtrar por tipo de persiana)
+  /** Campo extra "COD TECIDO": liga os rolos de larguras diferentes do MESMO
+   * tecido. Vazio quando não cadastrado — aí o agrupamento cai no nome. */
+  codigo_tecido: string;
+  /** Campo extra "PERMITE INVERTER?": o tecido aceita ser cortado girado.
+   * Ausente ou diferente de SIM conta como NÃO — girar um tecido estampado
+   * inverte o desenho, e errar para esse lado estraga a peça. */
+  permite_inverter: boolean;
 }
 
 // Grupos de produto no GestãoClick (GET /api/grupos_produtos).
@@ -97,6 +104,46 @@ export function dimensaoDoProduto(p: GcProduto): number | null {
   return null;
 }
 
+/**
+ * Código que liga os rolos do mesmo tecido (campo extra "COD TECIDO" no GC).
+ *
+ * Existe porque o nome, que é o que a Pérsia usa hoje, falha em SILÊNCIO: um
+ * tecido novo cadastrado sem o sufixo de largura simplesmente não agrupa, e
+ * ninguém vê erro nenhum — a recomendação só deixa de aparecer.
+ *
+ * O valor tem que identificar tecido E cor. O código da coleção sozinho não
+ * serve: "AM-3640" é o mesmo no branco e no preto, e agrupá-los faria a Pérsia
+ * recomendar o rolo da cor errada, que é pior do que não recomendar nada.
+ */
+export function codigoDoTecido(p: GcProduto): string {
+  for (const a of p.atributos ?? []) {
+    const desc = String(a?.atributo?.descricao ?? '').trim().toUpperCase().replace(/[.:]/g, '');
+    if (desc === 'COD TECIDO' || desc === 'CODIGO TECIDO' || desc === 'CÓDIGO TECIDO') {
+      const v = String(a.atributo.conteudo ?? '').trim();
+      if (v) return v.replace(/\s+/g, ' ').toUpperCase();
+    }
+  }
+  return '';
+}
+
+/**
+ * O tecido aceita corte girado? (campo extra "PERMITE INVERTER?")
+ *
+ * Só SIM explícito libera. Vazio, ausente ou qualquer outra coisa é NÃO: a
+ * maioria dos tecidos tem desenho, e girar inverte o desenho (Victor,
+ * 14/09/2026). Perder a economia de um corte girado custa material; girar um
+ * estampado que não podia custa a peça.
+ */
+export function permiteInverterProduto(p: GcProduto): boolean {
+  for (const a of p.atributos ?? []) {
+    const desc = String(a?.atributo?.descricao ?? '').toUpperCase().replace(/[?.:]/g, '').trim();
+    if (desc === 'PERMITE INVERTER' || desc === 'CORTE GIRADO') {
+      return /^SIM$/i.test(String(a.atributo.conteudo ?? '').trim());
+    }
+  }
+  return false;
+}
+
 /** Preço (venda/custo) de um produto na tabela indicada. Fallback: valor_venda padrão. */
 export function precoByTier(p: GcProduto, tier: PriceTier): { venda: number; custo: number } {
   const v = p.valores?.find((x) => x.tipo_id === TIER_ID[tier] || x.nome_tipo === TIER_NOME[tier]);
@@ -124,6 +171,8 @@ function produtoParaTecido(p: GcProduto, exigirLargura = true): TecidoGc | null 
     preco_venda: preco.venda,
     preco_custo: preco.custo,
     grupo_id: String(p.grupo_id ?? ''),
+    codigo_tecido: codigoDoTecido(p),
+    permite_inverter: permiteInverterProduto(p),
   };
 }
 
@@ -147,7 +196,8 @@ async function tecidosDosGrupos(grupoIds: string[], exigirLargura = true): Promi
 }
 
 /** Todos os tecidos de PERSIANA (grupo 235486), preço VAREJO. */
-async function tecidosPersiana(): Promise<TecidoGc[]> {
+/** Todos os tecidos de persiana (grupo pai). Usado pelo diagnóstico de agrupamento. */
+export async function tecidosPersiana(): Promise<TecidoGc[]> {
   if (cache && cache.expiresAt > Date.now()) return cache.tecidos;
 
   const produtos = await listarProdutos({ grupo_id: GRUPO_TECIDOS_PERSIANA, ativo: 1 });
@@ -202,6 +252,8 @@ export async function tecidosCortina(): Promise<TecidoGc[]> {
       preco_venda: preco.venda,
       preco_custo: preco.custo,
       grupo_id: String(p.grupo_id ?? ''),
+      codigo_tecido: codigoDoTecido(p),
+      permite_inverter: permiteInverterProduto(p),
     });
   }
   cacheCortina = { tecidos, expiresAt: Date.now() + CACHE_TTL_MS };

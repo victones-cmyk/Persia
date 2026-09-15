@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArrowsRotate, faDatabase, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { api, ApiError } from '../../lib/api';
+import { GruposDeTecido } from '../../components/GruposDeTecido';
 import { invalidarCacheado, invalidarCacheadosPorPrefixo } from '../../lib/dadosCache';
 import { useToast } from '../../hooks/useToast';
 
@@ -159,6 +160,8 @@ export function AdminMateriasPrimas() {
           </table>
         )}
       </div>
+
+      <GruposDeTecido />
 
       {ultimoResumo && (
         <div className="card p-4">

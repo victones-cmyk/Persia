@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { desenharPlanoDeCorte, temPlanoDesenhavel } from './planoCorteDesenho';
 import type { TipoProduto } from '@prisma/client';
 import { ACIONAMENTO_LABEL } from '../calc/tipos';
 
@@ -828,7 +829,11 @@ function desenharOrdemProducao(doc: PDFKit.PDFDocument, ordem: OrdemDocumento): 
   doc.font('Helvetica').fontSize(8).fillColor('#5f6973').text('Conferir medidas, tecido e acessórios antes do corte/produção.', left, obsY, { width: pageW });
 }
 
-export async function gerarPdfOrdensProducao(ordens: OrdemDocumento[], titulo = 'Ordens de Produção'): Promise<Buffer> {
+export async function gerarPdfOrdensProducao(
+  ordens: OrdemDocumento[],
+  titulo = 'Ordens de Produção',
+  planoCorte?: unknown,
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 36, info: { Title: titulo } });
     const chunks: Buffer[] = [];
@@ -840,6 +845,17 @@ export async function gerarPdfOrdensProducao(ordens: OrdemDocumento[], titulo = 
       if (index > 0) doc.addPage();
       desenharOrdemProducao(doc, ordem);
     });
+
+    // O plano vai por ÚLTIMO, e não na frente: quem separa as OS uma a uma não
+    // pode ter uma página estranha no lugar da primeira ordem. Quem corta pega
+    // a última folha, que é onde ele já procura o resumo.
+    if (temPlanoDesenhavel(planoCorte)) {
+      doc.addPage();
+      const primeira = ordens[0];
+      const ref = primeira ? `Pedido ${texto(primeira.pedidoCodigo, primeira.orcamentoCodigo)} · ${texto(primeira.cliente, '')}` : '';
+      desenharPlanoDeCorte(doc, planoCorte, ref);
+    }
+
     doc.end();
   });
 }

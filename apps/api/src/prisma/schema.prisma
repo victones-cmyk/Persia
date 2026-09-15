@@ -118,6 +118,11 @@ model Orcamento {
   // na calculadora para edição. Persiana: { tipo, itens:[ItemInput], rt_pct }.
   // Cortina: { cortinas:[...], rt_pct }. Instalação e RT são por item.
   entrada_json          Json?
+  // Plano de corte do pedido: para cada tecido, qual rolo, em que sentido e como
+  // as pecas se encaixam nas faixas. Guardado, e nao recalculado na impressao,
+  // porque o catalogo muda: um plano refeito semanas depois poderia desenhar um
+  // arranjo diferente do que gerou as quantidades ja baixadas do estoque.
+  plano_corte_json      Json?
   payload_gc_enviado    Json?
   resposta_gc           Json?
   erro_gc               String?

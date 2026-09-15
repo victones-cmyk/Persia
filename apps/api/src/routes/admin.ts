@@ -22,6 +22,7 @@ import {
   listarProdutosGc,
   getStatusCatalogoGc,
   sincronizarCatalogoGc,
+  gruposDeTecidoGc,
   diagnosticarComponenteCatalogoGc,
   getVersao,
   listarLojas,
@@ -59,5 +60,6 @@ router.get('/gc/produtos', listarProdutosGc);
 router.get('/gc/catalogo-local/status', getStatusCatalogoGc);
 router.post('/gc/catalogo-local/sincronizar', sincronizarCatalogoGc);
 router.get('/gc/catalogo-local/diagnostico-componente', diagnosticarComponenteCatalogoGc);
+router.get('/gc/tecidos/grupos', gruposDeTecidoGc);
 
 export default router;

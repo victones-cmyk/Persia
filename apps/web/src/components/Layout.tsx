@@ -7,7 +7,7 @@ import { useGcHealth } from '../hooks/useGcHealth';
 import { NavGuardProvider } from '../hooks/useNavGuard';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
-import { GcOfflineBanner } from './GcOfflineBanner';
+import { GcLeituraBanner, GcOfflineBanner } from './GcOfflineBanner';
 import { VersaoNovaBanner } from './VersaoNovaBanner';
 import { useVersaoNova } from '../hooks/useVersaoNova';
 
@@ -24,6 +24,7 @@ export function Layout() {
       <div className="h-full flex flex-col">
         <Navbar gcStatus={status} />
         {status === 'offline' && <GcOfflineBanner />}
+        {status === 'leitura' && <GcLeituraBanner />}
         {versaoNova && <VersaoNovaBanner />}
         <div className="flex flex-col lg:flex-row flex-1 min-h-0">
           <Sidebar />

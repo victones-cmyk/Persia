@@ -1,12 +1,14 @@
 // apps/web/src/components/GcIndicator.tsx
 // Indicador de saúde do GestãoClick no header (DS §7).
 // Online: dot pulsante verde · Offline: dot estático vermelho · Verificando: amarelo.
+// Somente leitura (staging): azul — le o GestaoClick real, mas nao grava nele.
 
 import type { GcStatus } from '../hooks/useGcHealth';
 
 const CONFIG: Record<GcStatus, { cor: string; label: string; pulsante: boolean }> = {
   online: { cor: 'var(--gc-online)', label: 'online', pulsante: true },
   offline: { cor: 'var(--gc-offline)', label: 'offline', pulsante: false },
+  leitura: { cor: 'var(--gc-leitura)', label: 'somente leitura', pulsante: false },
   checking: { cor: 'var(--gc-checking)', label: 'verificando', pulsante: false },
 };
 

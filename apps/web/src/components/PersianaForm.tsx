@@ -12,6 +12,7 @@ import { api, ApiError } from '../lib/api';
 import { getCacheado } from '../lib/dadosCache';
 import { roundHalfUp, formatBRL, formatNum, formatQtd } from '../lib/formatacao';
 import { TecidoSearch } from './TecidoSearch';
+import { SeletorRolo } from './SeletorRolo';
 import { AvisoAmbientesRepetidos } from './AvisoAmbientesRepetidos';
 import { MedidaInput } from './MedidaInput';
 import { ConfirmModal } from './ConfirmModal';
@@ -624,6 +625,10 @@ export function PersianaForm({
                     invalid={it.tecido_id === ''}
                   />
                 )}
+                <SeletorRolo
+                  rolos={resultPorIdx[idx]?.rolos}
+                  onEscolher={(id) => atualizar(idx, { tecido_id: id })}
+                />
               </div>
               {!vertical && (
                 <div>

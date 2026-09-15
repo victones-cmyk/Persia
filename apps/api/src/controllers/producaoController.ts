@@ -1500,7 +1500,11 @@ export async function baixarPdfOrdensOrcamento(req: Request, res: Response): Pro
   }
 
   const docs = ordens.map((ordem) => ordemParaDocumento(ordem, orc));
-  const pdf = await gerarPdfOrdensProducao(docs, `Ordens de Produção ${tipo ?? ''}`.trim());
+  // O plano de corte só faz sentido com o pedido inteiro na mão: ele mostra
+  // quais peças dividem a mesma faixa do rolo. Numa impressão filtrada por tipo
+  // ele mentiria, desenhando peças que não estão nas folhas impressas.
+  const plano = tipo ? null : orc.plano_corte_json;
+  const pdf = await gerarPdfOrdensProducao(docs, `Ordens de Produção ${tipo ?? ''}`.trim(), plano);
   const sufixo = tipo ? `-${tipo}` : '';
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="ordens-producao${sufixo}-${orc.gc_pedido_codigo ?? orc.id}.pdf"`);

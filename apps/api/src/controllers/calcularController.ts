@@ -18,6 +18,7 @@ import {
   type CamadaCortina,
 } from '../services/calc/cortina';
 import { isTipoPersiana, type TipoPersiana } from '../services/calc/tipos';
+import { agruparOpcoesDeTecido, rolosDoMesmoTecido, type RoloDoTecido } from '../services/calc/seletorTecido';
 import { exigeLarguraTecido, getCalculadorasAtivas } from '../services/calc/calculadoras';
 import { getCalculadorasCortinaAtivas } from '../services/calc/calculadorasCortina';
 import type { TecidoGc } from '../services/gc/tecidos';
@@ -45,7 +46,9 @@ export async function listarTecidos(req: Request, res: Response): Promise<void> 
   if (!isTipoPersiana(tipo)) {
     throw new AppError(400, 'TIPO_INVALIDO', 'Tipo de persiana inválido.');
   }
-  const tecidos = await tecidosParaTipo(tipo);
+  // Colapsa os rolos de mesmo preço: o vendedor escolhe TECIDO, o plano de
+  // corte escolhe o rolo. Onde o rolo muda o preço, as opções seguem separadas.
+  const tecidos = agruparOpcoesDeTecido(await tecidosParaTipo(tipo));
   res.json({ tecidos });
 }
 
@@ -118,7 +121,7 @@ function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: num
     dimensao: tecido.dimensao_m,
     tc: item.tc,
     qtd_venda: v.tecido.quantidade,
-    qtd_producao: v.tecido.quantidade,
+    qtd_producao: v.tecido.quantidade_consumo ?? v.tecido.quantidade,
     preco_tecido: tecido.preco_venda,
     valor_bruto: valor, // SOMA de todos os componentes + tecido + instalação (VAREJO)
     valor,
@@ -128,6 +131,38 @@ function montarResultado(item: PrecoPersianaItem, tecido: TecidoGc, largura: num
     tecido: v.tecido,
     componentes, // compat com o formato antigo
   };
+}
+
+/**
+ * Os rolos do mesmo tecido, com o preço DESTA peça em cada um.
+ *
+ * Roda o motor de preço uma vez por rolo candidato — e isso é barato: são no
+ * máximo dois ou três, os mapas de preço já estão em memória e a lista de
+ * tecidos vem de um cache de 60s. Tecido de rolo único devolve lista vazia e
+ * não custa nem isso.
+ *
+ * Comparar pelo preço da peça INTEIRA, e não só pelo tecido, é o que torna o
+ * número útil: é o valor que o cliente vê. A instalação entra nos dois lados e
+ * se anula na diferença, mas mantém o absoluto igual ao que a tela mostra.
+ */
+async function rolosDoTecido(
+  tipo: TipoPersiana,
+  tecido: TecidoGc,
+  largura: number,
+  precoItem: (t: { preco_venda: number; preco_custo: number }) => number,
+): Promise<RoloDoTecido[]> {
+  try {
+    const catalogo = await tecidosParaTipo(tipo);
+    return rolosDoMesmoTecido({
+      selecionado: tecido,
+      catalogo,
+      largura,
+      precoDaPeca: (t) => precoItem({ preco_venda: t.preco_venda, preco_custo: t.preco_custo ?? 0 }),
+    });
+  } catch {
+    // Sugestão é acessório: se o catálogo não veio, o orçamento segue sem ela.
+    return [];
+  }
 }
 
 function mensagemErroFormula(err: unknown): string | null {
@@ -158,7 +193,7 @@ export async function calcularPersianaController(req: Request, res: Response): P
 
   // RN-01: a largura não pode exceder a largura do rolo do tecido.
   if (exigeLarguraTecido(tipo) && larguraN > tecido.dimensao_m) {
-    const alternativos = (await tecidosParaTipo(tipo))
+    const alternativos = agruparOpcoesDeTecido(await tecidosParaTipo(tipo))
       .filter((t) => t.dimensao_m >= larguraN)
       .map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m }));
     res.status(422).json({
@@ -172,23 +207,30 @@ export async function calcularPersianaController(req: Request, res: Response): P
 
   const { precos, custos, componentesPorNome } = await mapasDePrecoComponentes();
   const inst = instalacao_id ? (await indiceInstalacoes()).get(String(instalacao_id)) ?? null : null;
-  try {
-    const item = precoPersianaItem({
+  // Mesma entrada para o tecido escolhido e para cada rolo candidato: só o preço
+  // do tecido muda, e é exatamente isso que a comparação precisa isolar.
+  const comTecido = (t: { preco_venda: number; preco_custo: number }) =>
+    precoPersianaItem({
       tipo,
       acionamento,
       largura: larguraN,
       altura: alturaN,
       tc: tc !== undefined && tc !== null && tc !== '' ? Number(tc) : undefined,
-      preco_tecido: tecido.preco_venda,
-      preco_tecido_custo: tecido.preco_custo,
+      preco_tecido: t.preco_venda,
+      preco_tecido_custo: t.preco_custo,
       precos,
       custos,
       componentesPorNome,
       cor_acessorio,
       cor_base: base || cor_acessorio,
     });
+  try {
+    const item = comTecido(tecido);
+    const rolos = await rolosDoTecido(tipo, tecido, larguraN, (t) =>
+      roundHalfUp(comTecido(t).valor + (inst?.preco ?? 0)),
+    );
     res.json({
-      resultado: montarResultado(item, tecido, larguraN, alturaN, inst),
+      resultado: { ...montarResultado(item, tecido, larguraN, alturaN, inst), rolos },
       tecido: { id: tecido.id, nome: tecido.nome, dimensao_m: tecido.dimensao_m, preco_venda: tecido.preco_venda },
     });
   } catch (err) {
@@ -222,7 +264,12 @@ export async function calcularPersianaLoteController(req: Request, res: Response
   const compatCache = new Map<TipoPersiana, { id: string; nome: string; dimensao_m: number }[]>();
   const compatPara = async (tipo: TipoPersiana, larguraN: number) => {
     if (!compatCache.has(tipo)) {
-      compatCache.set(tipo, (await tecidosParaTipo(tipo)).map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m })));
+      // Agrupado pelo mesmo critério da lista: sugerir os três rolos do mesmo
+      // tecido como se fossem três alternativas é repetir a mesma sugestão.
+      compatCache.set(
+        tipo,
+        agruparOpcoesDeTecido(await tecidosParaTipo(tipo)).map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m })),
+      );
     }
     return compatCache.get(tipo)!.filter((t) => t.dimensao_m >= larguraN);
   };
@@ -264,15 +311,15 @@ export async function calcularPersianaLoteController(req: Request, res: Response
       continue;
     }
     const inst = it.instalacao_id ? idxInst.get(String(it.instalacao_id)) ?? null : null;
-    try {
-      const item = precoPersianaItem({
+    const comTecido = (t: { preco_venda: number; preco_custo: number }) =>
+      precoPersianaItem({
         tipo,
         acionamento: it.acionamento,
         largura: larguraN,
         altura: alturaN,
         tc: it.tc !== undefined && it.tc !== null && it.tc !== '' ? Number(it.tc) : undefined,
-        preco_tecido: tecido.preco_venda,
-        preco_tecido_custo: tecido.preco_custo,
+        preco_tecido: t.preco_venda,
+        preco_tecido_custo: t.preco_custo,
         precos,
         custos,
         componentesPorNome,
@@ -282,7 +329,12 @@ export async function calcularPersianaLoteController(req: Request, res: Response
         emissor: Boolean(it.emissor),
         componente_emissor: it.emissor && it.emissor_codigo ? { codigo_interno: String(it.emissor_codigo), descricao: String(it.emissor_nome || 'Emissor') } : null,
       });
-      const resultado = montarResultado(item, tecido, larguraN, alturaN, inst);
+    try {
+      const item = comTecido(tecido);
+      const rolos = await rolosDoTecido(tipo, tecido, larguraN, (t) =>
+        roundHalfUp(comTecido(t).valor + (inst?.preco ?? 0)),
+      );
+      const resultado = { ...montarResultado(item, tecido, larguraN, alturaN, inst), rolos };
       totalBruto = roundHalfUp(totalBruto + resultado.valor);
       resultados.push({
         ok: true,

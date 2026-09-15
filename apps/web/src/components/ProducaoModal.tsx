@@ -289,6 +289,8 @@ export function ProducaoModal({
     largura: number;
     altura: number;
     faces_medidas: number;
+    /** Presente quando a medida do técnico passou da largura do rolo vendido. */
+    nao_cabe_no_tecido?: { tecido: string; largura_maxima: number };
   }
 
   /**
@@ -322,6 +324,13 @@ export function ProducaoModal({
       // A prévia guardada era das medidas antigas: some para ninguém decidir
       // olhando uma diferença que já não corresponde aos campos.
       setPrevia(null);
+      for (const m of r.medidas.filter((x) => x.nao_cabe_no_tecido)) {
+        showToast(
+          'warning',
+          `${m.ambiente || 'Peça'} não cabe no tecido vendido`,
+          `${numeroMedida(m.largura)} m medidos contra ${numeroMedida(m.nao_cabe_no_tecido!.largura_maxima)} m de rolo do ${m.nao_cabe_no_tecido!.tecido}. Nessa largura a peça sai emendada ou em duas folhas — confirme com a produção antes de fechar a diferença.`,
+        );
+      }
       const emPartes = r.medidas.filter((m) => m.faces_medidas > 1).map((m) => m.ambiente).filter(Boolean);
       if (emPartes.length > 0) {
         showToast('warning', 'Ambiente medido em partes',

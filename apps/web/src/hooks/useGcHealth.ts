@@ -4,7 +4,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 
-export type GcStatus = 'online' | 'offline' | 'checking';
+/** 'leitura' = staging: le o GestaoClick real, gravacao desligada. */
+export type GcStatus = 'online' | 'offline' | 'leitura' | 'checking';
 
 interface GcHealthResponse {
   status: GcStatus;

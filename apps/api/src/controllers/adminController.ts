@@ -18,6 +18,8 @@ import { indicePrecosComponentes } from '../services/gc/componentesPersiana';
 import type { Acionamento, Cor } from '../services/calc/tipos';
 import type { VariantePersiana } from '../services/calc/persianaReceitas.data';
 import { diagnosticarProdutoLocal, sincronizarCatalogoLocal, statusCatalogoLocal } from '../services/gc/catalogoLocal';
+import { tecidosPersiana } from '../services/gc/tecidos';
+import { agruparTecidos, codigosOrfaos } from '../services/calc/seletorTecido';
 import { SECOES_CALCULADORA } from '../lib/permissaoRevenda';
 
 // ---------------------------------------------------------------------------
@@ -237,6 +239,19 @@ export async function sincronizarCatalogoGc(req: Request, res: Response): Promis
     throw new AppError(502, 'GC_CATALOGO_SYNC', resumo.erro ?? 'Falha ao atualizar matérias-primas.');
   }
   res.json({ resumo, status: await statusCatalogoLocal() });
+}
+
+/** GET /admin/gc/tecidos/grupos — como a Pérsia agrupa os rolos do mesmo tecido. */
+export async function gruposDeTecidoGc(_req: Request, res: Response): Promise<void> {
+  const catalogo = await tecidosPersiana();
+  const grupos = agruparTecidos(catalogo);
+  res.json({
+    total_tecidos: catalogo.length,
+    // Só os grupos com mais de um rolo interessam: é onde há escolha a fazer.
+    grupos: grupos.filter((g) => g.rolos.length > 1),
+    orfaos: codigosOrfaos(grupos),
+    com_codigo: catalogo.filter((t) => t.codigo_tecido).length,
+  });
 }
 
 export async function diagnosticarComponenteCatalogoGc(req: Request, res: Response): Promise<void> {

@@ -12,6 +12,22 @@ import { formatNum, semAcento } from '../lib/formatacao';
 
 const MAX_VISIVEL = 100;
 
+/**
+ * As larguras em que o tecido existe.
+ *
+ * Um tecido com três rolos aparece UMA vez na lista — o vendedor escolhe
+ * tecido, não rolo; quem escolhe o rolo é o plano de corte, que sabe a medida
+ * da peça. Mas as larguras precisam aparecer: é o que diz até onde a peça pode
+ * crescer, e era a única informação útil que a lista por rolo dava.
+ */
+function larguras(t: TecidoOpcao): string {
+  const todas = t.larguras_m && t.larguras_m.length > 0 ? t.larguras_m : [t.dimensao_m];
+  const validas = todas.filter((l) => l > 0);
+  if (validas.length === 0) return 'sem largura cadastrada';
+  if (validas.length === 1) return `${formatNum(validas[0])} m`;
+  return `${validas.map(formatNum).join(' / ')} m`;
+}
+
 export function TecidoSearch({
   tecidos,
   value,
@@ -172,7 +188,7 @@ export function TecidoSearch({
                 style={{ background: i === destaque ? 'var(--neutral-100)' : undefined }}
               >
                 <span className="text-neutral-800">{t.nome}</span>
-                <span className="text-xs-ui text-neutral-500"> — {t.dimensao_m > 0 ? `${formatNum(t.dimensao_m)} m` : 'sem largura cadastrada'}</span>
+                <span className="text-xs-ui text-neutral-500"> — {larguras(t)}</span>
               </button>
             ))
           )}

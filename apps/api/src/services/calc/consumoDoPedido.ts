@@ -1,0 +1,208 @@
+// apps/api/src/services/calc/consumoDoPedido.ts
+// Quanto de tecido o PEDIDO consome, depois de encaixar as peças no rolo.
+//
+// Até aqui cada peça carregava seu consumo isolado, e isso erra nos dois
+// sentidos ao mesmo tempo:
+//
+//   tela solar  debita a área da PEÇA, e o rolo perde a largura inteira da faixa
+//   lineares    debitam uma faixa por peça, mesmo quando três saem da mesma
+//
+// Medido nos pedidos enviados (14/09/2026): 331,71 m² a menos na tela solar,
+// 49,51 m a mais nas lineares. As duas somem quando o corte é planejado por
+// LOTE — todas as peças do mesmo tecido num pedido.
+//
+// O PREÇO não passa por aqui. Ele continua saindo da receita, peça a peça,
+// exatamente como está hoje (Victor, 14/09/2026): o cliente paga o que sempre
+// pagou, e quem passa a falar a verdade é a OS e a baixa de estoque.
+
+import { planejarLote, type FaixaDoPlano, type PlanoDoLote, type PecaDoLote, type RoloDisponivel } from './corteTecido';
+import { mesmoTecido, type TecidoDoCatalogo } from './seletorTecido';
+import { roundHalfUp } from './arredondamento';
+
+export interface PecaDoPedido {
+  /** Índice do item no pedido — como o chamador reencontra a peça. */
+  ref: number;
+  largura: number;
+  /** Consumo que a receita calculou para esta peça, na unidade abaixo. */
+  consumo: number;
+  unidade: string;
+  /** Folhas separadas (double vision = 2). */
+  folhas: number;
+  tecido: TecidoDoCatalogo;
+}
+
+export interface ConsumoDaPeca {
+  /** Quantidade que vai para a OS e para a baixa de estoque. */
+  quantidade: number;
+  unidade: string;
+  /** Produto do rolo efetivamente cortado. */
+  produto_id: string;
+  tecido_nome: string;
+}
+
+export interface LotePlanejado {
+  tecido_nome: string;
+  plano: PlanoDoLote;
+  unidade: string;
+  /**
+   * Peça do pedido → os retângulos dela dentro DESTE plano.
+   *
+   * São numerações diferentes, e confundi-las já custou os nomes dos ambientes
+   * no desenho: o retângulo é numerado por lote, começando do zero em cada
+   * tecido, enquanto a peça é numerada no pedido inteiro. Coincidem só no
+   * primeiro tecido, e só quando cada peça tem uma folha.
+   */
+  pecas: { ref: number; retangulos: number[] }[];
+}
+
+/**
+ * Todos os rolos do mesmo tecido, com o preço de cada um.
+ *
+ * Eu tinha restringido isto aos rolos de preço IGUAL ao escolhido, com medo de
+ * mexer no valor do cliente. Era medo mal colocado: o valor é calculado antes
+ * do plano e não muda com ele. O que eu queria evitar era o plano encarecer o
+ * material em silêncio — e disso quem cuida é o critério de menor CUSTO, não
+ * uma lista restrita.
+ *
+ * A restrição custava caro: duas peças de 0,80 × 2,60 ficavam presas no rolo de
+ * 2,80 m por R$ 502,32, com 1,20 m de largura desperdiçada, quando o mesmo
+ * tecido existe em 2,00 m por R$ 358,80 e sobra de 0,40 (Victor, 14/09/2026).
+ */
+export function rolosDoTecido(escolhido: TecidoDoCatalogo, catalogo: TecidoDoCatalogo[]): RoloComPreco[] {
+  const mesmos = catalogo.filter((t) => mesmoTecido(escolhido, t));
+  const lista = mesmos.some((t) => t.id === escolhido.id) ? mesmos : [escolhido, ...mesmos];
+  return lista.map((t) => ({ id: t.id, nome: t.nome, dimensao_m: t.dimensao_m, preco: t.preco_venda }));
+}
+
+interface RoloComPreco extends RoloDisponivel {
+  /** Por metro linear nas famílias lineares; por m² na tela solar. */
+  preco: number;
+}
+
+/**
+ * Custo do material de um plano.
+ *
+ * Usa o preço de VENDA porque é o campo confiável do cadastro e o mesmo que o
+ * seletor da Fase 2 mostra ao vendedor — as duas telas não podem discordar
+ * sobre qual rolo sai mais barato. O que decide é a RAZÃO entre os rolos, e ela
+ * é a mesma em venda ou custo enquanto o markup for uniforme.
+ */
+function custoDoPlano(unidade: string, precoPorRolo: Map<string, number>) {
+  return (plano: PlanoDoLote): number => {
+    const preco = precoPorRolo.get(plano.rolo.id) ?? 0;
+    return (unidade === 'm²' ? plano.area_consumida_m2 : plano.metros_lineares) * preco;
+  };
+}
+
+/** Retângulos que a peça ocupa no rolo — um por folha. */
+function retangulos(p: PecaDoPedido): { largura: number; altura: number }[] {
+  const folhas = Math.max(1, Math.floor(p.folhas || 1));
+  // Em m² o consumo é área: a altura sai da divisão pela largura, sem repetir a
+  // folga da receita aqui. Em metro linear o consumo já é o comprimento.
+  const comprimentoTotal = p.unidade === 'm²' ? p.consumo / p.largura : p.consumo;
+  const altura = comprimentoTotal / folhas;
+  return Array.from({ length: folhas }, () => ({ largura: p.largura, altura }));
+}
+
+/**
+ * Planeja o corte de cada tecido do pedido e devolve o consumo real por peça.
+ *
+ * Melhor esforço por lote: um tecido cujas peças não cabem em rolo nenhum fica
+ * de fora e mantém o consumo da receita. É o comportamento de hoje, e é melhor
+ * que derrubar o pedido inteiro — a RN-01 já barra peça larga demais antes
+ * disso, então cair aqui significa que apareceu um caso que ninguém previu.
+ */
+export function consumoDoPedido(args: {
+  pecas: PecaDoPedido[];
+  /** Todos os tecidos do catálogo, para achar os rolos irmãos. */
+  catalogo: TecidoDoCatalogo[];
+  /** tecido_id → permite girar. Ausente = não gira. */
+  permiteInverter?: (tecido: TecidoDoCatalogo) => boolean;
+}): { porPeca: Map<number, ConsumoDaPeca>; lotes: LotePlanejado[] } {
+  const porPeca = new Map<number, ConsumoDaPeca>();
+  const lotes: LotePlanejado[] = [];
+
+  // Agrupa por tecido — o lote é o conjunto de peças que dividem o mesmo rolo.
+  const grupos: PecaDoPedido[][] = [];
+  for (const peca of args.pecas) {
+    const grupo = grupos.find((g) => mesmoTecido(g[0].tecido, peca.tecido));
+    if (grupo) grupo.push(peca);
+    else grupos.push([peca]);
+  }
+
+  for (const grupo of grupos) {
+    const base = grupo[0];
+    const rolos = rolosDoTecido(base.tecido, args.catalogo);
+    const precoPorRolo = new Map(rolos.map((r) => [r.id, r.preco]));
+    const inverte = args.permiteInverter ? args.permiteInverter(base.tecido) : false;
+
+    // Cada folha vira um retângulo com ref própria, para o rateio saber de qual
+    // peça cada uma veio depois.
+    const pecasDoLote: PecaDoLote[] = [];
+    const folhaDaPeca = new Map<number, number[]>();
+    let seq = 0;
+    for (const p of grupo) {
+      const refs: number[] = [];
+      for (const r of retangulos(p)) {
+        pecasDoLote.push({ ref: seq, largura: r.largura, altura: r.altura });
+        refs.push(seq);
+        seq++;
+      }
+      folhaDaPeca.set(p.ref, refs);
+    }
+
+    const plano = planejarLote({
+      pecas: pecasDoLote,
+      rolos,
+      permiteInverter: inverte,
+      custo: custoDoPlano(base.unidade, precoPorRolo),
+    });
+    if (!plano) continue; // sem plano viável: cada peça fica com o consumo da receita
+
+    lotes.push({
+      tecido_nome: base.tecido.nome,
+      plano,
+      unidade: base.unidade,
+      pecas: grupo.map((p) => ({ ref: p.ref, retangulos: folhaDaPeca.get(p.ref) ?? [] })),
+    });
+
+    for (const p of grupo) {
+      const metros = (folhaDaPeca.get(p.ref) ?? []).reduce((s, r) => s + (plano.consumo_por_peca[r] ?? 0), 0);
+      // Em m² a baixa é a área retirada do rolo (metros × largura do rolo), que
+      // é como o estoque ENTRA no GestãoClick: o ERP converte a compra em metro
+      // linear multiplicando pela largura (Victor, 14/09/2026). Assim os dois
+      // lados da conta falam a mesma língua.
+      const quantidade = p.unidade === 'm²' ? metros * plano.rolo.dimensao_m : metros;
+      porPeca.set(p.ref, {
+        quantidade: roundHalfUp(quantidade, 4),
+        unidade: p.unidade,
+        produto_id: plano.rolo.id,
+        tecido_nome: plano.rolo.nome,
+      });
+    }
+  }
+
+  return { porPeca, lotes };
+}
+
+/**
+ * O plano como ele é GUARDADO no orçamento, e não recalculado na impressão.
+ *
+ * O catálogo muda — rolo novo, rolo inativado, largura corrigida. Um plano
+ * refeito semanas depois poderia desenhar um arranjo diferente daquele que
+ * gerou as quantidades já baixadas do estoque, e aí o desenho na mesa de corte
+ * contradiz a baixa que já aconteceu. Guardar congela os dois juntos.
+ */
+export interface PlanoCorteSalvo {
+  gerado_em: string;
+  lotes: {
+    tecido_nome: string;
+    unidade: string;
+    rolo: RoloDisponivel;
+    metros_lineares: number;
+    area_consumida_m2: number;
+    faixas: FaixaDoPlano[];
+    /** ref → ambiente, para o desenho nomear cada retângulo. */
+    ambientes: { ref: number; ambiente: string }[];
+  }[];
+}
