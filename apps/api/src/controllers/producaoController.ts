@@ -1500,10 +1500,14 @@ export async function baixarPdfOrdensOrcamento(req: Request, res: Response): Pro
   }
 
   const docs = ordens.map((ordem) => ordemParaDocumento(ordem, orc));
-  // O plano de corte só faz sentido com o pedido inteiro na mão: ele mostra
-  // quais peças dividem a mesma faixa do rolo. Numa impressão filtrada por tipo
-  // ele mentiria, desenhando peças que não estão nas folhas impressas.
-  const plano = tipo ? null : orc.plano_corte_json;
+  // O plano é de tecido de persiana, então acompanha a impressão de persiana e
+  // fica fora da de cortina e trilho, onde não diria nada.
+  //
+  // A versão anterior disto suprimia o plano em QUALQUER impressão filtrada, e
+  // como a tela só imprime filtrada (os três botões mandam tipo=persiana,
+  // cortina ou trilho), o desenho ficou inalcançável pelo app — só saía numa URL
+  // sem filtro, que ninguém tem como montar.
+  const plano = tipo === null || tipo === 'persiana' ? orc.plano_corte_json : null;
   const pdf = await gerarPdfOrdensProducao(docs, `Ordens de Produção ${tipo ?? ''}`.trim(), plano);
   const sufixo = tipo ? `-${tipo}` : '';
   res.setHeader('Content-Type', 'application/pdf');
