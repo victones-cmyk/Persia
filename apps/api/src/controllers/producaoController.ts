@@ -1036,11 +1036,35 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
     if (loja.gc_loja_id) payload.loja_id = loja.gc_loja_id;
 
     const venda = await criarVendaComPayload(payload);
+
+    // A diferença acabou de ser cobrada, então uma solicitação de absorção ainda
+    // pendente perdeu o objeto: ela pergunta ao admin se a casa absorve um valor
+    // que o cliente já vai pagar. Sai de medicao_absorcao — que é onde o aviso
+    // "aguardando sua decisão" procura — e vira histórico ao lado.
+    //
+    // Sem isso o aviso ficava na tela do admin para sempre, mesmo com a venda
+    // complementar emitida e as OS geradas (visto no orçamento 10347).
+    //
+    // Só mexe na pendente: decisão já tomada é fato consumado e fica onde está.
+    const absorcaoPendente = medicaoAbsorcao(orc);
+    const pendenteAberta = absorcaoPendente?.status === 'solicitada' ? absorcaoPendente : null;
+    const respostaBase = { ...respostaAtual };
+    if (pendenteAberta) delete respostaBase.medicao_absorcao;
+
     await prisma.orcamento.update({
       where: { id: orc.id },
       data: {
         resposta_gc: {
-          ...respostaAtual,
+          ...respostaBase,
+          ...(pendenteAberta
+            ? {
+                medicao_absorcao_resolvida: {
+                  ...pendenteAberta,
+                  resolvida_em: new Date().toISOString(),
+                  resolvida_por: 'venda_ajuste',
+                },
+              }
+            : {}),
           venda_ajuste_medicao: venda.resposta,
           payload_venda_ajuste_medicao: venda.payload,
           medicao_venda_ajuste: {
@@ -1057,7 +1081,7 @@ export async function gerarVendaAjusteMedicao(req: Request, res: Response): Prom
       data: {
         usuario_id: req.session.usuario!.id,
         acao: 'venda_ajuste_medicao_gc',
-        detalhe: { orcamento_id: orc.id, pedido, diferenca: previa.diferenca, gc_pedido_id: venda.gc_pedido_id, gc_pedido_codigo: venda.gc_pedido_codigo },
+        detalhe: { orcamento_id: orc.id, pedido, diferenca: previa.diferenca, gc_pedido_id: venda.gc_pedido_id, gc_pedido_codigo: venda.gc_pedido_codigo, absorcao_pendente_encerrada: Boolean(pendenteAberta) },
       },
     });
     // Agora que a venda da diferença tem número, o pedido original pode apontar
@@ -1565,6 +1589,11 @@ export async function listarAprovacoesPendentesMedicao(req: Request, res: Respon
   const orcamentos = await prisma.orcamento.findMany({
     where: {
       resposta_gc: { path: ['medicao_absorcao', 'status'], equals: 'solicitada' },
+      // Trava de segunda linha: uma venda complementar já cobrou a diferença, e
+      // não há o que o admin decida. O caminho de cima já encerra a solicitação
+      // ao emitir a venda; isto cobre os registros que ficaram abertos antes
+      // dessa correção, sem precisar reescrever o histórico deles.
+      NOT: { resposta_gc: { path: ['venda_ajuste_medicao'], not: Prisma.DbNull } },
     },
     include: { usuario: { select: { nome: true } }, loja: { select: { nome: true } } },
     orderBy: { criado_em: 'desc' },
