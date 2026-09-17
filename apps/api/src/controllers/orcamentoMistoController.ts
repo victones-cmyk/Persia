@@ -103,9 +103,13 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
       tecidos.set(id, t);
     }
   }
-  const { preparados: persPrep } = itensEntrada.length > 0
+  // O plano de corte vem junto: o pedido misto tem persiana como qualquer outro,
+  // e jogá-lo fora aqui era o que deixava a folha de producao sem o desenho —
+  // o formulário manda para cá sempre que há persiana E qualquer outra coisa
+  // (cortina, trilho ou avulso), que é a maioria dos pedidos de verdade.
+  const { preparados: persPrep, planoCorte } = itensEntrada.length > 0
     ? await prepararItens(tipoFallback, itensEntrada, tecidos)
-    : { preparados: [] };
+    : { preparados: [], planoCorte: null };
 
   // --- Cortinas: recalcula cada uma ---
   const cortPrep: CortinaPreparada[] = [];
@@ -178,6 +182,7 @@ export async function criarOrcamentoMisto(req: Request, res: Response): Promise<
   const primeiroExtra = extrasPrep[0] ?? null;
   const baseDados = {
     tipo_produto: 'misto' as const,
+    plano_corte_json: (planoCorte ? (planoCorte as unknown as Prisma.InputJsonValue) : Prisma.DbNull),
     usuario_id: vendedorAtribuido?.id ?? editarOrc?.usuario_id ?? sessao.id,
     loja_id: loja.id,
     entrada_json: entradaJson,
